@@ -93,7 +93,7 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes of inactivity
 const DEFAULT_HOST = 'java.flaremc.org'
 const DEFAULT_PORT = 25565
 const DEFAULT_VERSION = '1.21.11'
-const DEFAULT_MICROSOFT_EMAIL = 'voidzkillz203@outlook.com'
+const DEFAULT_MICROSOFT_EMAIL = process.env.MICROSOFT_EMAIL || ''
 
 // ============================================================
 // AUTOMATION TIMERS

@@ -1,0 +1,23 @@
+# Secrets - never commit these
+.env
+.env.*.local
+SSH-Keys/
+shhkeys.txt
+auth_cache/
+
+# Account data
+users.json
+bot-configs.json
+
+# Logs
+logs/
+*.log
+
+# Dependencies
+node_modules/
+
+# Old local backups, not needed in the repo
+index-backup.js
+index-backup2.js
+public/index-backup.html
+public/index-backup2.html

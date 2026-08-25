@@ -1,0 +1,1156 @@
+    <!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Voidz.IO Dashboard — Login</title>
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+    <link
+        rel="preconnect"
+        href="https://fonts.googleapis.com"
+    >
+
+    <link
+        rel="preconnect"
+        href="https://fonts.gstatic.com"
+        crossorigin
+    >
+
+    <link
+y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap"
+        rel="stylesheet"
+    >
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        :root {
+            --background: #04050c;
+            --bg-glow-1: rgba(0, 229, 255, 0.12);
+            --bg-glow-2: rgba(176, 38, 255, 0.08);
+
+            --panel: rgba(6, 12, 24, 0.72);
+            --panel-2: rgba(0, 229, 255, 0.045);
+            --panel-2-solid: #0a1424;
+            --panel-solid: #050a16;
+
+            --border: rgba(0, 229, 255, 0.22);
+            --border-strong: rgba(0, 229, 255, 0.55);
+
+            --text: #eafcff;
+            --muted: #7fa3b8;
+
+            --red: #ff2b56;
+            --blue: #00e5ff;
+            --purple: #b026ff;
+            --teal: #00fff0;
+
+            --radius: 4px;
+
+            --shadow: 0 0 24px rgba(0, 229, 255, 0.12), 0 10px 30px rgba(0, 0, 0, 0.5);
+            --shadow-lg: 0 0 40px rgba(0, 229, 255, 0.2), 0 20px 55px rgba(0, 0, 0, 0.6);
+
+            --gx: 50%;
+            --gy: 40%;
+            --mx: 0px;
+            --my: 0px;
+        }
+
+        :root[data-theme="light"] {
+            --background: #eaf3fa;
+            --bg-glow-1: rgba(0, 180, 216, 0.14);
+            --bg-glow-2: rgba(176, 38, 255, 0.06);
+
+            --panel: rgba(255, 255, 255, 0.75);
+            --panel-2: rgba(0, 130, 160, 0.05);
+            --panel-2-solid: #eef7fb;
+            --panel-solid: #ffffff;
+
+            --border: rgba(0, 130, 160, 0.28);
+            --border-strong: rgba(0, 130, 160, 0.55);
+
+            --text: #04212c;
+            --muted: #3f6b7a;
+
+            --blue: #0082a0;
+
+            --shadow: 0 0 24px rgba(0, 160, 200, 0.10), 0 10px 30px rgba(20, 60, 80, 0.12);
+            --shadow-lg: 0 0 40px rgba(0, 160, 200, 0.16), 0 20px 55px rgba(20, 60, 80, 0.18);
+        }
+
+        :root[data-theme="midnight"] {
+            --background: #08040f;
+            --bg-glow-1: rgba(176, 38, 255, 0.18);
+            --bg-glow-2: rgba(255, 47, 209, 0.10);
+
+            --panel: rgba(18, 8, 32, 0.72);
+            --panel-2: rgba(176, 38, 255, 0.05);
+            --panel-2-solid: #150a26;
+            --panel-solid: #0c051a;
+
+            --border: rgba(176, 38, 255, 0.28);
+            --border-strong: rgba(176, 38, 255, 0.6);
+
+            --text: #f6e9ff;
+            --muted: #a888c9;
+
+            --blue: #d33fff;
+            --purple: #b026ff;
+
+            --shadow: 0 0 24px rgba(176, 38, 255, 0.18), 0 10px 30px rgba(0, 0, 0, 0.55);
+            --shadow-lg: 0 0 40px rgba(176, 38, 255, 0.28), 0 20px 55px rgba(0, 0, 0, 0.65);
+        }
+
+        :root[data-theme="aurora"] {
+            --background: #020c08;
+            --bg-glow-1: rgba(0, 255, 163, 0.16);
+            --bg-glow-2: rgba(0, 255, 90, 0.08);
+
+            --panel: rgba(4, 24, 18, 0.72);
+            --panel-2: rgba(0, 255, 163, 0.05);
+            --panel-2-solid: #071f17;
+            --panel-solid: #03140f;
+
+            --border: rgba(0, 255, 163, 0.25);
+            --border-strong: rgba(0, 255, 163, 0.6);
+
+            --text: #e6fff5;
+            --muted: #6cbf9f;
+
+            --blue: #00ffa3;
+
+            --shadow: 0 0 24px rgba(0, 255, 163, 0.16), 0 10px 30px rgba(0, 0, 0, 0.55);
+            --shadow-lg: 0 0 40px rgba(0, 255, 163, 0.26), 0 20px 55px rgba(0, 0, 0, 0.65);
+        }
+
+        :root[data-theme="sunset"] {
+            --background: #0f0402;
+            --bg-glow-1: rgba(255, 107, 53, 0.18);
+            --bg-glow-2: rgba(255, 43, 86, 0.10);
+
+            --panel: rgba(28, 10, 6, 0.72);
+            --panel-2: rgba(255, 107, 53, 0.06);
+            --panel-2-solid: #1f0d07;
+            --panel-solid: #170805;
+
+            --border: rgba(255, 107, 53, 0.28);
+            --border-strong: rgba(255, 107, 53, 0.6);
+
+            --text: #fff0e8;
+            --muted: #cf9075;
+
+            --blue: #ff6b35;
+
+            --shadow: 0 0 24px rgba(255, 107, 53, 0.18), 0 10px 30px rgba(0, 0, 0, 0.55);
+            --shadow-lg: 0 0 40px rgba(255, 107, 53, 0.28), 0 20px 55px rgba(0, 0, 0, 0.65);
+        }
+
+        html {
+            color-scheme: dark;
+        }
+
+        html[data-theme="light"] {
+            color-scheme: light;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+
+            position: relative;
+            overflow: hidden;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            padding: 20px;
+
+            background: var(--background);
+
+            color: var(--text);
+
+            font-family: 'Rajdhani', Arial, sans-serif;
+
+            perspective: 1200px;
+
+            transition: background-color 0.25s ease, color 0.25s ease;
+        }
+
+        /* ================================================= */
+        /* ANIMATED BACKGROUND */
+        /* ================================================= */
+
+        .bg {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .bg::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+
+            background-image:
+                linear-gradient(color-mix(in srgb, var(--blue) 12%, transparent) 1px, transparent 1px),
+                linear-gradient(90deg, color-mix(in srgb, var(--blue) 12%, transparent) 1px, transparent 1px);
+
+            background-size: 42px 42px;
+
+            -webkit-mask-image: radial-gradient(circle at var(--gx) var(--gy), black, transparent 60%);
+            mask-image: radial-gradient(circle at var(--gx) var(--gy), black, transparent 60%);
+        }
+
+        .cursor-glow {
+            position: absolute;
+            inset: 0;
+
+            background:
+                radial-gradient(
+                    circle at var(--gx) var(--gy),
+                    color-mix(in srgb, var(--blue) 16%, transparent),
+                    transparent 32%
+                );
+
+            mix-blend-mode: screen;
+        }
+
+        .scanline {
+            position: absolute;
+            inset: 0;
+
+            overflow: hidden;
+            opacity: 0.5;
+        }
+
+        .scanline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 140px;
+
+            background: linear-gradient(
+                to bottom,
+                transparent,
+                color-mix(in srgb, var(--blue) 10%, transparent),
+                transparent
+            );
+
+            animation: scan-sweep 9s linear infinite;
+        }
+
+        @keyframes scan-sweep {
+            0% { top: -140px; }
+            100% { top: 100vh; }
+        }
+
+        .orb-shift {
+            transform:
+                translate3d(
+                    calc(var(--mx) * var(--depth, 1)),
+                    calc(var(--my) * var(--depth, 1)),
+                    0
+                );
+
+            transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.4;
+            will-change: transform;
+        }
+
+        .orb-1 {
+            width: 480px;
+            height: 480px;
+            top: -160px;
+            left: -140px;
+            background: radial-gradient(circle, var(--blue), transparent 70%);
+            animation: float-a 24s ease-in-out infinite;
+        }
+
+        .orb-2 {
+            width: 420px;
+            height: 420px;
+            bottom: -160px;
+            right: -140px;
+            background: radial-gradient(circle, var(--purple), transparent 70%);
+            animation: float-b 28s ease-in-out infinite;
+        }
+
+        .orb-3 {
+            width: 320px;
+            height: 320px;
+            top: 45%;
+            left: 55%;
+            background: radial-gradient(circle, var(--teal), transparent 70%);
+            opacity: 0.28;
+            animation: float-c 32s ease-in-out infinite;
+        }
+
+        @keyframes float-a {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(60px, 50px) scale(1.12); }
+        }
+
+        @keyframes float-b {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(-50px, -40px) scale(1.08); }
+        }
+
+        @keyframes float-c {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-55%, -45%) scale(1.2); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .orb, .scanline {
+                animation: none;
+                display: none;
+            }
+        }
+
+        /* ================================================= */
+        /* THEME PICKER */
+        /* ================================================= */
+
+        .theme-picker-float {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+
+            display: flex;
+            align-items: center;
+            gap: 9px;
+
+            padding: 9px 12px;
+
+            background: var(--panel);
+            backdrop-filter: blur(14px);
+
+            border: 1px solid var(--border);
+            border-radius: 999px;
+
+            box-shadow: var(--shadow);
+        }
+
+        .theme-swatch {
+            width: 20px;
+            height: 20px;
+            padding: 0;
+
+            border-radius: 50%;
+            border: 2px solid transparent;
+
+            box-shadow: 0 0 0 1px var(--border);
+
+            cursor: pointer;
+
+            transition:
+                transform 0.15s ease,
+                border-color 0.15s ease;
+        }
+
+        .theme-swatch:hover {
+            transform: scale(1.14);
+            box-shadow: 0 0 0 1px var(--border-strong);
+        }
+
+        .theme-swatch.active {
+            border-color: var(--text);
+        }
+
+        .custom-swatch {
+            position: relative;
+
+            background: conic-gradient(
+                from 180deg,
+                #ff2b56, #ffd60a, #00ffa3, #00e5ff, #b026ff, #ff2b56
+            );
+        }
+
+        .custom-swatch input[type="color"] {
+            position: absolute;
+            inset: 0;
+
+            width: 100%;
+            height: 100%;
+
+            opacity: 0;
+
+            border: none;
+            padding: 0;
+
+            cursor: pointer;
+        }
+
+        .theme-custom-reset {
+            width: 20px;
+            height: 20px;
+            padding: 0;
+
+            display: none;
+            align-items: center;
+            justify-content: center;
+
+            border-radius: 50%;
+            border: 1px solid var(--border);
+
+            background: transparent;
+            color: var(--muted);
+
+            font-size: 10px;
+            line-height: 1;
+
+            cursor: pointer;
+
+            transition:
+                color 0.15s ease,
+                border-color 0.15s ease;
+        }
+
+        .theme-custom-reset:hover {
+            color: var(--red);
+            border-color: var(--red);
+        }
+
+        /* ================================================= */
+        /* CARD */
+        /* ================================================= */
+
+        .card {
+            position: relative;
+            z-index: 1;
+
+            width: 100%;
+            max-width: 380px;
+
+            background: var(--panel);
+            backdrop-filter: blur(18px);
+
+            border: 1px solid var(--border);
+
+            clip-path: polygon(
+                16px 0, 100% 0, 100% calc(100% - 16px),
+                calc(100% - 16px) 100%, 0 100%, 0 16px
+            );
+
+            padding: 32px 28px;
+
+            box-shadow: var(--shadow-lg);
+
+            overflow: hidden;
+            transform-style: preserve-3d;
+
+            transition:
+                transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.35s ease,
+                background-color 0.25s ease,
+                border-color 0.25s ease;
+        }
+
+        .card.tilting {
+            border-color: var(--border-strong);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+
+            background:
+                radial-gradient(
+                    circle at var(--sx, 50%) var(--sy, 40%),
+                    color-mix(in srgb, var(--blue) 25%, transparent),
+                    transparent 55%
+                );
+
+            opacity: 0;
+
+            transition: opacity 0.3s ease;
+
+            pointer-events: none;
+
+            mix-blend-mode: screen;
+        }
+
+        .card.tilting::before {
+            opacity: 1;
+        }
+
+        .card::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+
+            pointer-events: none;
+
+            background-image:
+                linear-gradient(var(--blue), var(--blue)),
+                linear-gradient(var(--blue), var(--blue));
+
+            background-size: 18px 2px, 2px 18px;
+            background-position: bottom 0 right 0, bottom 0 right 0;
+            background-repeat: no-repeat;
+
+            opacity: 0.65;
+
+            filter: drop-shadow(0 0 4px var(--blue));
+        }
+
+        .card > * {
+            position: relative;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+
+            margin-bottom: 26px;
+        }
+
+        .logo {
+            width: 46px;
+            height: 46px;
+            flex-shrink: 0;
+
+            filter: drop-shadow(0 0 14px color-mix(in srgb, var(--blue) 45%, transparent));
+        }
+
+        .brand h1 {
+            margin: 0;
+
+            font-family: 'Orbitron', 'Rajdhani', sans-serif;
+            font-size: 19px;
+            font-weight: 800;
+
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+
+            text-shadow: 0 0 16px var(--bg-glow-1);
+        }
+
+        .brand p {
+            margin: 3px 0 0;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        label {
+            display: block;
+
+            font-size: 11.5px;
+            font-weight: 700;
+            color: var(--muted);
+
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+
+            margin-bottom: 6px;
+        }
+
+        .field {
+            margin-bottom: 16px;
+        }
+
+        input {
+            width: 100%;
+
+            padding: 13px 14px;
+
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+
+            background: var(--panel-2);
+            color: var(--text);
+
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+
+            outline: none;
+
+            transition:
+                border-color 0.15s ease,
+                box-shadow 0.15s ease;
+        }
+
+        input::placeholder {
+            color: var(--muted);
+            letter-spacing: 0.06em;
+        }
+
+        input:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent);
+        }
+
+        button {
+            width: 100%;
+
+            margin-top: 6px;
+
+            padding: 14px;
+
+            border-radius: var(--radius);
+            border: 1px solid var(--border-strong);
+
+            background: color-mix(in srgb, var(--blue) 16%, transparent);
+            color: var(--blue);
+
+            font-family: 'Orbitron', 'Rajdhani', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+
+            cursor: pointer;
+
+            transition:
+                background-color 0.15s ease,
+                transform 0.15s ease,
+                box-shadow 0.15s ease;
+        }
+
+        button:hover:not(:disabled) {
+            background: color-mix(in srgb, var(--blue) 28%, transparent);
+            box-shadow: var(--shadow);
+            transform: translateY(-1px);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.55;
+            cursor: default;
+        }
+
+        .error {
+            display: none;
+
+            margin-bottom: 16px;
+            padding: 10px 12px;
+
+            border-radius: var(--radius);
+
+            background: rgba(255, 43, 86, 0.1);
+            border: 1px solid rgba(255, 43, 86, 0.35);
+
+            color: var(--red);
+
+            font-size: 13px;
+        }
+
+        .error.show {
+            display: block;
+        }
+
+        .back-link {
+            display: block;
+
+            margin-top: 18px;
+
+            text-align: center;
+
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .back-link a {
+            color: var(--blue);
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+    <div class="bg">
+
+        <div class="cursor-glow"></div>
+        <div class="scanline"></div>
+
+        <div class="orb-shift" style="--depth: 1;">
+            <div class="orb orb-1"></div>
+        </div>
+
+        <div class="orb-shift" style="--depth: -0.7;">
+            <div class="orb orb-2"></div>
+        </div>
+
+        <div class="orb-shift" style="--depth: 1.6;">
+            <div class="orb orb-3"></div>
+        </div>
+
+    </div>
+
+    <div class="theme-picker-float" id="themeSwatches">
+
+        <button class="theme-swatch" data-theme-value="dark" onclick="setTheme('dark')" title="Dark" style="background: linear-gradient(135deg, #04050c 50%, #00e5ff 50%);"></button>
+        <button class="theme-swatch" data-theme-value="light" onclick="setTheme('light')" title="Light" style="background: linear-gradient(135deg, #eaf3fa 50%, #0082a0 50%);"></button>
+        <button class="theme-swatch" data-theme-value="midnight" onclick="setTheme('midnight')" title="Midnight" style="background: linear-gradient(135deg, #08040f 50%, #d33fff 50%);"></button>
+        <button class="theme-swatch" data-theme-value="aurora" onclick="setTheme('aurora')" title="Aurora" style="background: linear-gradient(135deg, #020c08 50%, #00ffa3 50%);"></button>
+        <button class="theme-swatch" data-theme-value="sunset" onclick="setTheme('sunset')" title="Sunset" style="background: linear-gradient(135deg, #0f0402 50%, #ff6b35 50%);"></button>
+
+        <label class="theme-swatch custom-swatch" id="customAccentSwatch" title="Custom accent color">
+            <input type="color" id="customAccentInput" value="#00e5ff" oninput="setCustomAccent(this.value)">
+        </label>
+
+        <button class="theme-custom-reset" id="customAccentReset" title="Reset accent color" onclick="clearCustomAccent()">&#10005;</button>
+
+    </div>
+
+    <div class="card">
+
+        <div class="brand">
+
+            <svg class="logo" viewBox="0 0 100 100">
+                <defs>
+                    <linearGradient id="voidzMarkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:var(--blue)"/>
+                        <stop offset="100%" style="stop-color:var(--purple)"/>
+                    </linearGradient>
+                    <filter id="voidzMarkGlow" x="-60%" y="-60%" width="220%" height="220%">
+                        <feGaussianBlur stdDeviation="2.1" result="blur"/>
+                        <feMerge>
+                            <feMergeNode in="blur"/>
+                            <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
+                    </filter>
+                </defs>
+                <polygon points="50,3 95,26 95,74 50,97 5,74 5,26" fill="none" stroke="url(#voidzMarkGrad)" stroke-width="3.2" stroke-linejoin="round" filter="url(#voidzMarkGlow)"/>
+                <path d="M28 25 L50 79" fill="none" stroke="url(#voidzMarkGrad)" stroke-width="12" stroke-linecap="square" filter="url(#voidzMarkGlow)"/>
+                <path d="M72 25 L50 79" fill="none" stroke="url(#voidzMarkGrad)" stroke-width="12" stroke-linecap="square" filter="url(#voidzMarkGlow)"/>
+                <circle cx="50" cy="79" r="10" fill="var(--panel-solid)" stroke="var(--teal)" stroke-width="1.6" opacity="0.95"/>
+                <circle cx="50" cy="79" r="2.4" fill="var(--text)"/>
+            </svg>
+
+            <div>
+                <h1>Voidz.IO</h1>
+                <p>Dashboard Login</p>
+            </div>
+
+        </div>
+
+        <div id="error" class="error"></div>
+
+        <form id="loginForm">
+
+            <div class="field">
+                <label for="username">Username</label>
+                <input
+                    id="username"
+                    name="username"
+                    type="text"
+                    autocomplete="username"
+                    placeholder="USERNAME"
+                    required
+                >
+            </div>
+
+            <div class="field">
+                <label for="password">Password</label>
+                <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    placeholder="PASSWORD"
+                    required
+                >
+            </div>
+
+            <button id="submitBtn" type="submit">
+                Log In
+            </button>
+
+        </form>
+
+        <div class="back-link">
+            New to Voidz.IO? <a href="/signup">Make an account here!</a>
+        </div>
+
+    </div>
+
+    <script>
+
+        'use strict'
+
+        // ==================================================
+        // THEME
+        // ==================================================
+
+        const THEMES = ['dark', 'light', 'midnight', 'aurora', 'sunset']
+        const CUSTOM_ACCENT_PROPS = [
+            '--blue', '--border', '--border-strong',
+            '--bg-glow-1', '--shadow', '--shadow-lg'
+        ]
+
+        function applyTheme(theme) {
+
+            if (!THEMES.includes(theme)) {
+                theme = 'dark'
+            }
+
+            document.documentElement.setAttribute('data-theme', theme)
+
+            document.querySelectorAll('.theme-swatch').forEach(
+                el => {
+
+                    el.classList.toggle(
+                        'active',
+                        el.dataset.themeValue === theme
+                    )
+
+                }
+            )
+
+        }
+
+        function setTheme(theme) {
+
+            const root = document.documentElement
+
+            CUSTOM_ACCENT_PROPS.forEach(
+                prop => root.style.removeProperty(prop)
+            )
+
+            applyTheme(theme)
+
+            const resetBtn = document.getElementById('customAccentReset')
+
+            if (resetBtn) {
+                resetBtn.style.display = 'none'
+            }
+
+            try {
+
+                localStorage.setItem('fleaxer-theme', theme)
+                localStorage.removeItem('fleaxer-accent')
+
+            } catch {}
+
+        }
+
+        function hexToRgb(hex) {
+
+            const clean = hex.replace('#', '')
+
+            const full =
+                clean.length === 3
+                    ? clean.split('').map(c => c + c).join('')
+                    : clean
+
+            const num = parseInt(full, 16)
+
+            return {
+                r: (num >> 16) & 255,
+                g: (num >> 8) & 255,
+                b: num & 255
+            }
+
+        }
+
+        function setCustomAccent(hex) {
+
+            const { r, g, b } = hexToRgb(hex)
+            const root = document.documentElement
+
+            root.style.setProperty('--blue', hex)
+            root.style.setProperty('--border', `rgba(${r}, ${g}, ${b}, 0.28)`)
+            root.style.setProperty('--border-strong', `rgba(${r}, ${g}, ${b}, 0.6)`)
+            root.style.setProperty('--bg-glow-1', `rgba(${r}, ${g}, ${b}, 0.16)`)
+            root.style.setProperty('--shadow', `0 0 24px rgba(${r}, ${g}, ${b}, 0.18), 0 10px 30px rgba(0, 0, 0, 0.55)`)
+            root.style.setProperty('--shadow-lg', `0 0 40px rgba(${r}, ${g}, ${b}, 0.28), 0 20px 55px rgba(0, 0, 0, 0.65)`)
+
+            document.querySelectorAll('.theme-swatch').forEach(
+                el => el.classList.remove('active')
+            )
+
+            const customSwatch = document.getElementById('customAccentSwatch')
+
+            if (customSwatch) {
+                customSwatch.classList.add('active')
+            }
+
+            const input = document.getElementById('customAccentInput')
+
+            if (input) {
+                input.value = hex
+            }
+
+            const resetBtn = document.getElementById('customAccentReset')
+
+            if (resetBtn) {
+                resetBtn.style.display = 'inline-flex'
+            }
+
+            try {
+
+                localStorage.setItem('fleaxer-accent', hex)
+
+            } catch {}
+
+        }
+
+        function clearCustomAccent() {
+
+            const current =
+                document.documentElement.getAttribute('data-theme') || 'dark'
+
+            setTheme(current)
+
+        }
+
+        function initTheme() {
+
+            let stored = null
+
+            try {
+
+                stored = localStorage.getItem('fleaxer-theme')
+
+            } catch {}
+
+            if (stored && THEMES.includes(stored)) {
+
+                applyTheme(stored)
+
+            } else {
+
+                const prefersLight =
+                    window.matchMedia &&
+                    window.matchMedia('(prefers-color-scheme: light)').matches
+
+                applyTheme(prefersLight ? 'light' : 'dark')
+
+            }
+
+            let customAccent = null
+
+            try {
+
+                customAccent = localStorage.getItem('fleaxer-accent')
+
+            } catch {}
+
+            if (customAccent) {
+                setCustomAccent(customAccent)
+            }
+
+        }
+
+        initTheme()
+
+        // ==================================================
+        // CURSOR-REACTIVE BACKGROUND
+        // ==================================================
+
+        const reduceMotion =
+            window.matchMedia &&
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+        if (!reduceMotion) {
+
+            const root = document.documentElement
+
+            let pointerX = window.innerWidth / 2
+            let pointerY = window.innerHeight / 2
+
+            let frameQueued = false
+
+            function applyPointer() {
+
+                frameQueued = false
+
+                const gx = (pointerX / window.innerWidth) * 100
+                const gy = (pointerY / window.innerHeight) * 100
+
+                root.style.setProperty('--gx', `${gx}%`)
+                root.style.setProperty('--gy', `${gy}%`)
+
+                const dx = pointerX - window.innerWidth / 2
+                const dy = pointerY - window.innerHeight / 2
+
+                const mx = Math.max(-22, Math.min(22, dx * 0.035))
+                const my = Math.max(-22, Math.min(22, dy * 0.035))
+
+                root.style.setProperty('--mx', `${mx}px`)
+                root.style.setProperty('--my', `${my}px`)
+
+            }
+
+            function onPointerMove(x, y) {
+
+                pointerX = x
+                pointerY = y
+
+                if (!frameQueued) {
+
+                    frameQueued = true
+
+                    requestAnimationFrame(applyPointer)
+
+                }
+
+            }
+
+            window.addEventListener('mousemove', event => {
+
+                onPointerMove(event.clientX, event.clientY)
+
+            })
+
+            window.addEventListener('touchmove', event => {
+
+                const touch = event.touches[0]
+
+                if (touch) {
+                    onPointerMove(touch.clientX, touch.clientY)
+                }
+
+            }, { passive: true })
+
+            // ----------------------------------------------
+            // CARD TILT + SHEEN
+            // ----------------------------------------------
+
+            const cardEl = document.querySelector('.card')
+
+            if (cardEl) {
+
+                cardEl.addEventListener('mousemove', event => {
+
+                    const rect = cardEl.getBoundingClientRect()
+
+                    const relX = (event.clientX - rect.left) / rect.width
+                    const relY = (event.clientY - rect.top) / rect.height
+
+                    const rotateY = (relX - 0.5) * 14
+                    const rotateX = (0.5 - relY) * 14
+
+                    cardEl.style.setProperty('--sx', `${relX * 100}%`)
+                    cardEl.style.setProperty('--sy', `${relY * 100}%`)
+
+                    cardEl.style.transform =
+                        `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`
+
+                })
+
+                cardEl.addEventListener('mouseenter', () => {
+
+                    cardEl.classList.add('tilting')
+
+                })
+
+                cardEl.addEventListener('mouseleave', () => {
+
+                    cardEl.classList.remove('tilting')
+
+                    cardEl.style.transform = ''
+
+                })
+
+            }
+
+        }
+
+        const form = document.getElementById('loginForm')
+        const errorBox = document.getElementById('error')
+        const submitBtn = document.getElementById('submitBtn')
+
+        form.addEventListener('submit', event => {
+
+            event.preventDefault()
+
+            errorBox.classList.remove('show')
+            errorBox.textContent = ''
+
+            submitBtn.disabled = true
+            submitBtn.textContent = 'Logging in...'
+
+            const username = document.getElementById('username').value.trim()
+            const password = document.getElementById('password').value
+
+            fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+
+                    if (ok && data.ok) {
+
+                        try {
+
+                            sessionStorage.setItem('voidz-show-welcome', '1')
+
+                        } catch {}
+
+                        window.location.href = '/'
+
+                        return
+
+                    }
+
+                    errorBox.textContent = data.error || 'Login failed.'
+                    errorBox.classList.add('show')
+
+                    submitBtn.disabled = false
+                    submitBtn.textContent = 'Log In'
+
+                })
+                .catch(() => {
+
+                    errorBox.textContent = 'Could not reach the server. Try again.'
+                    errorBox.classList.add('show')
+
+                    submitBtn.disabled = false
+                    submitBtn.textContent = 'Log In'
+
+                })
+
+        })
+
+    </script>
+
+</body>
+
+</html>

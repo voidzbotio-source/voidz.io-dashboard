@@ -3926,7 +3926,12 @@
                         <input id="settingsDiscordWebhook" type="text" placeholder="https://discord.com/api/webhooks/..." autocomplete="off">
                     </div>
 
-                    <p class="settings-section-desc" style="margin-top: -8px;">Pings this webhook when the Black Market opens, so you find out even when the dashboard's closed.</p>
+                    <div class="field">
+                        <label for="settingsDiscordRole">Discord Role ID to Ping (optional)</label>
+                        <input id="settingsDiscordRole" type="text" placeholder="e.g. 1516457703680118814" autocomplete="off">
+                    </div>
+
+                    <p class="settings-section-desc" style="margin-top: -8px;">Pings this webhook (and role, if set) when the Black Market opens, so you find out even when the dashboard's closed.</p>
 
                     <button class="modal-ok" id="settingsSaveBtn" onclick="saveSettings()" style="width: 100%;">
                         Save Bot Configuration
@@ -4629,6 +4634,7 @@
                     $('settingsVersion').value = config.version || ''
                     $('settingsAutopilot').checked = !!config.lifestealAutopilot
                     $('settingsDiscordWebhook').value = config.discordWebhookUrl || ''
+                    $('settingsDiscordRole').value = config.discordRoleId || ''
 
                 })
                 .catch(() => {})
@@ -4677,7 +4683,8 @@
                 port: Number($('settingsPort').value) || 25565,
                 version: $('settingsVersion').value.trim(),
                 lifestealAutopilot: $('settingsAutopilot').checked,
-                discordWebhookUrl: $('settingsDiscordWebhook').value.trim()
+                discordWebhookUrl: $('settingsDiscordWebhook').value.trim(),
+                discordRoleId: $('settingsDiscordRole').value.trim()
             }
 
             saveBtn.disabled = true

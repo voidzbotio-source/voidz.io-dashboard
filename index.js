@@ -376,8 +376,9 @@ function normalizeBotConfig(input) {
 
     const lifestealAutopilot = !!input?.lifestealAutopilot
     const discordWebhookUrl = String(input?.discordWebhookUrl || '').trim()
+    const discordRoleId = String(input?.discordRoleId || '').trim().replace(/\D/g, '')
 
-    return { microsoftEmail, host, port, version, lifestealAutopilot, discordWebhookUrl }
+    return { microsoftEmail, host, port, version, lifestealAutopilot, discordWebhookUrl, discordRoleId }
 
 }
 
@@ -435,14 +436,25 @@ function cleanMessage(text) {
 
 }
 
-function sendDiscordWebhook(webhookUrl, content) {
+function sendDiscordWebhook(webhookUrl, content, roleId) {
 
     if (!webhookUrl) return
+
+    const body = {
+        content: roleId ? `<@&${roleId}> ${content}` : content
+    }
+
+    // Discord only actually pings a role mention in a webhook message
+    // if it's explicitly allowed here - otherwise it renders as text
+    // but stays silent.
+    if (roleId) {
+        body.allowed_mentions = { roles: [roleId] }
+    }
 
     fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content })
+        body: JSON.stringify(body)
     }).catch(error => originalError('[DISCORD WEBHOOK]', error.message))
 
 }
@@ -1478,7 +1490,8 @@ class BotSession {
 
         sendDiscordWebhook(
             this.config.discordWebhookUrl,
-            `🛒 **Black Market has opened** on ${this.username}'s server - limited stock, go now!`
+            `🛒 **Black Market has opened** on ${this.username}'s server - limited stock, go now!`,
+            this.config.discordRoleId
         )
 
     }

@@ -768,8 +768,9 @@ class BotSession {
 
         // Set to the game's name (e.g. 'math') right after its "X has
         // been chosen!" broadcast, so the very next matching question
-        // line is known to belong to that round. Only 'math' is
-        // actually answered right now - see checkTrivia().
+        // line is known to belong to that round. Only 'math' and
+        // 'replication' are actually answered right now - see
+        // checkTrivia().
         this.triviaActiveType = null
 
         // Auto-reinvited players who have already been kicked for
@@ -1696,11 +1697,12 @@ class BotSession {
     }
 
     // The trivia plugin broadcasts "<Type> has been chosen!" and then
-    // the question itself as a separate line shortly after. Only Math
-    // is handled right now - it's the only format actually seen so
-    // far (a bare "233 + 418" style expression). Other types
-    // (Replication, Blanks, ...) need a real example of their chat
-    // format before they can be added safely.
+    // the question itself as a separate "CHAT GAME" line shortly
+    // after. Math and Replication are handled - the only two formats
+    // actually seen so far. Blanks is skipped on request; Scramble
+    // (unscrambling shuffled letters back into a real word) would
+    // need a Minecraft-item wordlist to solve reliably and isn't
+    // built yet.
     checkTrivia(text) {
 
         const cleaned = cleanMessage(text)
@@ -1717,33 +1719,59 @@ class BotSession {
             return
         }
 
-        if (this.triviaActiveType !== 'math') return
+        if (this.triviaActiveType === 'math') {
 
-        const mathMatch = cleaned.match(/(\d+)\s*([+\-x×*÷/])\s*(\d+)\s*$/i)
+            const mathMatch = cleaned.match(/(\d+)\s*([+\-x×*÷/])\s*(\d+)\s*$/i)
 
-        if (!mathMatch) return
+            if (!mathMatch) return
 
-        const a = Number(mathMatch[1])
-        const b = Number(mathMatch[3])
+            const a = Number(mathMatch[1])
+            const b = Number(mathMatch[3])
 
-        let answer
+            let answer
 
-        switch (mathMatch[2].toLowerCase()) {
-            case '+': answer = a + b; break
-            case '-': answer = a - b; break
-            case 'x': case '×': case '*': answer = a * b; break
-            case '÷': case '/': answer = b !== 0 ? a / b : null; break
+            switch (mathMatch[2].toLowerCase()) {
+                case '+': answer = a + b; break
+                case '-': answer = a - b; break
+                case 'x': case '×': case '*': answer = a * b; break
+                case '÷': case '/': answer = b !== 0 ? a / b : null; break
+            }
+
+            if (!Number.isFinite(answer)) return
+
+            // Consume immediately so this round can't be answered
+            // twice (e.g. if the question line coincidentally
+            // matches again).
+            this.triviaActiveType = null
+
+            this.log(`Trivia (Math): ${a} ${mathMatch[2]} ${b} = ${answer}`)
+
+            setTimeout(() => this.sendMinecraftChat(String(answer)), 1000)
+
+            return
+
         }
 
-        if (!Number.isFinite(answer)) return
+        if (this.triviaActiveType === 'replication') {
 
-        // Consume immediately so this round can't be answered twice
-        // (e.g. if the question line coincidentally matches again).
-        this.triviaActiveType = null
+            // The question line shares the same "CHAT GAME" prefix as
+            // the "has been chosen!" line - strip it (plus whatever
+            // icon/arrow glyph sits between it and the text) and
+            // whatever's left is exactly what to repeat back. If the
+            // line didn't start with that prefix at all, it's some
+            // unrelated chat message (a player talking, etc.) and
+            // must not be echoed.
+            const stripped = cleaned.replace(/^CHAT GAME\W*/i, '')
 
-        this.log(`Trivia (Math): ${a} ${mathMatch[2]} ${b} = ${answer}`)
+            if (stripped === cleaned || !stripped) return
 
-        setTimeout(() => this.sendMinecraftChat(String(answer)), 1000)
+            this.triviaActiveType = null
+
+            this.log(`Trivia (Replication): "${stripped}"`)
+
+            setTimeout(() => this.sendMinecraftChat(stripped), 1000)
+
+        }
 
     }
 

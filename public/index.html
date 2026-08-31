@@ -2070,7 +2070,7 @@
         /* THREATS */
         /* ================================================= */
 
-        .threat-row, .ally-row {
+        .threat-row, .ally-row, .autoinvite-row {
             display: flex;
             align-items: center;
             gap: 9px;
@@ -2084,7 +2084,7 @@
             animation: rise 0.3s ease;
         }
 
-        .threat-row:last-child, .ally-row:last-child {
+        .threat-row:last-child, .ally-row:last-child, .autoinvite-row:last-child {
             border-bottom: none;
         }
 
@@ -2106,7 +2106,7 @@
             50% { background: color-mix(in srgb, var(--green) 14%, transparent); }
         }
 
-        .threat-name, .ally-name {
+        .threat-name, .ally-name, .autoinvite-name {
             flex: 1;
 
             overflow: hidden;
@@ -2114,7 +2114,7 @@
             white-space: nowrap;
         }
 
-        .threat-status, .ally-status {
+        .threat-status, .ally-status, .autoinvite-status {
             color: var(--faint);
             font-size: 10.5px;
             font-weight: 700;
@@ -2126,11 +2126,11 @@
             color: var(--red);
         }
 
-        .ally-status.online {
+        .ally-status.online, .autoinvite-status.online {
             color: var(--green);
         }
 
-        .threat-remove, .ally-remove {
+        .threat-remove, .ally-remove, .autoinvite-remove {
             width: 20px;
             height: 20px;
             padding: 0;
@@ -2148,7 +2148,7 @@
             opacity: 0.55;
         }
 
-        .threat-remove:hover, .ally-remove:hover {
+        .threat-remove:hover, .ally-remove:hover, .autoinvite-remove:hover {
             opacity: 1;
             background: rgba(239, 68, 68, 0.14);
             transform: none;
@@ -3663,6 +3663,41 @@
                     class="team-body scroll"
                 >
                     <div class="empty-state">No allies tracked. Click + to add one.</div>
+                </div>
+
+            </section>
+
+            <!-- ========================================== -->
+            <!-- AUTO-INVITE -->
+            <!-- ========================================== -->
+
+            <section class="card col-2" data-card-id="autoinvite" draggable="true" style="animation-delay: 0.199s;">
+
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
+                    Auto-Invite
+                    <span id="autoInviteBadge" class="badge" style="margin-left: auto; display: none; color: var(--green); border-color: var(--green);">0 TRACKED</span>
+                    <button class="title-action" id="autoInviteAddToggle" title="Auto re-invite someone who leaves the team" onclick="toggleAutoInviteAdder()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </button>
+                </div>
+
+                <p class="settings-section-desc" style="margin-bottom: 10px;">If someone here leaves the team, the bot automatically sends /t invite to bring them back.</p>
+
+                <div id="autoInviteAdder" class="quick-action-editor">
+                    <div class="qa-editor-row">
+                        <input id="autoInviteNameInput" type="text" placeholder="Minecraft username" class="qa-input" autocomplete="off">
+                        <button class="qa-add-btn" onclick="addAutoInvite()">
+                            Add
+                        </button>
+                    </div>
+                </div>
+
+                <div
+                    id="autoInviteList"
+                    class="team-body scroll"
+                >
+                    <div class="empty-state">No one tracked. Click + to add someone.</div>
                 </div>
 
             </section>
@@ -5578,6 +5613,10 @@
                 data.players || []
             )
 
+            updateAutoInvite(
+                data.players || []
+            )
+
             // ----------------------------------------------
             // TEAM + INVENTORY
             // ----------------------------------------------
@@ -6940,6 +6979,177 @@
 
         loadAllies()
         renderAllies([])
+
+        // ==================================================
+        // AUTO-INVITE
+        // ==================================================
+
+        let autoInviteList = []
+        let lastKnownAutoInvitePlayers = []
+
+        function loadAutoInvite() {
+
+            fetch('/api/auto-reinvite')
+                .then(response => response.json())
+                .then(data => {
+
+                    autoInviteList = Array.isArray(data.list) ? data.list : []
+
+                    renderAutoInvite(lastKnownAutoInvitePlayers)
+
+                })
+                .catch(() => {})
+
+        }
+
+        function saveAutoInviteList() {
+
+            fetch('/api/auto-reinvite', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ list: autoInviteList })
+            }).catch(() => {})
+
+        }
+
+        function toggleAutoInviteAdder() {
+
+            const adder = $('autoInviteAdder')
+            const btn = $('autoInviteAddToggle')
+
+            const showing = adder.classList.toggle('show')
+
+            btn.classList.toggle('active', showing)
+
+            if (showing) {
+                $('autoInviteNameInput')?.focus()
+            }
+
+        }
+
+        function addAutoInvite() {
+
+            const input = $('autoInviteNameInput')
+            const name = (input?.value || '').trim()
+
+            if (!name) {
+                showToast('Enter a username first.', 'error')
+                return
+            }
+
+            if (autoInviteList.some(existing => existing.toLowerCase() === name.toLowerCase())) {
+                showToast('Already tracking that name.', 'error')
+                return
+            }
+
+            autoInviteList.push(name)
+
+            saveAutoInviteList()
+            renderAutoInvite(lastKnownAutoInvitePlayers)
+
+            input.value = ''
+
+            showToast(`Now auto-inviting: ${name}`, 'success')
+
+        }
+
+        function removeAutoInvite(index) {
+
+            const removed = autoInviteList[index]
+
+            if (!removed) {
+                return
+            }
+
+            autoInviteList.splice(index, 1)
+
+            saveAutoInviteList()
+            renderAutoInvite(lastKnownAutoInvitePlayers)
+
+            showToast(`No longer tracking: ${removed}`)
+
+        }
+
+        function updateAutoInvite(players) {
+
+            lastKnownAutoInvitePlayers = Array.isArray(players) ? players : []
+
+            const onlineSet =
+                new Set(lastKnownAutoInvitePlayers.map(name => name.toLowerCase()))
+
+            const onlineCount =
+                autoInviteList.filter(name => onlineSet.has(name.toLowerCase())).length
+
+            const badge = $('autoInviteBadge')
+
+            if (badge) {
+
+                if (autoInviteList.length > 0) {
+                    badge.style.display = 'inline-block'
+                    badge.textContent = `${onlineCount}/${autoInviteList.length} ONLINE`
+                } else {
+                    badge.style.display = 'none'
+                }
+
+            }
+
+            renderAutoInvite(lastKnownAutoInvitePlayers)
+
+        }
+
+        function renderAutoInvite(players) {
+
+            const container = $('autoInviteList')
+
+            if (!container) {
+                return
+            }
+
+            if (autoInviteList.length === 0) {
+
+                container.innerHTML =
+                    '<div class="empty-state">No one tracked. Click + to add someone.</div>'
+
+                return
+
+            }
+
+            const onlineSet =
+                new Set((players || []).map(name => name.toLowerCase()))
+
+            container.innerHTML =
+                autoInviteList
+                    .map(
+                        (name, index) => {
+
+                            const online =
+                                onlineSet.has(name.toLowerCase())
+
+                            return `
+                                <div class="autoinvite-row">
+                                    <span class="member-dot ${online ? 'online' : 'offline'}"></span>
+                                    <span class="autoinvite-name">${escapeHtml(name)}</span>
+                                    <span class="autoinvite-status ${online ? 'online' : ''}">${online ? 'Online' : 'Offline'}</span>
+                                    <button class="autoinvite-remove" onclick="removeAutoInvite(${index})" title="Stop tracking">&times;</button>
+                                </div>
+                            `
+
+                        }
+                    )
+                    .join('')
+
+        }
+
+        $('autoInviteNameInput')?.addEventListener('keydown', event => {
+
+            if (event.key === 'Enter') {
+                event.preventDefault()
+                addAutoInvite()
+            }
+
+        })
+
+        loadAutoInvite()
 
         // ==================================================
         // DASHBOARD LAYOUT (drag to reorder cards)

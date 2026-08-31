@@ -333,7 +333,19 @@ function getBotConfig(username) {
 
 function saveBotConfig(username, config) {
     const configs = loadBotConfigs()
-    configs[username] = config
+    configs[username] = { ...configs[username], ...config }
+    saveBotConfigs(configs)
+}
+
+function getAutoReinviteList(username) {
+    const configs = loadBotConfigs()
+    const list = configs[username]?.autoReinvite
+    return Array.isArray(list) ? list : []
+}
+
+function saveAutoReinviteList(username, list) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], autoReinvite: list }
     saveBotConfigs(configs)
 }
 
@@ -1404,6 +1416,31 @@ class BotSession {
 
     }
 
+    // Watches for the server's "X has left the team." broadcast and
+    // sends /t invite for anyone on the auto-reinvite list, so a
+    // tracked teammate who gets kicked/leaves gets pulled back in
+    // without anyone needing to be online to do it manually.
+    checkAutoReinvite(text) {
+
+        const match = text.match(/^TEAMS ➟ (.+?) has left the team\.?$/)
+
+        if (!match) return
+
+        const username = match[1].trim()
+        const list = Array.isArray(this.config.autoReinvite) ? this.config.autoReinvite : []
+
+        const tracked = list.some(name => name.toLowerCase() === username.toLowerCase())
+
+        if (!tracked) return
+
+        this.log(`Auto-reinviting ${username} (left the team).`)
+
+        this.sendMinecraftChat(`/t invite ${username}`)
+
+        io.to(this.username).emit('notice', { type: 'success', text: `Auto-reinvited ${username}` })
+
+    }
+
     finalizeTeamInfoCapture() {
 
         if (!this.teamInfoCapture) return
@@ -1672,6 +1709,7 @@ class BotSession {
             if (!text.trim()) return
 
             this.tryParseTeamInfoLine(text, message.json)
+            this.checkAutoReinvite(text)
 
             // Player chat (position 'chat') is already broadcast by
             // the 'chat' event above, which knows the real username -
@@ -2233,12 +2271,38 @@ app.post('/api/bot-config', (req, res) => {
     const existing = sessions.get(req.session.username)
 
     if (existing) {
-        existing.config = config
+        existing.config = { ...existing.config, ...config }
     }
 
     appLog(`Bot config saved: ${req.session.username}`)
 
     res.json({ ok: true })
+
+})
+
+app.get('/api/auto-reinvite', (req, res) => {
+    res.json({ list: getAutoReinviteList(req.session.username) })
+})
+
+app.post('/api/auto-reinvite', (req, res) => {
+
+    const raw = Array.isArray(req.body?.list) ? req.body.list : []
+
+    const list = [...new Set(
+        raw
+            .map(name => String(name || '').trim())
+            .filter(Boolean)
+    )]
+
+    saveAutoReinviteList(req.session.username, list)
+
+    const existing = sessions.get(req.session.username)
+
+    if (existing) {
+        existing.config.autoReinvite = list
+    }
+
+    res.json({ ok: true, list })
 
 })
 

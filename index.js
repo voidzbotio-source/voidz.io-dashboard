@@ -167,6 +167,19 @@ const sessionMiddleware = session({
 app.use(express.json())
 app.use(sessionMiddleware)
 
+// This is a private dashboard, not a public site - keep it out of
+// search engines. The header covers every response (defense in
+// depth for crawlers that ignore robots.txt); robots.txt below is
+// the first thing well-behaved ones check.
+app.use((req, res, next) => {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow')
+    next()
+})
+
+app.get('/robots.txt', (req, res) => {
+    res.type('text/plain').send('User-agent: *\nDisallow: /\n')
+})
+
 // Share the same session with Socket.IO connections, so a
 // dashboard socket is only allowed to connect while logged in.
 io.engine.use(sessionMiddleware)

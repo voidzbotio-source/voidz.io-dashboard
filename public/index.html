@@ -4396,6 +4396,8 @@
 
             } catch {}
 
+            syncPreferenceToServer({ theme, customAccent: null })
+
         }
 
         function hexToRgb(hex) {
@@ -4456,6 +4458,10 @@
                 localStorage.setItem('fleaxer-accent', hex)
 
             } catch {}
+
+            const baseTheme = document.documentElement.getAttribute('data-theme') || 'dark'
+
+            syncPreferenceToServer({ theme: baseTheme, customAccent: hex })
 
         }
 
@@ -4528,6 +4534,8 @@
 
             } catch {}
 
+            syncPreferenceToServer({ reduceMotion: enabled })
+
         }
 
         function setCompactMode(enabled) {
@@ -4539,6 +4547,8 @@
                 localStorage.setItem('fleaxer-compact-mode', enabled ? '1' : '0')
 
             } catch {}
+
+            syncPreferenceToServer({ compactMode: enabled })
 
         }
 
@@ -4577,6 +4587,7 @@
         // ==================================================
 
         let alertVolume = 0.7
+        let alertVolumeSyncTimer = null
 
         function setAlertVolume(value) {
 
@@ -4589,6 +4600,15 @@
                 localStorage.setItem('fleaxer-alert-volume', String(Math.round(percent)))
 
             } catch {}
+
+            // The slider fires this on every drag tick - debounce the
+            // network sync so dragging doesn't spam the server.
+            clearTimeout(alertVolumeSyncTimer)
+
+            alertVolumeSyncTimer = setTimeout(
+                () => syncPreferenceToServer({ alertVolume: Math.round(percent) }),
+                400
+            )
 
         }
 
@@ -6589,6 +6609,8 @@
                 localStorage.setItem(THREATS_STORAGE_KEY, JSON.stringify(threats))
             } catch {}
 
+            syncPreferenceToServer({ threats })
+
         }
 
         function toggleThreatAdder() {
@@ -6872,6 +6894,8 @@
             try {
                 localStorage.setItem(ALLIES_STORAGE_KEY, JSON.stringify(allies))
             } catch {}
+
+            syncPreferenceToServer({ allies })
 
         }
 
@@ -7275,6 +7299,156 @@
         })
 
         loadAutoInvite()
+
+        // ==================================================
+        // PREFERENCES SYNC (Threats/Allies/Appearance across devices)
+        // ==================================================
+        // Threats, Allies, and the whole Appearance tab used to live
+        // in localStorage only - one browser, one set of settings.
+        // They're still applied from localStorage first (instant, no
+        // flash of default state), then this reconciles against the
+        // server's copy so the same account looks the same on every
+        // device/browser.
+
+        function syncPreferenceToServer(partial) {
+
+            fetch('/api/preferences', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(partial)
+            }).catch(() => {})
+
+        }
+
+        function reconcilePreferencesFromServer() {
+
+            fetch('/api/preferences')
+                .then(response => response.json())
+                .then(data => {
+
+                    if (!data.synced) {
+
+                        // This account has never synced before - push
+                        // whatever's already in localStorage up rather
+                        // than overwrite it with server defaults.
+                        let localAccent = null
+
+                        try {
+                            localAccent = localStorage.getItem('fleaxer-accent')
+                        } catch {}
+
+                        syncPreferenceToServer({
+                            threats,
+                            allies,
+                            theme: document.documentElement.getAttribute('data-theme') || 'dark',
+                            customAccent: localAccent,
+                            reduceMotion: document.documentElement.classList.contains('reduce-motion'),
+                            compactMode: document.body.classList.contains('compact'),
+                            alertVolume: Math.round(alertVolume * 100)
+                        })
+
+                        return
+
+                    }
+
+                    if (Array.isArray(data.threats)) {
+
+                        threats = data.threats
+
+                        try {
+                            localStorage.setItem(THREATS_STORAGE_KEY, JSON.stringify(threats))
+                        } catch {}
+
+                        renderThreats(lastKnownThreatPlayers)
+
+                    }
+
+                    if (Array.isArray(data.allies)) {
+
+                        allies = data.allies
+
+                        try {
+                            localStorage.setItem(ALLIES_STORAGE_KEY, JSON.stringify(allies))
+                        } catch {}
+
+                        renderAllies(lastKnownAllyPlayers)
+
+                    }
+
+                    if (data.theme && THEMES.includes(data.theme)) {
+
+                        try {
+                            localStorage.setItem('fleaxer-theme', data.theme)
+                        } catch {}
+
+                        applyTheme(data.theme)
+
+                        if (data.customAccent) {
+
+                            try {
+                                localStorage.setItem('fleaxer-accent', data.customAccent)
+                            } catch {}
+
+                            setCustomAccent(data.customAccent)
+
+                        } else {
+
+                            try {
+                                localStorage.removeItem('fleaxer-accent')
+                            } catch {}
+
+                        }
+
+                    }
+
+                    const reduceMotion = !!data.reduceMotion
+                    const compactMode = !!data.compactMode
+
+                    try {
+
+                        localStorage.setItem('fleaxer-reduce-motion', reduceMotion ? '1' : '0')
+                        localStorage.setItem('fleaxer-compact-mode', compactMode ? '1' : '0')
+
+                    } catch {}
+
+                    document.documentElement.classList.toggle('reduce-motion', reduceMotion)
+                    document.body.classList.toggle('compact', compactMode)
+
+                    const reduceMotionToggle = document.getElementById('reduceMotionToggle')
+                    const compactModeToggle = document.getElementById('compactModeToggle')
+
+                    if (reduceMotionToggle) {
+                        reduceMotionToggle.checked = reduceMotion
+                    }
+
+                    if (compactModeToggle) {
+                        compactModeToggle.checked = compactMode
+                    }
+
+                    if (Number.isFinite(data.alertVolume)) {
+
+                        const percent = Math.max(0, Math.min(100, data.alertVolume))
+
+                        alertVolume = percent / 100
+
+                        try {
+                            localStorage.setItem('fleaxer-alert-volume', String(Math.round(percent)))
+                        } catch {}
+
+                        const slider = document.getElementById('alertVolumeSlider')
+
+                        if (slider) {
+                            slider.value = String(percent)
+                        }
+
+                    }
+
+                })
+                .catch(() => {})
+
+        }
+
+        reconcilePreferencesFromServer()
 
         // ==================================================
         // DASHBOARD LAYOUT (drag to reorder cards)

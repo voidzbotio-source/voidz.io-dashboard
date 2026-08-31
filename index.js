@@ -362,6 +362,40 @@ function saveAutoReinviteList(username, list) {
     saveBotConfigs(configs)
 }
 
+// Everything the dashboard used to keep in localStorage only
+// (Threats, Allies, and the Appearance tab) - now synced through
+// here too, so it follows the account across devices/browsers.
+const PREFERENCE_KEYS = ['threats', 'allies', 'theme', 'customAccent', 'reduceMotion', 'compactMode', 'alertVolume']
+
+function getPreferences(username) {
+
+    const configs = loadBotConfigs()
+    const config = configs[username] || {}
+
+    return {
+        threats: Array.isArray(config.threats) ? config.threats : [],
+        allies: Array.isArray(config.allies) ? config.allies : [],
+        theme: config.theme || null,
+        customAccent: config.customAccent || null,
+        reduceMotion: !!config.reduceMotion,
+        compactMode: !!config.compactMode,
+        alertVolume: Number.isFinite(config.alertVolume) ? config.alertVolume : 70,
+        // False the very first time this account is seen after this
+        // feature shipped - tells the client "nothing saved here yet,
+        // push your localStorage state up instead of overwriting it."
+        synced: PREFERENCE_KEYS.some(key => key in config)
+    }
+
+}
+
+function savePreferences(username, partial) {
+
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], ...partial }
+    saveBotConfigs(configs)
+
+}
+
 function normalizeBotConfig(input) {
 
     const microsoftEmail = String(input?.microsoftEmail || '').trim()
@@ -2390,6 +2424,54 @@ app.post('/api/auto-reinvite', (req, res) => {
     }
 
     res.json({ ok: true, list })
+
+})
+
+app.get('/api/preferences', (req, res) => {
+    res.json(getPreferences(req.session.username))
+})
+
+app.post('/api/preferences', (req, res) => {
+
+    const body = req.body || {}
+    const partial = {}
+
+    for (const key of PREFERENCE_KEYS) {
+
+        if (!(key in body)) continue
+
+        if (key === 'threats' || key === 'allies') {
+
+            partial[key] = Array.isArray(body[key])
+                ? body[key].filter(entry => entry && typeof entry.name === 'string')
+                : []
+
+        } else if (key === 'reduceMotion' || key === 'compactMode') {
+
+            partial[key] = !!body[key]
+
+        } else if (key === 'alertVolume') {
+
+            const volume = Number(body[key])
+            partial[key] = Number.isFinite(volume) ? Math.max(0, Math.min(100, volume)) : 70
+
+        } else {
+
+            partial[key] = body[key] ? String(body[key]) : null
+
+        }
+
+    }
+
+    savePreferences(req.session.username, partial)
+
+    const existing = sessions.get(req.session.username)
+
+    if (existing) {
+        existing.config = { ...existing.config, ...partial }
+    }
+
+    res.json({ ok: true })
 
 })
 

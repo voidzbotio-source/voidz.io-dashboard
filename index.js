@@ -1381,6 +1381,41 @@ class BotSession {
 
     }
 
+    // One-off diagnostic for the low-HP auto-kick feature: dumps each
+    // online player's raw tab-list text (JSON-escaped, so any custom
+    // font / private-use-area characters show up as \uXXXX) into the
+    // dashboard's chat panel, since there's no server console access
+    // from there. Trigger from the browser console with:
+    //   sendCommand('tablist-debug')
+    debugTabList() {
+
+        if (!this.bot || !this.bot.players) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Bot is not connected.' })
+            return
+        }
+
+        const names = Object.keys(this.bot.players)
+
+        if (names.length === 0) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'No players in the tab list right now.' })
+            return
+        }
+
+        for (const name of names.slice(0, 10)) {
+
+            const player = this.bot.players[name]
+            const raw = player?.displayName?.toString?.() ?? String(player?.displayName ?? '(no display name)')
+
+            io.to(this.username).emit('chat', {
+                username: 'DEBUG',
+                message: `${name}: ${JSON.stringify(raw)}`,
+                time: new Date().toLocaleTimeString()
+            })
+
+        }
+
+    }
+
     showWhere() {
 
         if (!this.bot || !this.bot.entity) { originalLog('Bot is not currently connected.'); return }
@@ -2332,6 +2367,7 @@ function handleWebCommand(username, command) {
         case 'health': botSession.showHealth(); break
         case 'players': botSession.showPlayers(); break
         case 'playerslist': botSession.showPlayersList(); break
+        case 'tablist-debug': botSession.debugTabList(); break
         case 'where': botSession.showWhere(); break
         case 'lastchat': botSession.showLastChat(); break
         case 'keysamount': botSession.showKeysAmount(); break

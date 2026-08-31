@@ -375,8 +375,9 @@ function normalizeBotConfig(input) {
     const version = String(input?.version || '').trim()
 
     const lifestealAutopilot = !!input?.lifestealAutopilot
+    const discordWebhookUrl = String(input?.discordWebhookUrl || '').trim()
 
-    return { microsoftEmail, host, port, version, lifestealAutopilot }
+    return { microsoftEmail, host, port, version, lifestealAutopilot, discordWebhookUrl }
 
 }
 
@@ -431,6 +432,18 @@ function cleanMessage(text) {
         .replace(/§[0-9a-fk-or]/gi, '')
         .replace(/\s+/g, ' ')
         .trim()
+
+}
+
+function sendDiscordWebhook(webhookUrl, content) {
+
+    if (!webhookUrl) return
+
+    fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+    }).catch(error => originalError('[DISCORD WEBHOOK]', error.message))
 
 }
 
@@ -1454,6 +1467,22 @@ class BotSession {
 
     }
 
+    // The Black Market restock is a short-lived limited-quantity
+    // event (server-side, roughly every 3 hours) - worth a Discord
+    // ping since nobody's watching the dashboard 24/7.
+    checkBlackMarket(text) {
+
+        if (!/black market has now opened/i.test(text)) return
+
+        this.log('Black Market opened - pinging Discord.')
+
+        sendDiscordWebhook(
+            this.config.discordWebhookUrl,
+            `🛒 **Black Market has opened** on ${this.username}'s server - limited stock, go now!`
+        )
+
+    }
+
     finalizeTeamInfoCapture() {
 
         if (!this.teamInfoCapture) return
@@ -1723,6 +1752,7 @@ class BotSession {
 
             this.tryParseTeamInfoLine(text, message.json)
             this.checkAutoReinvite(text)
+            this.checkBlackMarket(text)
 
             // Player chat (position 'chat') is already broadcast by
             // the 'chat' event above, which knows the real username -

@@ -3921,6 +3921,13 @@
                         <span>Enable LifeSteal Autopilot &mdash; FlareMC-style auto /jq, hub recovery, and daily keyall. Only turn this on if your server matches that setup.</span>
                     </label>
 
+                    <div class="field">
+                        <label for="settingsDiscordWebhook">Discord Webhook URL (optional)</label>
+                        <input id="settingsDiscordWebhook" type="text" placeholder="https://discord.com/api/webhooks/..." autocomplete="off">
+                    </div>
+
+                    <p class="settings-section-desc" style="margin-top: -8px;">Pings this webhook when the Black Market opens, so you find out even when the dashboard's closed.</p>
+
                     <button class="modal-ok" id="settingsSaveBtn" onclick="saveSettings()" style="width: 100%;">
                         Save Bot Configuration
                     </button>
@@ -4621,6 +4628,7 @@
                     $('settingsPort').value = config.port || 25565
                     $('settingsVersion').value = config.version || ''
                     $('settingsAutopilot').checked = !!config.lifestealAutopilot
+                    $('settingsDiscordWebhook').value = config.discordWebhookUrl || ''
 
                 })
                 .catch(() => {})
@@ -4668,7 +4676,8 @@
                 host: $('settingsHost').value.trim(),
                 port: Number($('settingsPort').value) || 25565,
                 version: $('settingsVersion').value.trim(),
-                lifestealAutopilot: $('settingsAutopilot').checked
+                lifestealAutopilot: $('settingsAutopilot').checked,
+                discordWebhookUrl: $('settingsDiscordWebhook').value.trim()
             }
 
             saveBtn.disabled = true

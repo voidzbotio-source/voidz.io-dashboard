@@ -695,6 +695,7 @@ class BotSession {
         this.homeTimer = null
         this.recoveryTimer = null
         this.keyallTimer = null
+        this.nextKeyallAt = null
         this.jqSafetyTimer = null
 
         this.shuttingDown = false
@@ -917,6 +918,7 @@ class BotSession {
 
             keys,
             totalKeys: keys.vote + keys.exclusive + keys.insane,
+            nextKeyallAt: this.nextKeyallAt,
 
             lastChat: this.lastChatMessage,
             lastChatTime: this.lastChatTime,
@@ -1517,7 +1519,10 @@ class BotSession {
         const username = match[1].trim()
         const list = Array.isArray(this.config.autoReinvite) ? this.config.autoReinvite : []
 
-        const tracked = list.some(name => name.toLowerCase() === username.toLowerCase())
+        const tracked = list.some(entry => {
+            const entryName = typeof entry === 'string' ? entry : (entry?.name || '')
+            return entryName.toLowerCase() === username.toLowerCase()
+        })
 
         if (!tracked) return
 
@@ -1543,6 +1548,8 @@ class BotSession {
             `🛒 **Black Market has opened** on ${this.username}'s server - limited stock, go now!`,
             this.config.discordRoleId
         )
+
+        io.to(this.username).emit('notice', { type: 'info', text: '🛒 Black Market has opened - limited stock!' })
 
     }
 
@@ -1665,6 +1672,8 @@ class BotSession {
 
         this.stopKeyallTimer()
 
+        this.nextKeyallAt = null
+
         if (this.shuttingDown) return
         if (!this.config.lifestealAutopilot) return
 
@@ -1673,8 +1682,11 @@ class BotSession {
 
         originalLog(`[KEYALL:${this.username}] Next claim in approximately ${nextMinutes} minutes.`)
 
+        this.nextKeyallAt = Date.now() + delay
+
         this.keyallTimer = setTimeout(() => {
             this.keyallTimer = null
+            this.nextKeyallAt = null
             this.claimDiamondKey()
             this.scheduleNextKeyall()
         }, delay)
@@ -2409,11 +2421,26 @@ app.post('/api/auto-reinvite', (req, res) => {
 
     const raw = Array.isArray(req.body?.list) ? req.body.list : []
 
-    const list = [...new Set(
-        raw
-            .map(name => String(name || '').trim())
-            .filter(Boolean)
-    )]
+    const seenNames = new Set()
+    const list = []
+
+    for (const entry of raw) {
+
+        const name = String((typeof entry === 'string' ? entry : entry?.name) || '').trim()
+
+        if (!name) continue
+
+        const key = name.toLowerCase()
+
+        if (seenNames.has(key)) continue
+
+        seenNames.add(key)
+
+        const lastSeen = (typeof entry === 'object' && Number.isFinite(entry?.lastSeen)) ? entry.lastSeen : null
+
+        list.push({ name, lastSeen })
+
+    }
 
     saveAutoReinviteList(req.session.username, list)
 

@@ -14,6 +14,14 @@
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 
+    <!-- Installable as an app (Add to Home Screen) -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0a0a12">
+    <link rel="apple-touch-icon" href="/favicon.svg">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Voidz.IO">
+
     <!-- ================================================== -->
     <!-- FONT -->
     <!-- ================================================== -->
@@ -1427,6 +1435,36 @@
         /* ================================================= */
         /* KEYS */
         /* ================================================= */
+
+        .keyall-countdown {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+
+            padding: 8px 12px;
+            margin-bottom: 12px;
+
+            border-radius: var(--radius-sm);
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+            color: var(--muted);
+            font-size: 12.5px;
+            font-weight: 600;
+        }
+
+        .keyall-countdown svg {
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+            color: var(--blue);
+        }
+
+        #keyallCountdownValue {
+            color: var(--text);
+            font-weight: 700;
+        }
 
         .keys-grid {
             display: grid;
@@ -3508,6 +3546,11 @@
                     </span>
                 </div>
 
+                <div id="keyallCountdown" class="keyall-countdown" style="display: none;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    Next claim in <span id="keyallCountdownValue">-</span>
+                </div>
+
                 <div class="keys-grid">
 
                     <div class="key vote">
@@ -4038,6 +4081,14 @@
                     <label class="toggle-row" title="Threat/ally alert sound volume">
                         <span>Alert Volume</span>
                         <input type="range" id="alertVolumeSlider" class="volume-slider" min="0" max="100" value="70" oninput="setAlertVolume(this.value)">
+                    </label>
+
+                    <label class="toggle-row" title="Get an OS-level notification when the tab isn't focused">
+                        <span>Desktop Notifications</span>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="desktopNotifToggle" onchange="setDesktopNotifications(this.checked)">
+                            <span class="toggle-slider"></span>
+                        </span>
                     </label>
 
                 </div>
@@ -4581,6 +4632,101 @@
         }
 
         initDisplayPrefs()
+
+        // ==================================================
+        // DESKTOP NOTIFICATIONS
+        // ==================================================
+        // OS-level popups (not just the in-tab toast) for anything
+        // that already fires a toast, but only while the tab is
+        // hidden/unfocused - so it's useful, not redundant.
+
+        let desktopNotificationsEnabled = false
+
+        function initDesktopNotifications() {
+
+            let stored = false
+
+            try {
+                stored = localStorage.getItem('fleaxer-desktop-notifications') === '1'
+            } catch {}
+
+            desktopNotificationsEnabled =
+                stored &&
+                typeof Notification !== 'undefined' &&
+                Notification.permission === 'granted'
+
+            const toggle = $('desktopNotifToggle')
+
+            if (toggle) {
+                toggle.checked = desktopNotificationsEnabled
+            }
+
+        }
+
+        function setDesktopNotifications(enabled) {
+
+            const toggle = $('desktopNotifToggle')
+
+            if (!enabled) {
+
+                desktopNotificationsEnabled = false
+
+                try {
+                    localStorage.setItem('fleaxer-desktop-notifications', '0')
+                } catch {}
+
+                return
+
+            }
+
+            if (typeof Notification === 'undefined') {
+
+                showToast("Your browser doesn't support desktop notifications.", 'error')
+
+                if (toggle) toggle.checked = false
+
+                return
+
+            }
+
+            Notification.requestPermission().then(permission => {
+
+                desktopNotificationsEnabled = permission === 'granted'
+
+                try {
+                    localStorage.setItem('fleaxer-desktop-notifications', desktopNotificationsEnabled ? '1' : '0')
+                } catch {}
+
+                if (desktopNotificationsEnabled) {
+                    showToast('Desktop notifications enabled.', 'success')
+                } else {
+                    showToast('Notification permission was blocked.', 'error')
+                    if (toggle) toggle.checked = false
+                }
+
+            })
+
+        }
+
+        function maybeSendDesktopNotification(message, type) {
+
+            if (!desktopNotificationsEnabled) return
+            if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+            if (document.visibilityState === 'visible' && document.hasFocus()) return
+
+            try {
+
+                new Notification('Voidz.IO', {
+                    body: message,
+                    icon: '/favicon.svg',
+                    tag: 'voidz-io-alert'
+                })
+
+            } catch {}
+
+        }
+
+        initDesktopNotifications()
 
         // ==================================================
         // ALERT VOLUME
@@ -5284,6 +5430,8 @@
 
         function showToast(message, type = 'info') {
 
+            maybeSendDesktopNotification(message, type)
+
             const container =
                 $('toastContainer')
 
@@ -5669,6 +5817,8 @@
                 'totalKeys',
                 data.totalKeys || 0
             )
+
+            setNextKeyallAt(data.nextKeyallAt || null)
 
             // ----------------------------------------------
             // PLAYERS
@@ -6432,6 +6582,36 @@
 
         }
 
+        function timeAgo(timestamp) {
+
+            if (!timestamp) {
+                return 'never seen'
+            }
+
+            const diff = Date.now() - timestamp
+
+            if (diff < 60000) {
+                return 'just now'
+            }
+
+            const minutes = Math.floor(diff / 60000)
+
+            if (minutes < 60) {
+                return `${minutes}m ago`
+            }
+
+            const hours = Math.floor(minutes / 60)
+
+            if (hours < 24) {
+                return `${hours}h ago`
+            }
+
+            const days = Math.floor(hours / 24)
+
+            return `${days}d ago`
+
+        }
+
         // ==================================================
         // CHAT
         // ==================================================
@@ -6706,6 +6886,11 @@
 
                     newlyOffline = true
 
+                    // "Last seen" only ever needs to reflect the most
+                    // recent moment they were confirmed online - that's
+                    // right now, since we just noticed them leave.
+                    threat.lastSeen = Date.now()
+
                     showToast(`Threat offline: ${threat.name}`)
 
                 }
@@ -6718,6 +6903,10 @@
                 playThreatAlert()
             } else if (newlyOffline) {
                 playThreatOfflineAlert()
+            }
+
+            if (newlyOnline || newlyOffline) {
+                saveThreats()
             }
 
             const badge = $('threatsOnlineBadge')
@@ -6769,7 +6958,7 @@
                                 <div class="threat-row ${online ? 'online' : ''}">
                                     <span class="member-dot ${online ? 'online' : 'offline'}"></span>
                                     <span class="threat-name">${escapeHtml(threat.name)}</span>
-                                    <span class="threat-status ${online ? 'online' : ''}">${online ? 'Online' : 'Offline'}</span>
+                                    <span class="threat-status ${online ? 'online' : ''}">${online ? 'Online' : escapeHtml(timeAgo(threat.lastSeen))}</span>
                                     <button class="threat-remove" onclick="removeThreat(${index})" title="Stop tracking">&times;</button>
                                 </div>
                             `
@@ -6992,6 +7181,8 @@
 
                     newlyOffline = true
 
+                    ally.lastSeen = Date.now()
+
                     showToast(`Ally offline: ${ally.name}`)
 
                 }
@@ -7004,6 +7195,10 @@
                 playAllyAlert()
             } else if (newlyOffline) {
                 playAllyOfflineAlert()
+            }
+
+            if (newlyOnline || newlyOffline) {
+                saveAllies()
             }
 
             const badge = $('alliesOnlineBadge')
@@ -7055,7 +7250,7 @@
                                 <div class="ally-row ${online ? 'online' : ''}">
                                     <span class="member-dot ${online ? 'online' : 'offline'}"></span>
                                     <span class="ally-name">${escapeHtml(ally.name)}</span>
-                                    <span class="ally-status ${online ? 'online' : ''}">${online ? 'Online' : 'Offline'}</span>
+                                    <span class="ally-status ${online ? 'online' : ''}">${online ? 'Online' : escapeHtml(timeAgo(ally.lastSeen))}</span>
                                     <button class="ally-remove" onclick="removeAlly(${index})" title="Stop tracking">&times;</button>
                                 </div>
                             `
@@ -7142,7 +7337,15 @@
                 .then(response => response.json())
                 .then(data => {
 
-                    autoInviteList = Array.isArray(data.list) ? data.list : []
+                    // Older saves stored plain username strings - normalize
+                    // those to the same {name, lastSeen} shape as anything
+                    // added since.
+                    autoInviteList = (Array.isArray(data.list) ? data.list : [])
+                        .map(entry => typeof entry === 'string'
+                            ? { name: entry, lastSeen: null }
+                            : { name: entry?.name || '', lastSeen: entry?.lastSeen || null }
+                        )
+                        .filter(entry => entry.name)
 
                     renderAutoInvite(lastKnownAutoInvitePlayers)
 
@@ -7186,12 +7389,12 @@
                 return
             }
 
-            if (autoInviteList.some(existing => existing.toLowerCase() === name.toLowerCase())) {
+            if (autoInviteList.some(existing => existing.name.toLowerCase() === name.toLowerCase())) {
                 showToast('Already tracking that name.', 'error')
                 return
             }
 
-            autoInviteList.push(name)
+            autoInviteList.push({ name, lastSeen: null })
 
             saveAutoInviteList()
             renderAutoInvite(lastKnownAutoInvitePlayers)
@@ -7215,9 +7418,11 @@
             saveAutoInviteList()
             renderAutoInvite(lastKnownAutoInvitePlayers)
 
-            showToast(`No longer tracking: ${removed}`)
+            showToast(`No longer tracking: ${removed.name}`)
 
         }
+
+        let autoInviteOnlineState = {}
 
         function updateAutoInvite(players) {
 
@@ -7226,8 +7431,29 @@
             const onlineSet =
                 new Set(lastKnownAutoInvitePlayers.map(name => name.toLowerCase()))
 
-            const onlineCount =
-                autoInviteList.filter(name => onlineSet.has(name.toLowerCase())).length
+            let onlineCount = 0
+            let seenChanged = false
+
+            for (const entry of autoInviteList) {
+
+                const key = entry.name.toLowerCase()
+                const isOnline = onlineSet.has(key)
+                const wasOnline = autoInviteOnlineState[key]
+
+                if (isOnline) {
+                    onlineCount++
+                } else if (wasOnline) {
+                    entry.lastSeen = Date.now()
+                    seenChanged = true
+                }
+
+                autoInviteOnlineState[key] = isOnline
+
+            }
+
+            if (seenChanged) {
+                saveAutoInviteList()
+            }
 
             const badge = $('autoInviteBadge')
 
@@ -7269,16 +7495,16 @@
             container.innerHTML =
                 autoInviteList
                     .map(
-                        (name, index) => {
+                        (entry, index) => {
 
                             const online =
-                                onlineSet.has(name.toLowerCase())
+                                onlineSet.has(entry.name.toLowerCase())
 
                             return `
                                 <div class="autoinvite-row">
                                     <span class="member-dot ${online ? 'online' : 'offline'}"></span>
-                                    <span class="autoinvite-name">${escapeHtml(name)}</span>
-                                    <span class="autoinvite-status ${online ? 'online' : ''}">${online ? 'Online' : 'Offline'}</span>
+                                    <span class="autoinvite-name">${escapeHtml(entry.name)}</span>
+                                    <span class="autoinvite-status ${online ? 'online' : ''}">${online ? 'Online' : escapeHtml(timeAgo(entry.lastSeen))}</span>
                                     <button class="autoinvite-remove" onclick="removeAutoInvite(${index})" title="Stop tracking">&times;</button>
                                 </div>
                             `
@@ -7449,6 +7675,68 @@
         }
 
         reconcilePreferencesFromServer()
+
+        // ==================================================
+        // KEYALL COUNTDOWN
+        // ==================================================
+
+        let nextKeyallAt = null
+
+        function formatCountdown(ms) {
+
+            if (ms <= 0) {
+                return 'any moment now'
+            }
+
+            const totalSeconds = Math.floor(ms / 1000)
+
+            const hours = Math.floor(totalSeconds / 3600)
+            const minutes = Math.floor((totalSeconds % 3600) / 60)
+            const seconds = totalSeconds % 60
+
+            if (hours > 0) {
+                return `${hours}h ${minutes}m`
+            }
+
+            if (minutes > 0) {
+                return `${minutes}m ${seconds}s`
+            }
+
+            return `${seconds}s`
+
+        }
+
+        function tickKeyallCountdown() {
+
+            const wrap = $('keyallCountdown')
+
+            if (!wrap) {
+                return
+            }
+
+            if (!nextKeyallAt) {
+                wrap.style.display = 'none'
+                return
+            }
+
+            wrap.style.display = 'flex'
+
+            setText(
+                'keyallCountdownValue',
+                formatCountdown(nextKeyallAt - Date.now())
+            )
+
+        }
+
+        function setNextKeyallAt(timestamp) {
+
+            nextKeyallAt = timestamp || null
+
+            tickKeyallCountdown()
+
+        }
+
+        setInterval(tickKeyallCountdown, 1000)
 
         // ==================================================
         // DASHBOARD LAYOUT (drag to reorder cards)

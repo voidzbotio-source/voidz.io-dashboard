@@ -459,6 +459,17 @@ function sendDiscordWebhook(webhookUrl, content, roleId) {
 
 }
 
+function parseCurrencyAmount(text) {
+
+    if (!text) return null
+
+    const cleaned = String(text).replace(/[^0-9.\-]/g, '')
+    const value = parseFloat(cleaned)
+
+    return Number.isFinite(value) ? value : null
+
+}
+
 function containsLifeSteal(text) {
 
     const normalized = cleanMessage(text).toLowerCase()
@@ -670,6 +681,10 @@ class BotSession {
         this.teamRoster = null
         this.teamInfoCapture = null
         this.teamInfoCaptureTimer = null
+
+        // Points/balance from each /t info, oldest first, capped -
+        // powers the trend sparkline on the Team card.
+        this.teamHistory = []
 
         this.botState = 'OFFLINE'
         this.currentWorld = 'Unknown'
@@ -885,7 +900,8 @@ class BotSession {
                     onlineCount: this.teamRoster.onlineCount,
                     totalCount: this.teamRoster.totalCount,
                     roles: this.teamRoster.roles,
-                    updatedAt: this.teamRoster.updatedAt
+                    updatedAt: this.teamRoster.updatedAt,
+                    history: this.teamHistory
                 }
                 : null,
 
@@ -1519,6 +1535,21 @@ class BotSession {
             onlineCount: members.filter(member => member.online === true).length,
             totalCount: members.length,
             updatedAt: Date.now()
+        }
+
+        const points = this.teamRoster.header?.points
+        const balance = parseCurrencyAmount(this.teamRoster.balance)
+
+        if (Number.isFinite(points) || balance !== null) {
+
+            this.teamHistory.push({
+                timestamp: Date.now(),
+                points: Number.isFinite(points) ? points : null,
+                balance
+            })
+
+            this.teamHistory = this.teamHistory.slice(-40)
+
         }
 
         this.teamInfoCapture = null

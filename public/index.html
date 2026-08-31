@@ -1998,6 +1998,48 @@
             margin-top: 3px;
         }
 
+        .team-sparklines {
+            display: flex;
+            gap: 10px;
+
+            margin-bottom: 14px;
+        }
+
+        .team-stat {
+            flex: 1;
+            min-width: 0;
+
+            padding: 10px 12px;
+
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .team-stat-label {
+            color: var(--muted);
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .team-stat-value {
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .sparkline {
+            display: block;
+            margin-top: 2px;
+        }
+
         .team-online-count {
             font-family: 'Inter', sans-serif;
             font-size: 20px;
@@ -6080,6 +6122,50 @@
         // TEAM
         // ==================================================
 
+        function buildSparkline(values, width, height) {
+
+            const points = values.filter(
+                value => typeof value === 'number' && Number.isFinite(value)
+            )
+
+            if (points.length < 2) {
+                return ''
+            }
+
+            const min = Math.min(...points)
+            const max = Math.max(...points)
+            const range = max - min || 1
+
+            const xPad = 3
+            const yPad = 4
+
+            const innerWidth = width - xPad * 2
+            const innerHeight = height - yPad * 2
+
+            const stepX = innerWidth / (points.length - 1)
+
+            const coords = points.map(
+                (value, index) => [
+                    xPad + index * stepX,
+                    yPad + innerHeight - ((value - min) / range) * innerHeight
+                ]
+            )
+
+            const path = coords
+                .map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`)
+                .join(' ')
+
+            const [lastX, lastY] = coords[coords.length - 1]
+
+            return `
+                <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="sparkline">
+                    <path d="${path}" fill="none" stroke="var(--faint)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+                    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="4" fill="var(--blue)" stroke="var(--panel-2)" stroke-width="2"/>
+                </svg>
+            `
+
+        }
+
         function renderTeam(team) {
 
             const container =
@@ -6149,6 +6235,28 @@
                     )
                     .join('')
 
+            const history = Array.isArray(team.history) ? team.history : []
+
+            const pointsSpark = buildSparkline(history.map(entry => entry.points), 140, 32)
+            const balanceSpark = buildSparkline(history.map(entry => entry.balance), 140, 32)
+
+            const sparklinesHtml = (pointsSpark || balanceSpark)
+                ? `
+                    <div class="team-sparklines">
+                        <div class="team-stat">
+                            <div class="team-stat-label">Points</div>
+                            <div class="team-stat-value">${team.points ?? '-'}</div>
+                            ${pointsSpark}
+                        </div>
+                        <div class="team-stat">
+                            <div class="team-stat-label">Balance</div>
+                            <div class="team-stat-value">${escapeHtml(team.balance || '-')}</div>
+                            ${balanceSpark}
+                        </div>
+                    </div>
+                `
+                : ''
+
             container.innerHTML = `
                 <div class="team-header">
                     <div>
@@ -6157,6 +6265,7 @@
                     </div>
                     <div class="team-online-count">${team.onlineCount}/${team.totalCount}</div>
                 </div>
+                ${sparklinesHtml}
                 ${rolesHtml || '<div class="empty-state">No members found.</div>'}
             `
 

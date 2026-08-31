@@ -504,6 +504,40 @@ function parseCurrencyAmount(text) {
 
 }
 
+// Reads a player's HP out of their tab-list display name. The
+// exact format is server-defined (a heart symbol, "HP", etc.) and
+// isn't verified against FlareMC directly, so this tries a few
+// common patterns and returns null - never a guess - if none match,
+// so an unparseable name is skipped rather than misread as full HP.
+function parsePlayerHpFromDisplayName(text) {
+
+    const cleaned = cleanMessage(text)
+
+    const patterns = [
+        /❤\s*(\d+(?:\.\d+)?)/,
+        /(\d+(?:\.\d+)?)\s*❤/,
+        /\bHP\s*[:\-]?\s*(\d+(?:\.\d+)?)/i,
+        /(\d+(?:\.\d+)?)\s*\bHP\b/i
+    ]
+
+    for (const pattern of patterns) {
+
+        const match = cleaned.match(pattern)
+
+        if (match) {
+
+            const value = parseFloat(match[1])
+
+            if (Number.isFinite(value)) return value
+
+        }
+
+    }
+
+    return null
+
+}
+
 function containsLifeSteal(text) {
 
     const normalized = cleanMessage(text).toLowerCase()
@@ -731,6 +765,13 @@ class BotSession {
         // off by the dashboard's Stop button, on by Start. This is
         // separate from shuttingDown (a full process shutdown).
         this.botEnabled = true
+
+        // Auto-reinvited players who have already been kicked for
+        // low HP this "episode" - keyed by lowercase name, cleared
+        // once their tab-list HP is seen back at/above the threshold
+        // (or they drop off the tab list) so they aren't kicked
+        // every single tick while they stay critical.
+        this.lowHpHandled = new Set()
 
     }
 
@@ -1531,6 +1572,66 @@ class BotSession {
         this.sendMinecraftChat(`/t invite ${username}`)
 
         io.to(this.username).emit('notice', { type: 'success', text: `Auto-reinvited ${username}` })
+
+    }
+
+    // Runs every dashboard tick (~1s) while connected. Any Auto-Invite
+    // tracked player whose tab-list HP drops below 2.5 hearts (5 HP)
+    // gets kicked off the team and immediately reinvited - kicking
+    // drops them from `/t info` shared-location tracking before an
+    // enemy can use it against them at low HP, and the reinvite
+    // brings them straight back in once they're safe. `lowHpHandled`
+    // stops this firing every tick while someone stays critical.
+    checkAutoInviteLowHealth() {
+
+        if (!this.bot || !this.bot.players) return
+
+        const list = Array.isArray(this.config.autoReinvite) ? this.config.autoReinvite : []
+
+        if (list.length === 0) return
+
+        const trackedNames = list
+            .map(entry => (typeof entry === 'string' ? entry : entry?.name) || '')
+            .filter(Boolean)
+
+        if (trackedNames.length === 0) return
+
+        const onlineNames = Object.keys(this.bot.players)
+
+        for (const trackedName of trackedNames) {
+
+            const key = trackedName.toLowerCase()
+
+            const actualName = onlineNames.find(name => name.toLowerCase() === key)
+
+            if (!actualName) {
+                this.lowHpHandled.delete(key)
+                continue
+            }
+
+            const player = this.bot.players[actualName]
+            const hp = parsePlayerHpFromDisplayName(player?.displayName?.toString?.() ?? String(player?.displayName ?? ''))
+
+            if (hp === null) continue
+
+            if (hp >= 5) {
+                this.lowHpHandled.delete(key)
+                continue
+            }
+
+            if (this.lowHpHandled.has(key)) continue
+
+            this.lowHpHandled.add(key)
+
+            this.log(`${actualName} is at ${hp} HP - kicking and reinviting.`)
+
+            this.sendMinecraftChat(`/t kick ${actualName}`)
+
+            setTimeout(() => this.sendMinecraftChat(`/t invite ${actualName}`), 350)
+
+            io.to(this.username).emit('notice', { type: 'info', text: `${actualName} dropped below 2.5 hearts - kicked and reinvited` })
+
+        }
 
     }
 
@@ -2555,6 +2656,7 @@ app.get('/api/keepalive', (req, res) => {
 setInterval(() => {
     for (const botSession of sessions.values()) {
         botSession.updateDashboard()
+        botSession.checkAutoInviteLowHealth()
     }
 }, 1000)
 

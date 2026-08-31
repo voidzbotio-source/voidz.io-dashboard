@@ -1747,7 +1747,7 @@ class BotSession {
 
             this.log(`Trivia (Replication): "${stripped}"`)
 
-            setTimeout(() => this.sendMinecraftChat(stripped), 1000)
+            setTimeout(() => this.sendMinecraftChat(stripped), 1500)
 
         }
 

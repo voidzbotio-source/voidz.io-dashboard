@@ -7,7 +7,7 @@
 
     <meta
         name="viewport"
-        content="width=device-width, initial-scale=1.0"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     >
 
     <title>Fleaxer Dashboard</title>
@@ -370,6 +370,12 @@
         @keyframes float-c {
             0%, 100% { transform: translate(0, 0) scale(1); }
             50% { transform: translate(40px, -40px) scale(1.16); }
+        }
+
+        @media (hover: none) and (pointer: coarse) {
+            .cursor-glow {
+                display: none;
+            }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -3056,7 +3062,9 @@
             }
 
             .sidebar {
-                position: static;
+                position: sticky;
+                top: 0;
+                z-index: 40;
 
                 width: 100%;
                 height: auto;
@@ -3064,28 +3072,71 @@
                 flex-direction: row;
                 flex-wrap: wrap;
                 align-items: center;
-                gap: 8px;
+                gap: 6px;
+
+                padding: 10px 12px;
+                padding-top: max(10px, env(safe-area-inset-top));
+                padding-left: max(12px, env(safe-area-inset-left));
+                padding-right: max(12px, env(safe-area-inset-right));
+
+                backdrop-filter: blur(14px) saturate(180%);
 
                 border-right: none;
                 border-bottom: 1px solid var(--border);
             }
 
             .brand {
-                padding: 2px 6px;
+                order: 1;
+                padding: 0;
+                gap: 8px;
+                margin-right: auto;
+            }
+
+            .logo {
+                width: 32px;
+                height: 32px;
+                font-size: 14px;
+            }
+
+            .brand h1 {
+                font-size: 15px;
+            }
+
+            .brand p {
+                display: none;
             }
 
             .connection {
+                order: 2;
                 margin-bottom: 0;
+                padding: 7px 10px;
+            }
+
+            .connection-text {
+                display: none;
             }
 
             .sidebar .control-button {
-                width: auto;
+                order: 4;
+                width: 100%;
                 margin-bottom: 0;
             }
 
-            .sidebar-divider,
+            .sidebar-divider {
+                display: none;
+            }
+
             .sidebar-spacer {
                 display: none;
+            }
+
+            .sidebar-nav-item {
+                order: 5;
+                width: auto;
+                flex: 1 1 0;
+
+                justify-content: center;
+                padding: 10px;
             }
 
             .sidebar-nav-item span {
@@ -3093,12 +3144,38 @@
             }
 
             .sidebar-account {
+                order: 3;
                 border-top: none;
                 padding: 0;
             }
 
             .sidebar-account-name {
                 display: none;
+            }
+
+            .sidebar-logout-btn {
+                width: 36px;
+                height: 36px;
+            }
+
+            /* Blur is expensive to composite on mobile GPUs, and this
+               page stacks a lot of it (sidebar + every card + modals).
+               Keep the glass look but cut the cost. */
+            .card {
+                backdrop-filter: blur(12px) saturate(160%);
+            }
+
+            .modal-card {
+                backdrop-filter: blur(16px) saturate(160%);
+            }
+
+            .orb {
+                filter: blur(70px);
+            }
+
+            .orb-1, .orb-2, .orb-3 {
+                width: 320px;
+                height: 320px;
             }
 
         }
@@ -3115,10 +3192,6 @@
                 min-height: 44px;
             }
 
-            .brand h1 {
-                font-size: 18px;
-            }
-
             .grid {
                 grid-template-columns:
                     1fr;
@@ -3126,6 +3199,10 @@
 
             .col-1, .col-2, .col-3, .col-4 {
                 grid-column: span 1;
+            }
+
+            .card {
+                padding: 16px;
             }
 
             .keys-grid {
@@ -3160,6 +3237,33 @@
 
             .hero-state {
                 font-size: 26px;
+            }
+
+            .toast-container {
+                left: 12px;
+                right: 12px;
+                bottom: max(14px, env(safe-area-inset-bottom));
+
+                max-width: none;
+            }
+
+        }
+
+        @media (
+            max-width: 420px
+        ) {
+
+            .hero-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .settings-field-row {
+                flex-direction: column;
+                gap: 14px;
+            }
+
+            .settings-tab span {
+                display: none;
             }
 
         }
@@ -3949,17 +4053,17 @@
 
                 <button class="settings-tab active" data-tab="bot" onclick="switchSettingsTab('bot')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-                    Bot
+                    <span>Bot</span>
                 </button>
 
                 <button class="settings-tab" data-tab="appearance" onclick="switchSettingsTab('appearance')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/></svg>
-                    Appearance
+                    <span>Appearance</span>
                 </button>
 
                 <button class="settings-tab" data-tab="account" onclick="switchSettingsTab('account')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    Account
+                    <span>Account</span>
                 </button>
 
             </div>

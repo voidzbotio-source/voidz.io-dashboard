@@ -4241,6 +4241,35 @@
 
                     </div>
 
+                    <div class="settings-section">
+
+                        <div class="settings-section-header">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            <span>Backup &amp; Restore</span>
+                        </div>
+
+                        <p class="settings-section-desc">
+                            Downloads your Threats, Allies, Auto-Invite list, and appearance settings as a file you can restore from later &mdash; a safety net in case anything ever gets wiped.
+                        </p>
+
+                        <div id="importBackupError" class="settings-error"></div>
+
+                        <div class="settings-field-row">
+
+                            <button class="modal-ok" onclick="exportBackup()" style="flex: 1;">
+                                Export Backup
+                            </button>
+
+                            <button class="logout-button" onclick="document.getElementById('importBackupInput').click()" style="flex: 1;">
+                                Import Backup
+                            </button>
+
+                        </div>
+
+                        <input type="file" id="importBackupInput" accept="application/json" style="display: none;" onchange="importBackup(this.files[0])">
+
+                    </div>
+
                 </div>
 
             </div>
@@ -4923,7 +4952,7 @@
 
             switchSettingsTab('bot')
 
-            for (const id of ['settingsError', 'passwordError']) {
+            for (const id of ['settingsError', 'passwordError', 'importBackupError']) {
 
                 const box = $(id)
 
@@ -7779,6 +7808,160 @@
         }
 
         reconcilePreferencesFromServer()
+
+        // ==================================================
+        // BACKUP & RESTORE
+        // ==================================================
+        // A local safety net for Threats/Allies/Auto-Invite/appearance -
+        // separate from the cross-device sync, which has already lost
+        // data once when localStorage was empty on a fresh origin.
+
+        function exportBackup() {
+
+            const backup = {
+                version: 1,
+                exportedAt: Date.now(),
+                threats,
+                allies,
+                autoInvite: autoInviteList,
+                preferences: {
+                    theme: document.documentElement.getAttribute('data-theme') || 'dark',
+                    customAccent: (() => {
+                        try { return localStorage.getItem('fleaxer-accent') } catch { return null }
+                    })(),
+                    reduceMotion: document.documentElement.classList.contains('reduce-motion'),
+                    compactMode: document.body.classList.contains('compact'),
+                    alertVolume: Math.round(alertVolume * 100)
+                }
+            }
+
+            const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
+            const url = URL.createObjectURL(blob)
+
+            const dateStamp = new Date().toISOString().slice(0, 10)
+            const nameStamp = (currentUsername || 'account').toLowerCase()
+
+            const link = document.createElement('a')
+            link.href = url
+            link.download = `voidz-io-backup-${nameStamp}-${dateStamp}.json`
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+
+            URL.revokeObjectURL(url)
+
+            showToast('Backup downloaded.', 'success')
+
+        }
+
+        function importBackup(file) {
+
+            const errorBox = $('importBackupError')
+
+            errorBox.classList.remove('show')
+            errorBox.textContent = ''
+
+            if (!file) return
+
+            const reader = new FileReader()
+
+            reader.onload = () => {
+
+                let data
+
+                try {
+                    data = JSON.parse(reader.result)
+                } catch {
+                    errorBox.textContent = "That file isn't valid JSON."
+                    errorBox.classList.add('show')
+                    return
+                }
+
+                if (!data || typeof data !== 'object') {
+                    errorBox.textContent = "That file doesn't look like a Voidz.IO backup."
+                    errorBox.classList.add('show')
+                    return
+                }
+
+                const normalizeNamedList = list =>
+                    (Array.isArray(list) ? list : [])
+                        .map(entry => typeof entry === 'string'
+                            ? { name: entry, lastSeen: null }
+                            : { name: String(entry?.name || '').trim(), lastSeen: Number.isFinite(entry?.lastSeen) ? entry.lastSeen : null }
+                        )
+                        .filter(entry => entry.name)
+
+                if (Array.isArray(data.threats)) {
+                    threats = normalizeNamedList(data.threats)
+                    saveThreats()
+                    renderThreats(lastKnownThreatPlayers)
+                }
+
+                if (Array.isArray(data.allies)) {
+                    allies = normalizeNamedList(data.allies)
+                    saveAllies()
+                    renderAllies(lastKnownAllyPlayers)
+                }
+
+                if (Array.isArray(data.autoInvite)) {
+                    autoInviteList = normalizeNamedList(data.autoInvite)
+                    saveAutoInviteList()
+                    renderAutoInvite(lastKnownAutoInvitePlayers)
+                }
+
+                const prefs = data.preferences || {}
+
+                if (prefs.theme && THEMES.includes(prefs.theme)) {
+
+                    setTheme(prefs.theme)
+
+                    if (prefs.customAccent) {
+                        setCustomAccent(prefs.customAccent)
+                    }
+
+                }
+
+                if (typeof prefs.reduceMotion === 'boolean') {
+
+                    setReduceMotion(prefs.reduceMotion)
+
+                    const toggle = document.getElementById('reduceMotionToggle')
+                    if (toggle) toggle.checked = prefs.reduceMotion
+
+                }
+
+                if (typeof prefs.compactMode === 'boolean') {
+
+                    setCompactMode(prefs.compactMode)
+
+                    const toggle = document.getElementById('compactModeToggle')
+                    if (toggle) toggle.checked = prefs.compactMode
+
+                }
+
+                if (Number.isFinite(prefs.alertVolume)) {
+
+                    setAlertVolume(prefs.alertVolume)
+
+                    const slider = document.getElementById('alertVolumeSlider')
+                    if (slider) slider.value = String(Math.max(0, Math.min(100, prefs.alertVolume)))
+
+                }
+
+                showToast('Backup restored.', 'success')
+
+            }
+
+            reader.onerror = () => {
+                errorBox.textContent = 'Could not read that file.'
+                errorBox.classList.add('show')
+            }
+
+            reader.readAsText(file)
+
+            $('importBackupInput').value = ''
+
+        }
 
         // ==================================================
         // KEYALL COUNTDOWN

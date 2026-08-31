@@ -1545,7 +1545,7 @@ class BotSession {
 
         sendDiscordWebhook(
             this.config.discordWebhookUrl,
-            `🛒 **Black Market has opened** on ${this.username}'s server - limited stock, go now!`,
+            'The Black Market has reset',
             this.config.discordRoleId
         )
 

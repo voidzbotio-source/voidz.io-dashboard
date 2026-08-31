@@ -504,40 +504,6 @@ function parseCurrencyAmount(text) {
 
 }
 
-// Reads a player's HP out of their tab-list display name. The
-// exact format is server-defined (a heart symbol, "HP", etc.) and
-// isn't verified against FlareMC directly, so this tries a few
-// common patterns and returns null - never a guess - if none match,
-// so an unparseable name is skipped rather than misread as full HP.
-function parsePlayerHpFromDisplayName(text) {
-
-    const cleaned = cleanMessage(text)
-
-    const patterns = [
-        /❤\s*(\d+(?:\.\d+)?)/,
-        /(\d+(?:\.\d+)?)\s*❤/,
-        /\bHP\s*[:\-]?\s*(\d+(?:\.\d+)?)/i,
-        /(\d+(?:\.\d+)?)\s*\bHP\b/i
-    ]
-
-    for (const pattern of patterns) {
-
-        const match = cleaned.match(pattern)
-
-        if (match) {
-
-            const value = parseFloat(match[1])
-
-            if (Number.isFinite(value)) return value
-
-        }
-
-    }
-
-    return null
-
-}
-
 function containsLifeSteal(text) {
 
     const normalized = cleanMessage(text).toLowerCase()
@@ -1624,6 +1590,14 @@ class BotSession {
     // enemy can use it against them at low HP, and the reinvite
     // brings them straight back in once they're safe. `lowHpHandled`
     // stops this firing every tick while someone stays critical.
+    //
+    // HP comes from the tab-list scoreboard (display slot 0, exposed
+    // by mineflayer as bot.scoreboard.list) - a real integer score
+    // per player, not text. A displayName-parsing version of this
+    // shipped first and never matched anything: a tablist-debug dump
+    // showed the tab list's HP number isn't in the display name text
+    // at all (just a colored bar + the name), confirming it's driven
+    // by this separate scoreboard objective instead.
     checkAutoInviteLowHealth() {
 
         if (!this.bot || !this.bot.players) return
@@ -1638,6 +1612,10 @@ class BotSession {
 
         if (trackedNames.length === 0) return
 
+        const listBoard = this.bot.scoreboard?.list
+
+        if (!listBoard) return
+
         const onlineNames = Object.keys(this.bot.players)
 
         for (const trackedName of trackedNames) {
@@ -1651,8 +1629,8 @@ class BotSession {
                 continue
             }
 
-            const player = this.bot.players[actualName]
-            const hp = parsePlayerHpFromDisplayName(player?.displayName?.toString?.() ?? String(player?.displayName ?? ''))
+            const scoreEntry = listBoard.itemsMap?.[actualName]
+            const hp = Number.isFinite(scoreEntry?.value) ? scoreEntry.value : null
 
             if (hp === null) continue
 

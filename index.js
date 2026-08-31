@@ -766,6 +766,12 @@ class BotSession {
         // separate from shuttingDown (a full process shutdown).
         this.botEnabled = true
 
+        // Set to the game's name (e.g. 'math') right after its "X has
+        // been chosen!" broadcast, so the very next matching question
+        // line is known to belong to that round. Only 'math' is
+        // actually answered right now - see checkTrivia().
+        this.triviaActiveType = null
+
         // Auto-reinvited players who have already been kicked for
         // low HP this "episode" - keyed by lowercase name, cleared
         // once their tab-list HP is seen back at/above the threshold
@@ -1689,6 +1695,58 @@ class BotSession {
 
     }
 
+    // The trivia plugin broadcasts "<Type> has been chosen!" and then
+    // the question itself as a separate line shortly after. Only Math
+    // is handled right now - it's the only format actually seen so
+    // far (a bare "233 + 418" style expression). Other types
+    // (Replication, Blanks, ...) need a real example of their chat
+    // format before they can be added safely.
+    checkTrivia(text) {
+
+        const cleaned = cleanMessage(text)
+
+        const chosenMatch = cleaned.match(/(\w+)\s+has been chosen!?$/i)
+
+        if (chosenMatch) {
+            this.triviaActiveType = chosenMatch[1].toLowerCase()
+            return
+        }
+
+        if (/\bhas won\b/i.test(cleaned)) {
+            this.triviaActiveType = null
+            return
+        }
+
+        if (this.triviaActiveType !== 'math') return
+
+        const mathMatch = cleaned.match(/(\d+)\s*([+\-x×*÷/])\s*(\d+)\s*$/i)
+
+        if (!mathMatch) return
+
+        const a = Number(mathMatch[1])
+        const b = Number(mathMatch[3])
+
+        let answer
+
+        switch (mathMatch[2].toLowerCase()) {
+            case '+': answer = a + b; break
+            case '-': answer = a - b; break
+            case 'x': case '×': case '*': answer = a * b; break
+            case '÷': case '/': answer = b !== 0 ? a / b : null; break
+        }
+
+        if (!Number.isFinite(answer)) return
+
+        // Consume immediately so this round can't be answered twice
+        // (e.g. if the question line coincidentally matches again).
+        this.triviaActiveType = null
+
+        this.log(`Trivia (Math): ${a} ${mathMatch[2]} ${b} = ${answer}`)
+
+        setTimeout(() => this.sendMinecraftChat(String(answer)), 1000)
+
+    }
+
     finalizeTeamInfoCapture() {
 
         if (!this.teamInfoCapture) return
@@ -1979,6 +2037,7 @@ class BotSession {
             this.tryParseTeamInfoLine(text, message.json)
             this.checkAutoReinvite(text)
             this.checkBlackMarket(text)
+            this.checkTrivia(text)
 
             // Player chat (position 'chat') is already broadcast by
             // the 'chat' event above, which knows the real username -

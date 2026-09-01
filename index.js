@@ -504,65 +504,13 @@ function parseCurrencyAmount(text) {
 
 }
 
-// A best-effort list of Minecraft item/block display names for the
-// "Blanks" trivia game (a hangman-style mask, e.g. "P_tt_d Cl_s_d
-// E_el_ss_m" -> "Potted Closed Eyeblossom"). Compiled from general
-// knowledge, not pulled from the game's actual registry - it won't
-// catch every possible item, especially very new additions. Extend
-// it if a round keeps going unanswered.
-const MINECRAFT_ITEM_NAMES = [
-    'Coal', 'Charcoal', 'Raw Iron', 'Iron Ingot', 'Iron Nugget', 'Raw Gold', 'Gold Ingot', 'Gold Nugget',
-    'Raw Copper', 'Copper Ingot', 'Redstone Dust', 'Redstone Block', 'Lapis Lazuli', 'Diamond', 'Emerald',
-    'Amethyst Shard', 'Netherite Scrap', 'Netherite Ingot', 'Quartz', 'Nether Quartz', 'Glowstone Dust',
-    'Prismarine Crystals', 'Prismarine Shard', 'Ancient Debris', 'Flint', 'Clay Ball', 'Brick', 'Nether Brick',
-    'Wooden Sword', 'Stone Sword', 'Iron Sword', 'Golden Sword', 'Diamond Sword', 'Netherite Sword',
-    'Wooden Axe', 'Stone Axe', 'Iron Axe', 'Golden Axe', 'Diamond Axe', 'Netherite Axe',
-    'Wooden Pickaxe', 'Stone Pickaxe', 'Iron Pickaxe', 'Golden Pickaxe', 'Diamond Pickaxe', 'Netherite Pickaxe',
-    'Wooden Shovel', 'Stone Shovel', 'Iron Shovel', 'Golden Shovel', 'Diamond Shovel', 'Netherite Shovel',
-    'Wooden Hoe', 'Stone Hoe', 'Iron Hoe', 'Golden Hoe', 'Diamond Hoe', 'Netherite Hoe',
-    'Fishing Rod', 'Bow', 'Crossbow', 'Arrow', 'Spectral Arrow', 'Trident', 'Shield', 'Shears',
-    'Flint and Steel', 'Fire Charge', 'Elytra', 'Totem of Undying', 'Mace',
-    'Leather Boots', 'Leather Helmet', 'Leather Chestplate', 'Leather Leggings',
-    'Iron Boots', 'Iron Helmet', 'Iron Chestplate', 'Iron Leggings',
-    'Golden Boots', 'Golden Helmet', 'Golden Chestplate', 'Golden Leggings',
-    'Diamond Boots', 'Diamond Helmet', 'Diamond Chestplate', 'Diamond Leggings',
-    'Netherite Boots', 'Netherite Helmet', 'Netherite Chestplate', 'Netherite Leggings',
-    'Chainmail Boots', 'Chainmail Helmet', 'Chainmail Chestplate', 'Chainmail Leggings',
-    'Turtle Helmet', 'Wolf Armor',
-    'Golden Apple', 'Enchanted Golden Apple', 'Apple', 'Cooked Beef', 'Cooked Porkchop', 'Cooked Chicken',
-    'Cooked Mutton', 'Cooked Rabbit', 'Cooked Cod', 'Cooked Salmon', 'Bread', 'Cake', 'Cookie',
-    'Pumpkin Pie', 'Melon Slice', 'Golden Carrot', 'Carrot', 'Potato', 'Baked Potato', 'Poisonous Potato',
-    'Suspicious Stew', 'Rabbit Stew', 'Mushroom Stew', 'Beetroot Soup', 'Honey Bottle', 'Glow Berries',
-    'Sweet Berries', 'Chorus Fruit', 'Popped Chorus Fruit', 'Dried Kelp', 'Rotten Flesh', 'Spider Eye',
-    'Fermented Spider Eye', 'Beetroot', 'Wheat', 'Sugar', 'Egg', 'Milk Bucket', 'Pufferfish',
-    'Crafting Table', 'Furnace', 'Blast Furnace', 'Smoker', 'Anvil', 'Enchanting Table', 'Bookshelf',
-    'Chiseled Bookshelf', 'Chest', 'Ender Chest', 'Trapped Chest', 'Barrel', 'Loom', 'Cartography Table',
-    'Fletching Table', 'Grindstone', 'Smithing Table', 'Stonecutter', 'Composter', 'Lectern', 'Beacon',
-    'Conduit', 'Jukebox', 'Note Block', 'Bell', 'Lantern', 'Soul Lantern', 'Campfire', 'Soul Campfire',
-    'Scaffolding', 'Ladder', 'Torch', 'Redstone Torch', 'Sea Lantern', 'Glowstone', 'Shroomlight', 'End Rod',
-    'Redstone Comparator', 'Redstone Repeater', 'Piston', 'Sticky Piston', 'Observer', 'Dropper',
-    'Dispenser', 'Hopper', 'Redstone Lamp', 'Tripwire Hook', 'Target', 'Lightning Rod',
-    'Nether Star', 'Ghast Tear', 'Blaze Rod', 'Blaze Powder', 'Magma Cream', 'Ender Pearl', 'Eye of Ender',
-    'Dragon Egg', 'Shulker Shell', 'Phantom Membrane', 'Slime Ball', 'Nautilus Shell', 'Heart of the Sea',
-    'Turtle Egg', 'Sniffer Egg', 'Firework Rocket', 'Firework Star', 'Experience Bottle',
-    'Potted Closed Eyeblossom', 'Potted Open Eyeblossom', 'Potted Cactus', 'Potted Bamboo', 'Potted Fern',
-    'Potted Dead Bush', 'Potted Oak Sapling', 'Potted Spruce Sapling', 'Potted Birch Sapling',
-    'Potted Jungle Sapling', 'Potted Acacia Sapling', 'Potted Dark Oak Sapling', 'Potted Mangrove Propagule',
-    'Potted Cherry Sapling', 'Potted Azalea', 'Potted Flowering Azalea', 'Potted Dandelion', 'Potted Poppy',
-    'Potted Blue Orchid', 'Potted Allium', 'Potted Azure Bluet', 'Potted Red Tulip', 'Potted Orange Tulip',
-    'Potted White Tulip', 'Potted Pink Tulip', 'Potted Oxeye Daisy', 'Potted Cornflower',
-    'Potted Lily of the Valley', 'Potted Wither Rose', 'Potted Brown Mushroom', 'Potted Red Mushroom',
-    'Potted Crimson Fungus', 'Potted Warped Fungus', 'Potted Crimson Roots', 'Potted Warped Roots',
-    'Closed Eyeblossom', 'Open Eyeblossom', 'Dandelion', 'Poppy', 'Blue Orchid', 'Allium', 'Azure Bluet',
-    'Red Tulip', 'Orange Tulip', 'White Tulip', 'Pink Tulip', 'Oxeye Daisy', 'Cornflower',
-    'Lily of the Valley', 'Wither Rose', 'Sunflower', 'Lilac', 'Rose Bush', 'Peony', 'Pitcher Plant',
-    'Torchflower', 'Bamboo', 'Sugar Cane', 'Cactus', 'Kelp', 'Seagrass', 'Vine', 'Lily Pad', 'Glow Lichen',
-    'Compass', 'Recovery Compass', 'Clock', 'Map', 'Spyglass', 'Name Tag', 'Lead', 'Saddle', 'Music Disc',
-    'Bucket', 'Water Bucket', 'Lava Bucket', 'Powder Snow Bucket', 'Bundle', 'Bone Meal', 'Bone',
-    'String', 'Feather', 'Leather', 'Gunpowder', 'Ink Sac', 'Glow Ink Sac', 'Paper', 'Book',
-    'Enchanted Book', 'Writable Book', 'Ender Dragon', 'Wither', 'Warden', 'Allay', 'Axolotl', 'Goat',
-    'Frog', 'Tadpole', 'Sniffer', 'Camel', 'Armadillo', 'Bogged', 'Breeze', 'Creaking'
-]
+// Item/block display names for the "Blanks" trivia game (a hangman-
+// style mask, e.g. "P_tt_d Cl_s_d E_el_ss_m" -> "Potted Closed
+// Eyeblossom"). Generated once from Minecraft's own en_us.json lang
+// file (via the misode/mcmeta GitHub mirror, which tracks the latest
+// release) - see minecraft-item-names.json. Regenerate that file for
+// a newer Minecraft version if trivia starts using items it predates.
+const MINECRAFT_ITEM_NAMES = JSON.parse(fs.readFileSync(path.join(__dirname, 'minecraft-item-names.json'), 'utf8'))
 
 function findBlanksCandidates(maskedLine) {
 

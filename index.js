@@ -504,6 +504,94 @@ function parseCurrencyAmount(text) {
 
 }
 
+// A best-effort list of Minecraft item/block display names for the
+// "Blanks" trivia game (a hangman-style mask, e.g. "P_tt_d Cl_s_d
+// E_el_ss_m" -> "Potted Closed Eyeblossom"). Compiled from general
+// knowledge, not pulled from the game's actual registry - it won't
+// catch every possible item, especially very new additions. Extend
+// it if a round keeps going unanswered.
+const MINECRAFT_ITEM_NAMES = [
+    'Coal', 'Charcoal', 'Raw Iron', 'Iron Ingot', 'Iron Nugget', 'Raw Gold', 'Gold Ingot', 'Gold Nugget',
+    'Raw Copper', 'Copper Ingot', 'Redstone Dust', 'Redstone Block', 'Lapis Lazuli', 'Diamond', 'Emerald',
+    'Amethyst Shard', 'Netherite Scrap', 'Netherite Ingot', 'Quartz', 'Nether Quartz', 'Glowstone Dust',
+    'Prismarine Crystals', 'Prismarine Shard', 'Ancient Debris', 'Flint', 'Clay Ball', 'Brick', 'Nether Brick',
+    'Wooden Sword', 'Stone Sword', 'Iron Sword', 'Golden Sword', 'Diamond Sword', 'Netherite Sword',
+    'Wooden Axe', 'Stone Axe', 'Iron Axe', 'Golden Axe', 'Diamond Axe', 'Netherite Axe',
+    'Wooden Pickaxe', 'Stone Pickaxe', 'Iron Pickaxe', 'Golden Pickaxe', 'Diamond Pickaxe', 'Netherite Pickaxe',
+    'Wooden Shovel', 'Stone Shovel', 'Iron Shovel', 'Golden Shovel', 'Diamond Shovel', 'Netherite Shovel',
+    'Wooden Hoe', 'Stone Hoe', 'Iron Hoe', 'Golden Hoe', 'Diamond Hoe', 'Netherite Hoe',
+    'Fishing Rod', 'Bow', 'Crossbow', 'Arrow', 'Spectral Arrow', 'Trident', 'Shield', 'Shears',
+    'Flint and Steel', 'Fire Charge', 'Elytra', 'Totem of Undying', 'Mace',
+    'Leather Boots', 'Leather Helmet', 'Leather Chestplate', 'Leather Leggings',
+    'Iron Boots', 'Iron Helmet', 'Iron Chestplate', 'Iron Leggings',
+    'Golden Boots', 'Golden Helmet', 'Golden Chestplate', 'Golden Leggings',
+    'Diamond Boots', 'Diamond Helmet', 'Diamond Chestplate', 'Diamond Leggings',
+    'Netherite Boots', 'Netherite Helmet', 'Netherite Chestplate', 'Netherite Leggings',
+    'Chainmail Boots', 'Chainmail Helmet', 'Chainmail Chestplate', 'Chainmail Leggings',
+    'Turtle Helmet', 'Wolf Armor',
+    'Golden Apple', 'Enchanted Golden Apple', 'Apple', 'Cooked Beef', 'Cooked Porkchop', 'Cooked Chicken',
+    'Cooked Mutton', 'Cooked Rabbit', 'Cooked Cod', 'Cooked Salmon', 'Bread', 'Cake', 'Cookie',
+    'Pumpkin Pie', 'Melon Slice', 'Golden Carrot', 'Carrot', 'Potato', 'Baked Potato', 'Poisonous Potato',
+    'Suspicious Stew', 'Rabbit Stew', 'Mushroom Stew', 'Beetroot Soup', 'Honey Bottle', 'Glow Berries',
+    'Sweet Berries', 'Chorus Fruit', 'Popped Chorus Fruit', 'Dried Kelp', 'Rotten Flesh', 'Spider Eye',
+    'Fermented Spider Eye', 'Beetroot', 'Wheat', 'Sugar', 'Egg', 'Milk Bucket', 'Pufferfish',
+    'Crafting Table', 'Furnace', 'Blast Furnace', 'Smoker', 'Anvil', 'Enchanting Table', 'Bookshelf',
+    'Chiseled Bookshelf', 'Chest', 'Ender Chest', 'Trapped Chest', 'Barrel', 'Loom', 'Cartography Table',
+    'Fletching Table', 'Grindstone', 'Smithing Table', 'Stonecutter', 'Composter', 'Lectern', 'Beacon',
+    'Conduit', 'Jukebox', 'Note Block', 'Bell', 'Lantern', 'Soul Lantern', 'Campfire', 'Soul Campfire',
+    'Scaffolding', 'Ladder', 'Torch', 'Redstone Torch', 'Sea Lantern', 'Glowstone', 'Shroomlight', 'End Rod',
+    'Redstone Comparator', 'Redstone Repeater', 'Piston', 'Sticky Piston', 'Observer', 'Dropper',
+    'Dispenser', 'Hopper', 'Redstone Lamp', 'Tripwire Hook', 'Target', 'Lightning Rod',
+    'Nether Star', 'Ghast Tear', 'Blaze Rod', 'Blaze Powder', 'Magma Cream', 'Ender Pearl', 'Eye of Ender',
+    'Dragon Egg', 'Shulker Shell', 'Phantom Membrane', 'Slime Ball', 'Nautilus Shell', 'Heart of the Sea',
+    'Turtle Egg', 'Sniffer Egg', 'Firework Rocket', 'Firework Star', 'Experience Bottle',
+    'Potted Closed Eyeblossom', 'Potted Open Eyeblossom', 'Potted Cactus', 'Potted Bamboo', 'Potted Fern',
+    'Potted Dead Bush', 'Potted Oak Sapling', 'Potted Spruce Sapling', 'Potted Birch Sapling',
+    'Potted Jungle Sapling', 'Potted Acacia Sapling', 'Potted Dark Oak Sapling', 'Potted Mangrove Propagule',
+    'Potted Cherry Sapling', 'Potted Azalea', 'Potted Flowering Azalea', 'Potted Dandelion', 'Potted Poppy',
+    'Potted Blue Orchid', 'Potted Allium', 'Potted Azure Bluet', 'Potted Red Tulip', 'Potted Orange Tulip',
+    'Potted White Tulip', 'Potted Pink Tulip', 'Potted Oxeye Daisy', 'Potted Cornflower',
+    'Potted Lily of the Valley', 'Potted Wither Rose', 'Potted Brown Mushroom', 'Potted Red Mushroom',
+    'Potted Crimson Fungus', 'Potted Warped Fungus', 'Potted Crimson Roots', 'Potted Warped Roots',
+    'Closed Eyeblossom', 'Open Eyeblossom', 'Dandelion', 'Poppy', 'Blue Orchid', 'Allium', 'Azure Bluet',
+    'Red Tulip', 'Orange Tulip', 'White Tulip', 'Pink Tulip', 'Oxeye Daisy', 'Cornflower',
+    'Lily of the Valley', 'Wither Rose', 'Sunflower', 'Lilac', 'Rose Bush', 'Peony', 'Pitcher Plant',
+    'Torchflower', 'Bamboo', 'Sugar Cane', 'Cactus', 'Kelp', 'Seagrass', 'Vine', 'Lily Pad', 'Glow Lichen',
+    'Compass', 'Recovery Compass', 'Clock', 'Map', 'Spyglass', 'Name Tag', 'Lead', 'Saddle', 'Music Disc',
+    'Bucket', 'Water Bucket', 'Lava Bucket', 'Powder Snow Bucket', 'Bundle', 'Bone Meal', 'Bone',
+    'String', 'Feather', 'Leather', 'Gunpowder', 'Ink Sac', 'Glow Ink Sac', 'Paper', 'Book',
+    'Enchanted Book', 'Writable Book', 'Ender Dragon', 'Wither', 'Warden', 'Allay', 'Axolotl', 'Goat',
+    'Frog', 'Tadpole', 'Sniffer', 'Camel', 'Armadillo', 'Bogged', 'Breeze', 'Creaking'
+]
+
+function findBlanksCandidates(maskedLine) {
+
+    const maskWords = maskedLine.split(' ').filter(Boolean)
+
+    return MINECRAFT_ITEM_NAMES.filter(name => {
+
+        const nameWords = name.split(' ')
+
+        if (nameWords.length !== maskWords.length) return false
+
+        return maskWords.every((mask, i) => {
+
+            const word = nameWords[i]
+
+            if (mask.length !== word.length) return false
+
+            for (let c = 0; c < mask.length; c++) {
+                if (mask[c] !== '_' && mask[c] !== word[c]) return false
+            }
+
+            return true
+
+        })
+
+    })
+
+}
+
 function containsLifeSteal(text) {
 
     const normalized = cleanMessage(text).toLowerCase()
@@ -734,10 +822,16 @@ class BotSession {
 
         // Set to the game's name (e.g. 'math') right after its "X has
         // been chosen!" broadcast, so the very next matching question
-        // line is known to belong to that round. Only 'math' and
-        // 'replication' are actually answered right now - see
-        // checkTrivia().
+        // line is known to belong to that round. 'math', 'replication',
+        // and 'blanks' are answered right now - see checkTrivia().
         this.triviaActiveType = null
+
+        // Blanks-specific: the list of item names still worth trying
+        // for the current round (null = no round parsed yet), and the
+        // timer for the next 1s-spaced guess. Both get reset the
+        // moment the round resolves.
+        this.triviaBlanksQueue = null
+        this.triviaBlanksTimer = null
 
         // Auto-reinvited players who have already been kicked for
         // low HP this "episode" - keyed by lowercase name, cleared
@@ -1676,11 +1770,9 @@ class BotSession {
 
     // The trivia plugin broadcasts "<Type> has been chosen!" and then
     // the question itself as a separate "CHAT GAME" line shortly
-    // after. Math and Replication are handled - the only two formats
-    // actually seen so far. Blanks is skipped on request; Scramble
+    // after. Math, Replication, and Blanks are handled. Scramble
     // (unscrambling shuffled letters back into a real word) would
-    // need a Minecraft-item wordlist to solve reliably and isn't
-    // built yet.
+    // need a different solving approach and isn't built yet.
     checkTrivia(text) {
 
         const cleaned = cleanMessage(text)
@@ -1688,13 +1780,31 @@ class BotSession {
         const chosenMatch = cleaned.match(/(\w+)\s+has been chosen!?$/i)
 
         if (chosenMatch) {
+
             this.triviaActiveType = chosenMatch[1].toLowerCase()
+            this.triviaBlanksQueue = null
+
+            if (this.triviaBlanksTimer) {
+                clearTimeout(this.triviaBlanksTimer)
+                this.triviaBlanksTimer = null
+            }
+
             return
+
         }
 
-        if (/\bhas won\b/i.test(cleaned)) {
+        if (/\bhas won\b/i.test(cleaned) || /\bnobody won\b/i.test(cleaned)) {
+
             this.triviaActiveType = null
+            this.triviaBlanksQueue = null
+
+            if (this.triviaBlanksTimer) {
+                clearTimeout(this.triviaBlanksTimer)
+                this.triviaBlanksTimer = null
+            }
+
             return
+
         }
 
         if (this.triviaActiveType === 'math') {
@@ -1749,7 +1859,58 @@ class BotSession {
 
             setTimeout(() => this.sendMinecraftChat(stripped), 1500)
 
+            return
+
         }
+
+        if (this.triviaActiveType === 'blanks') {
+
+            // Already parsed this round's mask and are working through
+            // candidates one per second - the queue/timer handle
+            // themselves, nothing more to do until "has won"/"nobody
+            // won" clears triviaActiveType above.
+            if (this.triviaBlanksQueue !== null) return
+
+            const stripped = cleaned.replace(/^CHAT GAME\W*/i, '')
+
+            if (stripped === cleaned || !stripped) return
+            if (!/^_*[A-Za-z][A-Za-z_]*(?: _*[A-Za-z][A-Za-z_]*)*$/.test(stripped)) return
+            if (!stripped.includes('_')) return
+
+            const candidates = findBlanksCandidates(stripped)
+
+            this.log(`Trivia (Blanks): mask "${stripped}" -> ${candidates.length} candidate(s)`)
+
+            this.triviaBlanksQueue = candidates
+
+            this.scheduleNextBlanksGuess()
+
+        }
+
+    }
+
+    // Sends the next best-guess item name for the active Blanks round,
+    // then queues the one after it 1s later - repeating until either
+    // the queue runs out or the round resolves (checkTrivia clears
+    // triviaActiveType/triviaBlanksQueue on "has won"/"nobody won",
+    // which the guard below picks up).
+    scheduleNextBlanksGuess() {
+
+        this.triviaBlanksTimer = setTimeout(() => {
+
+            this.triviaBlanksTimer = null
+
+            if (this.triviaActiveType !== 'blanks' || !this.triviaBlanksQueue) return
+
+            const next = this.triviaBlanksQueue.shift()
+
+            if (!next) return
+
+            this.sendMinecraftChat(next)
+
+            this.scheduleNextBlanksGuess()
+
+        }, 1000)
 
     }
 

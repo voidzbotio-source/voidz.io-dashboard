@@ -776,8 +776,8 @@ class BotSession {
 
         // Blanks-specific: the list of item names still worth trying
         // for the current round (null = no round parsed yet), and the
-        // timer for the next 1s-spaced guess. Both get reset the
-        // moment the round resolves.
+        // timer driving the next guess. Both get reset the moment the
+        // round resolves.
         this.triviaBlanksQueue = null
         this.triviaBlanksTimer = null
 
@@ -1838,10 +1838,10 @@ class BotSession {
     }
 
     // Sends the next best-guess item name for the active Blanks round,
-    // then queues the one after it 1s later - repeating until either
-    // the queue runs out or the round resolves (checkTrivia clears
-    // triviaActiveType/triviaBlanksQueue on "has won"/"nobody won",
-    // which the guard below picks up).
+    // then queues the one right after with no delay - repeating until
+    // either the queue runs out or the round resolves (checkTrivia
+    // clears triviaActiveType/triviaBlanksQueue on "has won"/"nobody
+    // won", which the guard below picks up).
     scheduleNextBlanksGuess() {
 
         this.triviaBlanksTimer = setTimeout(() => {
@@ -1858,7 +1858,7 @@ class BotSession {
 
             this.scheduleNextBlanksGuess()
 
-        }, 1000)
+        }, 0)
 
     }
 

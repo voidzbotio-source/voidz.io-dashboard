@@ -1388,13 +1388,18 @@ class BotSession {
 
     }
 
-    // One-off diagnostic for the Black Market auto-buy feature: dumps
-    // every slot of the NEXT inventory GUI that opens (item id,
-    // display name, count, and raw lore) into the dashboard's chat
-    // panel, then stops watching. Trigger from the browser console
-    // with sendCommand('bm-debug'), then open the GUI yourself
-    // in-game (/bm, or click an item to see its confirm dialog) -
-    // this only observes, it never clicks anything on its own.
+    // One-off diagnostic for the Black Market auto-buy feature. Sends
+    // /bm itself (must run through the BOT's own connection - a
+    // human manually opening /bm on a separate client/session never
+    // reaches this bot's windowOpen event), dumps the shop's slots,
+    // then clicks whichever slot's name/lore mentions "insane" to
+    // reveal the confirm dialog and dumps that too. Clicking a shop
+    // item only opens its confirm dialog - it does NOT spend
+    // anything, and nothing in the confirm dialog itself is ever
+    // clicked. If the Insane Key is at 0 stock right now, the server
+    // may not open a confirm dialog at all, in which case only the
+    // SHOP dump will show up. Trigger from the browser console with:
+    //   sendCommand('bm-debug')
     debugNextWindow() {
 
         if (!this.bot) {
@@ -1402,21 +1407,19 @@ class BotSession {
             return
         }
 
-        io.to(this.username).emit('notice', { type: 'info', text: 'Watching for the next GUI to open...' })
-
-        this.bot.once('windowOpen', window => {
+        const dumpWindow = (window, label) => {
 
             io.to(this.username).emit('chat', {
                 username: 'DEBUG',
-                message: `Window: "${window.title || window.type}" (${window.slots.length} slots)`,
+                message: `${label} - Window: "${window.title || window.type}" (${window.slots.length} slots)`,
                 time: new Date().toLocaleTimeString()
             })
 
-            const items = window.slots
+            const entries = window.slots
                 .map((item, index) => ({ item, index }))
                 .filter(entry => entry.item)
 
-            for (const { item, index } of items.slice(0, 20)) {
+            for (const { item, index } of entries.slice(0, 20)) {
 
                 const lore = item.nbt
                     ? JSON.stringify(item.nbt).slice(0, 300)
@@ -1424,13 +1427,41 @@ class BotSession {
 
                 io.to(this.username).emit('chat', {
                     username: 'DEBUG',
-                    message: `#${index}: ${item.name} x${item.count} - "${item.displayName}" - ${lore}`,
+                    message: `${label} #${index}: ${item.name} x${item.count} - "${item.displayName}" - ${lore}`,
                     time: new Date().toLocaleTimeString()
                 })
 
             }
 
+            return entries
+
+        }
+
+        io.to(this.username).emit('notice', { type: 'info', text: 'Opening /bm to inspect it...' })
+
+        this.bot.once('windowOpen', shopWindow => {
+
+            const entries = dumpWindow(shopWindow, 'SHOP')
+
+            const target = entries.find(({ item }) =>
+                /insane/i.test(item.displayName || '') ||
+                (item.nbt && /insane/i.test(JSON.stringify(item.nbt)))
+            )
+
+            if (!target) {
+                io.to(this.username).emit('notice', { type: 'error', text: 'No "Insane"-named item found in the shop to click.' })
+                return
+            }
+
+            this.bot.once('windowOpen', confirmWindow => {
+                dumpWindow(confirmWindow, 'CONFIRM')
+            })
+
+            this.bot.clickWindow(target.index, 0, 0).catch(() => {})
+
         })
+
+        this.sendMinecraftChat('/bm')
 
     }
 

@@ -1388,6 +1388,52 @@ class BotSession {
 
     }
 
+    // One-off diagnostic for the Black Market auto-buy feature: dumps
+    // every slot of the NEXT inventory GUI that opens (item id,
+    // display name, count, and raw lore) into the dashboard's chat
+    // panel, then stops watching. Trigger from the browser console
+    // with sendCommand('bm-debug'), then open the GUI yourself
+    // in-game (/bm, or click an item to see its confirm dialog) -
+    // this only observes, it never clicks anything on its own.
+    debugNextWindow() {
+
+        if (!this.bot) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Bot is not connected.' })
+            return
+        }
+
+        io.to(this.username).emit('notice', { type: 'info', text: 'Watching for the next GUI to open...' })
+
+        this.bot.once('windowOpen', window => {
+
+            io.to(this.username).emit('chat', {
+                username: 'DEBUG',
+                message: `Window: "${window.title || window.type}" (${window.slots.length} slots)`,
+                time: new Date().toLocaleTimeString()
+            })
+
+            const items = window.slots
+                .map((item, index) => ({ item, index }))
+                .filter(entry => entry.item)
+
+            for (const { item, index } of items.slice(0, 20)) {
+
+                const lore = item.nbt
+                    ? JSON.stringify(item.nbt).slice(0, 300)
+                    : '(no nbt)'
+
+                io.to(this.username).emit('chat', {
+                    username: 'DEBUG',
+                    message: `#${index}: ${item.name} x${item.count} - "${item.displayName}" - ${lore}`,
+                    time: new Date().toLocaleTimeString()
+                })
+
+            }
+
+        })
+
+    }
+
     showWhere() {
 
         if (!this.bot || !this.bot.entity) { originalLog('Bot is not currently connected.'); return }
@@ -2431,6 +2477,7 @@ function handleWebCommand(username, command) {
         case 'players': botSession.showPlayers(); break
         case 'playerslist': botSession.showPlayersList(); break
         case 'tablist-debug': botSession.debugTabList(); break
+        case 'bm-debug': botSession.debugNextWindow(); break
         case 'where': botSession.showWhere(); break
         case 'lastchat': botSession.showLastChat(); break
         case 'keysamount': botSession.showKeysAmount(); break

@@ -504,42 +504,6 @@ function parseCurrencyAmount(text) {
 
 }
 
-// Item/block display names for the "Blanks" trivia game (a hangman-
-// style mask, e.g. "P_tt_d Cl_s_d E_el_ss_m" -> "Potted Closed
-// Eyeblossom"). Generated once from Minecraft's own en_us.json lang
-// file (via the misode/mcmeta GitHub mirror, which tracks the latest
-// release) - see minecraft-item-names.json. Regenerate that file for
-// a newer Minecraft version if trivia starts using items it predates.
-const MINECRAFT_ITEM_NAMES = JSON.parse(fs.readFileSync(path.join(__dirname, 'minecraft-item-names.json'), 'utf8'))
-
-function findBlanksCandidates(maskedLine) {
-
-    const maskWords = maskedLine.split(' ').filter(Boolean)
-
-    return MINECRAFT_ITEM_NAMES.filter(name => {
-
-        const nameWords = name.split(' ')
-
-        if (nameWords.length !== maskWords.length) return false
-
-        return maskWords.every((mask, i) => {
-
-            const word = nameWords[i]
-
-            if (mask.length !== word.length) return false
-
-            for (let c = 0; c < mask.length; c++) {
-                if (mask[c] !== '_' && mask[c] !== word[c]) return false
-            }
-
-            return true
-
-        })
-
-    })
-
-}
-
 function containsLifeSteal(text) {
 
     const normalized = cleanMessage(text).toLowerCase()
@@ -770,16 +734,9 @@ class BotSession {
 
         // Set to the game's name (e.g. 'math') right after its "X has
         // been chosen!" broadcast, so the very next matching question
-        // line is known to belong to that round. 'math', 'replication',
-        // and 'blanks' are answered right now - see checkTrivia().
+        // line is known to belong to that round. 'math' and
+        // 'replication' are answered right now - see checkTrivia().
         this.triviaActiveType = null
-
-        // Blanks-specific: the list of item names still worth trying
-        // for the current round (null = no round parsed yet), and the
-        // timer driving the next guess. Both get reset the moment the
-        // round resolves.
-        this.triviaBlanksQueue = null
-        this.triviaBlanksTimer = null
 
         // Auto-reinvited players who have already been kicked for
         // low HP this "episode" - keyed by lowercase name, cleared
@@ -1718,9 +1675,8 @@ class BotSession {
 
     // The trivia plugin broadcasts "<Type> has been chosen!" and then
     // the question itself as a separate "CHAT GAME" line shortly
-    // after. Math, Replication, and Blanks are handled. Scramble
-    // (unscrambling shuffled letters back into a real word) would
-    // need a different solving approach and isn't built yet.
+    // after. Math and Replication are handled. Blanks and Scramble
+    // aren't built.
     checkTrivia(text) {
 
         const cleaned = cleanMessage(text)
@@ -1728,31 +1684,13 @@ class BotSession {
         const chosenMatch = cleaned.match(/(\w+)\s+has been chosen!?$/i)
 
         if (chosenMatch) {
-
             this.triviaActiveType = chosenMatch[1].toLowerCase()
-            this.triviaBlanksQueue = null
-
-            if (this.triviaBlanksTimer) {
-                clearTimeout(this.triviaBlanksTimer)
-                this.triviaBlanksTimer = null
-            }
-
             return
-
         }
 
         if (/\bhas won\b/i.test(cleaned) || /\bnobody won\b/i.test(cleaned)) {
-
             this.triviaActiveType = null
-            this.triviaBlanksQueue = null
-
-            if (this.triviaBlanksTimer) {
-                clearTimeout(this.triviaBlanksTimer)
-                this.triviaBlanksTimer = null
-            }
-
             return
-
         }
 
         if (this.triviaActiveType === 'math') {
@@ -1782,7 +1720,7 @@ class BotSession {
 
             this.log(`Trivia (Math): ${a} ${mathMatch[2]} ${b} = ${answer}`)
 
-            setTimeout(() => this.sendMinecraftChat(String(answer)), 1000)
+            setTimeout(() => this.sendMinecraftChat(String(answer)), 5000)
 
             return
 
@@ -1805,60 +1743,11 @@ class BotSession {
 
             this.log(`Trivia (Replication): "${stripped}"`)
 
-            setTimeout(() => this.sendMinecraftChat(stripped), 1500)
+            setTimeout(() => this.sendMinecraftChat(stripped), 3000)
 
             return
 
         }
-
-        if (this.triviaActiveType === 'blanks') {
-
-            // Already parsed this round's mask and are working through
-            // candidates one per second - the queue/timer handle
-            // themselves, nothing more to do until "has won"/"nobody
-            // won" clears triviaActiveType above.
-            if (this.triviaBlanksQueue !== null) return
-
-            const stripped = cleaned.replace(/^CHAT GAME\W*/i, '')
-
-            if (stripped === cleaned || !stripped) return
-            if (!/^_*[A-Za-z][A-Za-z_]*(?: _*[A-Za-z][A-Za-z_]*)*$/.test(stripped)) return
-            if (!stripped.includes('_')) return
-
-            const candidates = findBlanksCandidates(stripped)
-
-            this.log(`Trivia (Blanks): mask "${stripped}" -> ${candidates.length} candidate(s)`)
-
-            this.triviaBlanksQueue = candidates
-
-            this.scheduleNextBlanksGuess()
-
-        }
-
-    }
-
-    // Sends the next best-guess item name for the active Blanks round,
-    // then queues the one right after with no delay - repeating until
-    // either the queue runs out or the round resolves (checkTrivia
-    // clears triviaActiveType/triviaBlanksQueue on "has won"/"nobody
-    // won", which the guard below picks up).
-    scheduleNextBlanksGuess() {
-
-        this.triviaBlanksTimer = setTimeout(() => {
-
-            this.triviaBlanksTimer = null
-
-            if (this.triviaActiveType !== 'blanks' || !this.triviaBlanksQueue) return
-
-            const next = this.triviaBlanksQueue.shift()
-
-            if (!next) return
-
-            this.sendMinecraftChat(next)
-
-            this.scheduleNextBlanksGuess()
-
-        }, 0)
 
     }
 

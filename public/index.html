@@ -1007,6 +1007,13 @@
                     minmax(0, 1fr)
                 );
 
+            /* Cards span different widths (col-1..col-4) and get
+               freely reordered by drag-and-drop - without dense
+               packing, the browser's default sparse auto-placement
+               leaves gaps and can land a dropped card somewhere
+               other than where it was dropped. */
+            grid-auto-flow: row dense;
+
             gap: 16px;
 
             margin-bottom: 16px;
@@ -2063,6 +2070,36 @@
             display: flex;
             flex-direction: column;
             gap: 4px;
+
+            cursor: pointer;
+            transition: border-color 0.15s ease, background-color 0.15s ease;
+        }
+
+        .team-stat:hover {
+            border-color: var(--border-strong);
+            background: var(--panel-hover);
+        }
+
+        .detail-chart-wrap {
+            margin: 4px 0 6px;
+        }
+
+        .detail-chart {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        .detail-chart-labels {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+
+            margin-top: 6px;
+
+            color: var(--muted);
+            font-size: 11.5px;
+            font-weight: 600;
         }
 
         .team-stat-label {
@@ -4030,6 +4067,33 @@
                     Confirm
                 </button>
 
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- ================================================== -->
+    <!-- TEAM STAT DETAIL MODAL -->
+    <!-- ================================================== -->
+
+    <div id="teamStatModalOverlay" class="modal-overlay">
+
+        <div class="modal-card">
+
+            <h3>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8 13 13.7l-3-3L4.7 16"/></svg>
+                <span id="teamStatModalTitle">Points History</span>
+            </h3>
+
+            <p>Current: <strong id="teamStatModalCurrent">-</strong></p>
+
+            <div id="teamStatModalBody" class="detail-chart-wrap"></div>
+
+            <div class="modal-actions">
+                <button class="logout-button" onclick="closeTeamStatModal()" style="flex: 1;">
+                    Close
+                </button>
             </div>
 
         </div>
@@ -6425,6 +6489,8 @@
         // TEAM
         // ==================================================
 
+        let lastTeamHistory = []
+
         function buildSparkline(values, width, height) {
 
             const points = values.filter(
@@ -6540,21 +6606,17 @@
 
             const history = Array.isArray(team.history) ? team.history : []
 
-            const pointsSpark = buildSparkline(history.map(entry => entry.points), 140, 32)
-            const balanceSpark = buildSparkline(history.map(entry => entry.balance), 140, 32)
+            lastTeamHistory = history
 
-            const sparklinesHtml = (pointsSpark || balanceSpark)
+            const pointsSpark = buildSparkline(history.map(entry => entry.points), 140, 32)
+
+            const sparklinesHtml = pointsSpark
                 ? `
                     <div class="team-sparklines">
-                        <div class="team-stat">
+                        <div class="team-stat" onclick="openTeamStatDetail()" title="Click for a detailed view">
                             <div class="team-stat-label">Points</div>
                             <div class="team-stat-value">${team.points ?? '-'}</div>
                             ${pointsSpark}
-                        </div>
-                        <div class="team-stat">
-                            <div class="team-stat-label">Balance</div>
-                            <div class="team-stat-value">${escapeHtml(team.balance || '-')}</div>
-                            ${balanceSpark}
                         </div>
                     </div>
                 `
@@ -6572,6 +6634,93 @@
                 ${rolesHtml || '<div class="empty-state">No members found.</div>'}
             `
 
+        }
+
+        // A bigger line+area chart for the Points detail modal - same
+        // data as the sparkline, just with room for gridlines, a
+        // filled area, and min/max/current labels.
+        function buildDetailedChart(values, width, height) {
+
+            const points = values.filter(
+                value => typeof value === 'number' && Number.isFinite(value)
+            )
+
+            if (points.length < 2) {
+                return '<div class="empty-state">Not enough history yet.</div>'
+            }
+
+            const min = Math.min(...points)
+            const max = Math.max(...points)
+            const range = max - min || 1
+
+            const xPad = 12
+            const yPad = 16
+
+            const innerWidth = width - xPad * 2
+            const innerHeight = height - yPad * 2
+
+            const stepX = innerWidth / (points.length - 1)
+
+            const coords = points.map(
+                (value, index) => [
+                    xPad + index * stepX,
+                    yPad + innerHeight - ((value - min) / range) * innerHeight
+                ]
+            )
+
+            const linePath = coords
+                .map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`)
+                .join(' ')
+
+            const [firstX] = coords[0]
+            const [lastX, lastY] = coords[coords.length - 1]
+
+            const areaPath = `${linePath} L${lastX.toFixed(1)},${(yPad + innerHeight).toFixed(1)} L${firstX.toFixed(1)},${(yPad + innerHeight).toFixed(1)} Z`
+
+            const gridLines = [0.25, 0.5, 0.75]
+                .map(fraction => {
+                    const y = yPad + innerHeight * fraction
+                    return `<line x1="${xPad}" y1="${y.toFixed(1)}" x2="${width - xPad}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`
+                })
+                .join('')
+
+            const dots = coords
+                .slice(0, -1)
+                .map(([x, y]) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="var(--faint)"/>`)
+                .join('')
+
+            return `
+                <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="detail-chart">
+                    ${gridLines}
+                    <path d="${areaPath}" fill="var(--blue)" opacity="0.12" stroke="none"/>
+                    <path d="${linePath}" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+                    ${dots}
+                    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="5" fill="var(--blue)" stroke="var(--panel-2)" stroke-width="2"/>
+                </svg>
+                <div class="detail-chart-labels">
+                    <span>Min ${min}</span>
+                    <span>Max ${max}</span>
+                    <span>${points.length} reading${points.length === 1 ? '' : 's'}</span>
+                </div>
+            `
+
+        }
+
+        function openTeamStatDetail() {
+
+            const values = lastTeamHistory.map(entry => entry.points)
+            const current = values.length ? values[values.length - 1] : null
+
+            $('teamStatModalTitle').textContent = 'Points History'
+            $('teamStatModalCurrent').textContent = current ?? '-'
+            $('teamStatModalBody').innerHTML = buildDetailedChart(values, 520, 200)
+
+            $('teamStatModalOverlay').classList.add('show')
+
+        }
+
+        function closeTeamStatModal() {
+            $('teamStatModalOverlay').classList.remove('show')
         }
 
         function refreshTeam() {
@@ -6616,6 +6765,8 @@
             'other': 'Other'
         }
 
+        let lastInventorySignature = null
+
         function renderInventory(items) {
 
             const container =
@@ -6624,6 +6775,22 @@
             if (!container) {
                 return
             }
+
+            // Rebuilding this list's innerHTML resets its scroll
+            // position - harmless for a short inventory, but with a
+            // full one (needing to scroll) the dashboard's 1s tick
+            // was yanking it back to the top constantly. Skip the
+            // rebuild entirely when nothing actually changed, and
+            // restore scroll position on the rare tick where it did.
+            const signature = JSON.stringify(items)
+
+            if (signature === lastInventorySignature) {
+                return
+            }
+
+            lastInventorySignature = signature
+
+            const scrollTop = container.scrollTop
 
             if (
                 !Array.isArray(items) ||
@@ -6692,6 +6859,8 @@
                         `
                     )
                     .join('')
+
+            container.scrollTop = scrollTop
 
         }
 
@@ -8190,6 +8359,19 @@
                     getClosestCardForDrag(grid, event.clientX, event.clientY)
 
                 if (!closest) {
+                    return
+                }
+
+                // dragover fires continuously while the mouse moves -
+                // only touch the DOM when the target position has
+                // actually changed. Reinserting on every single event
+                // (even back into the same spot) was causing visible
+                // jitter as neighboring cards kept reflowing.
+                const alreadyInPlace = insertAfter
+                    ? closest.nextElementSibling === draggedCard
+                    : closest.previousElementSibling === draggedCard
+
+                if (alreadyInPlace) {
                     return
                 }
 

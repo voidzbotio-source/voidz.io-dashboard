@@ -362,6 +362,18 @@ function saveAutoReinviteList(username, list) {
     saveBotConfigs(configs)
 }
 
+function getTeamHistory(username) {
+    const configs = loadBotConfigs()
+    const history = configs[username]?.teamHistory
+    return Array.isArray(history) ? history : []
+}
+
+function saveTeamHistory(username, history) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], teamHistory: history }
+    saveBotConfigs(configs)
+}
+
 // Everything the dashboard used to keep in localStorage only
 // (Threats, Allies, and the Appearance tab) - now synced through
 // here too, so it follows the account across devices/browsers.
@@ -490,17 +502,6 @@ function sendDiscordWebhook(webhookUrl, content, roleId) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
     }).catch(error => originalError('[DISCORD WEBHOOK]', error.message))
-
-}
-
-function parseCurrencyAmount(text) {
-
-    if (!text) return null
-
-    const cleaned = String(text).replace(/[^0-9.\-]/g, '')
-    const value = parseFloat(cleaned)
-
-    return Number.isFinite(value) ? value : null
 
 }
 
@@ -717,9 +718,19 @@ class BotSession {
         this.teamInfoCapture = null
         this.teamInfoCaptureTimer = null
 
-        // Points/balance from each /t info, oldest first, capped -
-        // powers the trend sparkline on the Team card.
-        this.teamHistory = []
+        // Points from each /t info, oldest first, capped - powers the
+        // trend sparkline on the Team card. Persisted to disk (see
+        // getTeamHistory/saveTeamHistory) so it survives a restart
+        // instead of resetting every time the process comes back up.
+        this.teamHistory = getTeamHistory(username)
+        this.lastTeamRefreshRequestAt = 0
+
+        // Last known-settled inventory read (see getInventorySnapshot/
+        // getKeyAmounts) - served back out during a mid-update burst
+        // instead of a possibly-inconsistent live read.
+        this.lastInventoryTouchedAt = 0
+        this.cachedInventorySnapshot = []
+        this.cachedKeyAmounts = { vote: 0, exclusive: 0, insane: 0 }
 
         this.botState = 'OFFLINE'
         this.currentWorld = 'Unknown'
@@ -781,6 +792,14 @@ class BotSession {
             return []
         }
 
+        // A burst of per-slot update packets can still be landing
+        // (e.g. right after claiming several items at once) - serve
+        // the last settled read instead of a possibly-inconsistent
+        // one, rather than showing the dashboard a half-updated list.
+        if (Date.now() - this.lastInventoryTouchedAt < 150) {
+            return this.cachedInventorySnapshot
+        }
+
         const slots = this.bot.inventory.slots || []
         const result = []
 
@@ -810,17 +829,25 @@ class BotSession {
 
         }
 
+        this.cachedInventorySnapshot = result
+
         return result
 
     }
 
     getKeyAmounts() {
 
-        const result = { vote: 0, exclusive: 0, insane: 0 }
-
         if (!this.bot || !this.bot.inventory) {
-            return result
+            return { vote: 0, exclusive: 0, insane: 0 }
         }
+
+        // Same settle-guard as getInventorySnapshot() - avoid counting
+        // keys mid-way through a burst of slot updates.
+        if (Date.now() - this.lastInventoryTouchedAt < 150) {
+            return this.cachedKeyAmounts
+        }
+
+        const result = { vote: 0, exclusive: 0, insane: 0 }
 
         for (const item of this.bot.inventory.items()) {
 
@@ -858,6 +885,8 @@ class BotSession {
             result[keyType] += Number(item.count) || 0
 
         }
+
+        this.cachedKeyAmounts = result
 
         return result
 
@@ -1653,6 +1682,31 @@ class BotSession {
 
     }
 
+    // Keeps the Team card current without waiting for the next manual
+    // refresh: any "X has joined/left the team" or "X has been
+    // kicked" broadcast triggers a fresh /t info. The "kicked" wording
+    // isn't confirmed against a live example, so this matches loosely
+    // (with or without a trailing "from the team") rather than a
+    // single exact phrase.
+    checkTeamRosterChange(text) {
+
+        const isRosterChange =
+            /^TEAMS ➟ .+ has (joined|left) the team\.?$/i.test(text) ||
+            /^TEAMS ➟ .+ has been kicked\b/i.test(text)
+
+        if (!isRosterChange) return
+
+        // A burst of these (e.g. several people leaving/getting
+        // kicked at once) shouldn't each fire their own /t info -
+        // one refresh a couple seconds later covers all of them.
+        if (Date.now() - this.lastTeamRefreshRequestAt < 2000) return
+
+        this.lastTeamRefreshRequestAt = Date.now()
+
+        this.requestTeamInfo()
+
+    }
+
     // Runs every dashboard tick (~1s) while connected. Any Auto-Invite
     // tracked player whose tab-list HP drops below 2.5 hearts (5 HP)
     // gets kicked off the team and immediately reinvited - kicking
@@ -1770,17 +1824,17 @@ class BotSession {
         }
 
         const points = this.teamRoster.header?.points
-        const balance = parseCurrencyAmount(this.teamRoster.balance)
 
-        if (Number.isFinite(points) || balance !== null) {
+        if (Number.isFinite(points)) {
 
             this.teamHistory.push({
                 timestamp: Date.now(),
-                points: Number.isFinite(points) ? points : null,
-                balance
+                points
             })
 
             this.teamHistory = this.teamHistory.slice(-40)
+
+            saveTeamHistory(this.username, this.teamHistory)
 
         }
 
@@ -1986,6 +2040,8 @@ class BotSession {
 
         })
 
+        this.lastInventoryTouchedAt = 0
+
         // ----------------------------------------------------
         // LOGIN
         // ----------------------------------------------------
@@ -2033,6 +2089,7 @@ class BotSession {
 
             this.tryParseTeamInfoLine(text, message.json)
             this.checkAutoReinvite(text)
+            this.checkTeamRosterChange(text)
             this.checkBlackMarket(text)
 
             // Player chat (position 'chat') is already broadcast by
@@ -2103,6 +2160,22 @@ class BotSession {
             this.connectedAt = Date.now()
             this.proxySessionProblem = false
             this.reconnectDelay = RECONNECT_DELAY
+
+            // Minecraft sends inventory changes as individual per-slot
+            // packets, not one atomic update - after claiming a lot of
+            // items at once, a burst of these can still be arriving
+            // when the dashboard's 1s tick reads bot.inventory,
+            // catching it mid-update (some slots changed, others not
+            // yet). Track the last time anything changed so
+            // getInventorySnapshot/getKeyAmounts can tell a settled
+            // inventory from a still-changing one. bot.inventory isn't
+            // ready synchronously right after createBot() with
+            // version auto-detect, so this waits for spawn.
+            if (this.bot.inventory) {
+                this.bot.inventory.on('updateSlot', () => {
+                    this.lastInventoryTouchedAt = Date.now()
+                })
+            }
 
             this.handleSpawnState()
 

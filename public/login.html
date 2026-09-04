@@ -1,4 +1,4 @@
-    <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -7,7 +7,7 @@
 
     <meta
         name="viewport"
-        content="width=device-width, initial-scale=1.0"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     >
 
     <title>Voidz.IO Dashboard — Login</title>
@@ -26,7 +26,7 @@
     >
 
     <link
-y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
         rel="stylesheet"
     >
 
@@ -37,124 +37,105 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
         }
 
         :root {
-            --background: #04050c;
-            --bg-glow-1: rgba(0, 229, 255, 0.12);
-            --bg-glow-2: rgba(176, 38, 255, 0.08);
+            --background: #0b0c10;
 
-            --panel: rgba(6, 12, 24, 0.72);
-            --panel-2: rgba(0, 229, 255, 0.045);
-            --panel-2-solid: #0a1424;
-            --panel-solid: #050a16;
+            --panel: #17181e;
+            --panel-2: #1b1c23;
+            --panel-solid: #17181e;
 
-            --border: rgba(0, 229, 255, 0.22);
-            --border-strong: rgba(0, 229, 255, 0.55);
+            --border: #262731;
+            --border-strong: #33343f;
 
-            --text: #eafcff;
-            --muted: #7fa3b8;
+            --text: #eceef2;
+            --muted: #8b8d98;
 
-            --red: #ff2b56;
-            --blue: #00e5ff;
-            --purple: #b026ff;
-            --teal: #00fff0;
+            --red: #f87171;
+            --blue: #6366f1;
+            --purple: #c084fc;
+            --teal: #2dd4bf;
 
-            --radius: 4px;
+            --radius: 12px;
+            --radius-sm: 8px;
 
-            --shadow: 0 0 24px rgba(0, 229, 255, 0.12), 0 10px 30px rgba(0, 0, 0, 0.5);
-            --shadow-lg: 0 0 40px rgba(0, 229, 255, 0.2), 0 20px 55px rgba(0, 0, 0, 0.6);
-
-            --gx: 50%;
-            --gy: 40%;
-            --mx: 0px;
-            --my: 0px;
+            --shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.28);
         }
 
         :root[data-theme="light"] {
-            --background: #eaf3fa;
-            --bg-glow-1: rgba(0, 180, 216, 0.14);
-            --bg-glow-2: rgba(176, 38, 255, 0.06);
+            --background: #f7f7f9;
 
-            --panel: rgba(255, 255, 255, 0.75);
-            --panel-2: rgba(0, 130, 160, 0.05);
-            --panel-2-solid: #eef7fb;
+            --panel: #ffffff;
+            --panel-2: #f2f3f6;
             --panel-solid: #ffffff;
 
-            --border: rgba(0, 130, 160, 0.28);
-            --border-strong: rgba(0, 130, 160, 0.55);
+            --border: #e5e6eb;
+            --border-strong: #d3d4dc;
 
-            --text: #04212c;
-            --muted: #3f6b7a;
+            --text: #14151a;
+            --muted: #6b6d78;
 
-            --blue: #0082a0;
+            --blue: #6366f1;
 
-            --shadow: 0 0 24px rgba(0, 160, 200, 0.10), 0 10px 30px rgba(20, 60, 80, 0.12);
-            --shadow-lg: 0 0 40px rgba(0, 160, 200, 0.16), 0 20px 55px rgba(20, 60, 80, 0.18);
+            --shadow: 0 1px 2px rgba(20, 21, 26, 0.06);
+            --shadow-lg: 0 8px 24px rgba(20, 21, 26, 0.1);
         }
 
         :root[data-theme="midnight"] {
-            --background: #08040f;
-            --bg-glow-1: rgba(176, 38, 255, 0.18);
-            --bg-glow-2: rgba(255, 47, 209, 0.10);
+            --background: #0e0c14;
 
-            --panel: rgba(18, 8, 32, 0.72);
-            --panel-2: rgba(176, 38, 255, 0.05);
-            --panel-2-solid: #150a26;
-            --panel-solid: #0c051a;
+            --panel: #191521;
+            --panel-2: #1c1826;
+            --panel-solid: #191521;
 
-            --border: rgba(176, 38, 255, 0.28);
-            --border-strong: rgba(176, 38, 255, 0.6);
+            --border: #292233;
+            --border-strong: #362d43;
 
-            --text: #f6e9ff;
-            --muted: #a888c9;
+            --text: #f0ecf7;
+            --muted: #938aa3;
 
-            --blue: #d33fff;
-            --purple: #b026ff;
+            --blue: #c084fc;
+            --purple: #c084fc;
 
-            --shadow: 0 0 24px rgba(176, 38, 255, 0.18), 0 10px 30px rgba(0, 0, 0, 0.55);
-            --shadow-lg: 0 0 40px rgba(176, 38, 255, 0.28), 0 20px 55px rgba(0, 0, 0, 0.65);
+            --shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.28);
         }
 
         :root[data-theme="aurora"] {
-            --background: #020c08;
-            --bg-glow-1: rgba(0, 255, 163, 0.16);
-            --bg-glow-2: rgba(0, 255, 90, 0.08);
+            --background: #08120f;
 
-            --panel: rgba(4, 24, 18, 0.72);
-            --panel-2: rgba(0, 255, 163, 0.05);
-            --panel-2-solid: #071f17;
-            --panel-solid: #03140f;
+            --panel: #131f1b;
+            --panel-2: #16221d;
+            --panel-solid: #131f1b;
 
-            --border: rgba(0, 255, 163, 0.25);
-            --border-strong: rgba(0, 255, 163, 0.6);
+            --border: #223330;
+            --border-strong: #2c433f;
 
-            --text: #e6fff5;
-            --muted: #6cbf9f;
+            --text: #eafaf5;
+            --muted: #82a89c;
 
-            --blue: #00ffa3;
+            --blue: #2dd4bf;
 
-            --shadow: 0 0 24px rgba(0, 255, 163, 0.16), 0 10px 30px rgba(0, 0, 0, 0.55);
-            --shadow-lg: 0 0 40px rgba(0, 255, 163, 0.26), 0 20px 55px rgba(0, 0, 0, 0.65);
+            --shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.28);
         }
 
         :root[data-theme="sunset"] {
-            --background: #0f0402;
-            --bg-glow-1: rgba(255, 107, 53, 0.18);
-            --bg-glow-2: rgba(255, 43, 86, 0.10);
+            --background: #140d09;
 
-            --panel: rgba(28, 10, 6, 0.72);
-            --panel-2: rgba(255, 107, 53, 0.06);
-            --panel-2-solid: #1f0d07;
-            --panel-solid: #170805;
+            --panel: #1f1710;
+            --panel-2: #221a12;
+            --panel-solid: #1f1710;
 
-            --border: rgba(255, 107, 53, 0.28);
-            --border-strong: rgba(255, 107, 53, 0.6);
+            --border: #332417;
+            --border-strong: #42311f;
 
-            --text: #fff0e8;
-            --muted: #cf9075;
+            --text: #faf0e6;
+            --muted: #af9987;
 
-            --blue: #ff6b35;
+            --blue: #fb923c;
 
-            --shadow: 0 0 24px rgba(255, 107, 53, 0.18), 0 10px 30px rgba(0, 0, 0, 0.55);
-            --shadow-lg: 0 0 40px rgba(255, 107, 53, 0.28), 0 20px 55px rgba(0, 0, 0, 0.65);
+            --shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.28);
         }
 
         html {
@@ -173,9 +154,6 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
             margin: 0;
             min-height: 100vh;
 
-            position: relative;
-            overflow: hidden;
-
             display: flex;
             align-items: center;
             justify-content: center;
@@ -186,152 +164,9 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
 
             color: var(--text);
 
-            font-family: 'Rajdhani', Arial, sans-serif;
-
-            perspective: 1200px;
+            font-family: 'Inter', Arial, sans-serif;
 
             transition: background-color 0.25s ease, color 0.25s ease;
-        }
-
-        /* ================================================= */
-        /* ANIMATED BACKGROUND */
-        /* ================================================= */
-
-        .bg {
-            position: fixed;
-            inset: 0;
-            z-index: 0;
-
-            overflow: hidden;
-            pointer-events: none;
-        }
-
-        .bg::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-
-            background-image:
-                linear-gradient(color-mix(in srgb, var(--blue) 12%, transparent) 1px, transparent 1px),
-                linear-gradient(90deg, color-mix(in srgb, var(--blue) 12%, transparent) 1px, transparent 1px);
-
-            background-size: 42px 42px;
-
-            -webkit-mask-image: radial-gradient(circle at var(--gx) var(--gy), black, transparent 60%);
-            mask-image: radial-gradient(circle at var(--gx) var(--gy), black, transparent 60%);
-        }
-
-        .cursor-glow {
-            position: absolute;
-            inset: 0;
-
-            background:
-                radial-gradient(
-                    circle at var(--gx) var(--gy),
-                    color-mix(in srgb, var(--blue) 16%, transparent),
-                    transparent 32%
-                );
-
-            mix-blend-mode: screen;
-        }
-
-        .scanline {
-            position: absolute;
-            inset: 0;
-
-            overflow: hidden;
-            opacity: 0.5;
-        }
-
-        .scanline::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            right: 0;
-            height: 140px;
-
-            background: linear-gradient(
-                to bottom,
-                transparent,
-                color-mix(in srgb, var(--blue) 10%, transparent),
-                transparent
-            );
-
-            animation: scan-sweep 9s linear infinite;
-        }
-
-        @keyframes scan-sweep {
-            0% { top: -140px; }
-            100% { top: 100vh; }
-        }
-
-        .orb-shift {
-            transform:
-                translate3d(
-                    calc(var(--mx) * var(--depth, 1)),
-                    calc(var(--my) * var(--depth, 1)),
-                    0
-                );
-
-            transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-        }
-
-        .orb {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(100px);
-            opacity: 0.4;
-            will-change: transform;
-        }
-
-        .orb-1 {
-            width: 480px;
-            height: 480px;
-            top: -160px;
-            left: -140px;
-            background: radial-gradient(circle, var(--blue), transparent 70%);
-            animation: float-a 24s ease-in-out infinite;
-        }
-
-        .orb-2 {
-            width: 420px;
-            height: 420px;
-            bottom: -160px;
-            right: -140px;
-            background: radial-gradient(circle, var(--purple), transparent 70%);
-            animation: float-b 28s ease-in-out infinite;
-        }
-
-        .orb-3 {
-            width: 320px;
-            height: 320px;
-            top: 45%;
-            left: 55%;
-            background: radial-gradient(circle, var(--teal), transparent 70%);
-            opacity: 0.28;
-            animation: float-c 32s ease-in-out infinite;
-        }
-
-        @keyframes float-a {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            50% { transform: translate(60px, 50px) scale(1.12); }
-        }
-
-        @keyframes float-b {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            50% { transform: translate(-50px, -40px) scale(1.08); }
-        }
-
-        @keyframes float-c {
-            0%, 100% { transform: translate(-50%, -50%) scale(1); }
-            50% { transform: translate(-55%, -45%) scale(1.2); }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            .orb, .scanline {
-                animation: none;
-                display: none;
-            }
         }
 
         /* ================================================= */
@@ -351,7 +186,6 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
             padding: 9px 12px;
 
             background: var(--panel);
-            backdrop-filter: blur(14px);
 
             border: 1px solid var(--border);
             border-radius: 999px;
@@ -377,8 +211,7 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
         }
 
         .theme-swatch:hover {
-            transform: scale(1.14);
-            box-shadow: 0 0 0 1px var(--border-strong);
+            transform: scale(1.1);
         }
 
         .theme-swatch.active {
@@ -390,7 +223,7 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
 
             background: conic-gradient(
                 from 180deg,
-                #ff2b56, #ffd60a, #00ffa3, #00e5ff, #b026ff, #ff2b56
+                #f87171, #fbbf24, #34d399, #6366f1, #c084fc, #f87171
             );
         }
 
@@ -445,86 +278,18 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
 
         .card {
             position: relative;
-            z-index: 1;
 
             width: 100%;
             max-width: 380px;
 
             background: var(--panel);
-            backdrop-filter: blur(18px);
 
             border: 1px solid var(--border);
-
-            clip-path: polygon(
-                16px 0, 100% 0, 100% calc(100% - 16px),
-                calc(100% - 16px) 100%, 0 100%, 0 16px
-            );
+            border-radius: var(--radius);
 
             padding: 32px 28px;
 
             box-shadow: var(--shadow-lg);
-
-            overflow: hidden;
-            transform-style: preserve-3d;
-
-            transition:
-                transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
-                box-shadow 0.35s ease,
-                background-color 0.25s ease,
-                border-color 0.25s ease;
-        }
-
-        .card.tilting {
-            border-color: var(--border-strong);
-        }
-
-        .card::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-
-            background:
-                radial-gradient(
-                    circle at var(--sx, 50%) var(--sy, 40%),
-                    color-mix(in srgb, var(--blue) 25%, transparent),
-                    transparent 55%
-                );
-
-            opacity: 0;
-
-            transition: opacity 0.3s ease;
-
-            pointer-events: none;
-
-            mix-blend-mode: screen;
-        }
-
-        .card.tilting::before {
-            opacity: 1;
-        }
-
-        .card::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-
-            pointer-events: none;
-
-            background-image:
-                linear-gradient(var(--blue), var(--blue)),
-                linear-gradient(var(--blue), var(--blue));
-
-            background-size: 18px 2px, 2px 18px;
-            background-position: bottom 0 right 0, bottom 0 right 0;
-            background-repeat: no-repeat;
-
-            opacity: 0.65;
-
-            filter: drop-shadow(0 0 4px var(--blue));
-        }
-
-        .card > * {
-            position: relative;
         }
 
         .brand {
@@ -536,41 +301,46 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
         }
 
         .logo {
-            width: 46px;
-            height: 46px;
+            width: 42px;
+            height: 42px;
             flex-shrink: 0;
 
-            filter: drop-shadow(0 0 14px color-mix(in srgb, var(--blue) 45%, transparent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border-radius: var(--radius-sm);
+
+            background: linear-gradient(135deg, var(--blue), var(--purple));
+
+            font-size: 17px;
+            font-weight: 800;
+            color: #fff;
         }
 
         .brand h1 {
             margin: 0;
 
-            font-family: 'Orbitron', 'Rajdhani', sans-serif;
-            font-size: 19px;
-            font-weight: 800;
-
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-
-            text-shadow: 0 0 16px var(--bg-glow-1);
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
         }
 
         .brand p {
             margin: 3px 0 0;
             color: var(--muted);
-            font-size: 12px;
+            font-size: 12.5px;
         }
 
         label {
             display: block;
 
-            font-size: 11.5px;
+            font-size: 11px;
             font-weight: 700;
             color: var(--muted);
 
             text-transform: uppercase;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.06em;
 
             margin-bottom: 6px;
         }
@@ -579,21 +349,26 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
             margin-bottom: 16px;
         }
 
+        .hint {
+            margin: -10px 0 16px;
+            color: var(--muted);
+            font-size: 11.5px;
+        }
+
         input {
             width: 100%;
 
-            padding: 13px 14px;
+            padding: 12px 14px;
 
             border: 1px solid var(--border);
-            border-radius: var(--radius);
+            border-radius: var(--radius-sm);
 
             background: var(--panel-2);
             color: var(--text);
 
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 15px;
-            font-weight: 600;
-            letter-spacing: 0.02em;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 500;
 
             outline: none;
 
@@ -604,7 +379,6 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
 
         input::placeholder {
             color: var(--muted);
-            letter-spacing: 0.06em;
         }
 
         input:focus {
@@ -617,40 +391,35 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
 
             margin-top: 6px;
 
-            padding: 14px;
+            padding: 13px;
 
-            border-radius: var(--radius);
+            border-radius: var(--radius-sm);
             border: 1px solid var(--border-strong);
 
-            background: color-mix(in srgb, var(--blue) 16%, transparent);
-            color: var(--blue);
+            background: var(--blue);
+            color: #fff;
 
-            font-family: 'Orbitron', 'Rajdhani', sans-serif;
-            font-size: 13px;
+            font-family: inherit;
+            font-size: 13.5px;
             font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
 
             cursor: pointer;
 
             transition:
-                background-color 0.15s ease,
-                transform 0.15s ease,
-                box-shadow 0.15s ease;
+                opacity 0.15s ease,
+                transform 0.15s ease;
         }
 
         button:hover:not(:disabled) {
-            background: color-mix(in srgb, var(--blue) 28%, transparent);
-            box-shadow: var(--shadow);
-            transform: translateY(-1px);
+            opacity: 0.9;
         }
 
         button:active:not(:disabled) {
-            transform: translateY(0);
+            transform: translateY(1px);
         }
 
         button:disabled {
-            opacity: 0.55;
+            opacity: 0.5;
             cursor: default;
         }
 
@@ -660,10 +429,10 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
             margin-bottom: 16px;
             padding: 10px 12px;
 
-            border-radius: var(--radius);
+            border-radius: var(--radius-sm);
 
-            background: rgba(255, 43, 86, 0.1);
-            border: 1px solid rgba(255, 43, 86, 0.35);
+            background: color-mix(in srgb, var(--red) 12%, transparent);
+            border: 1px solid color-mix(in srgb, var(--red) 35%, transparent);
 
             color: var(--red);
 
@@ -701,35 +470,16 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
 
 <body>
 
-    <div class="bg">
-
-        <div class="cursor-glow"></div>
-        <div class="scanline"></div>
-
-        <div class="orb-shift" style="--depth: 1;">
-            <div class="orb orb-1"></div>
-        </div>
-
-        <div class="orb-shift" style="--depth: -0.7;">
-            <div class="orb orb-2"></div>
-        </div>
-
-        <div class="orb-shift" style="--depth: 1.6;">
-            <div class="orb orb-3"></div>
-        </div>
-
-    </div>
-
     <div class="theme-picker-float" id="themeSwatches">
 
-        <button class="theme-swatch" data-theme-value="dark" onclick="setTheme('dark')" title="Dark" style="background: linear-gradient(135deg, #04050c 50%, #00e5ff 50%);"></button>
-        <button class="theme-swatch" data-theme-value="light" onclick="setTheme('light')" title="Light" style="background: linear-gradient(135deg, #eaf3fa 50%, #0082a0 50%);"></button>
-        <button class="theme-swatch" data-theme-value="midnight" onclick="setTheme('midnight')" title="Midnight" style="background: linear-gradient(135deg, #08040f 50%, #d33fff 50%);"></button>
-        <button class="theme-swatch" data-theme-value="aurora" onclick="setTheme('aurora')" title="Aurora" style="background: linear-gradient(135deg, #020c08 50%, #00ffa3 50%);"></button>
-        <button class="theme-swatch" data-theme-value="sunset" onclick="setTheme('sunset')" title="Sunset" style="background: linear-gradient(135deg, #0f0402 50%, #ff6b35 50%);"></button>
+        <button class="theme-swatch" data-theme-value="dark" onclick="setTheme('dark')" title="Dark" style="background: linear-gradient(135deg, #0b0c10 50%, #6366f1 50%);"></button>
+        <button class="theme-swatch" data-theme-value="light" onclick="setTheme('light')" title="Light" style="background: linear-gradient(135deg, #f7f7f9 50%, #6366f1 50%);"></button>
+        <button class="theme-swatch" data-theme-value="midnight" onclick="setTheme('midnight')" title="Midnight" style="background: linear-gradient(135deg, #0e0c14 50%, #c084fc 50%);"></button>
+        <button class="theme-swatch" data-theme-value="aurora" onclick="setTheme('aurora')" title="Aurora" style="background: linear-gradient(135deg, #08120f 50%, #2dd4bf 50%);"></button>
+        <button class="theme-swatch" data-theme-value="sunset" onclick="setTheme('sunset')" title="Sunset" style="background: linear-gradient(135deg, #140d09 50%, #fb923c 50%);"></button>
 
         <label class="theme-swatch custom-swatch" id="customAccentSwatch" title="Custom accent color">
-            <input type="color" id="customAccentInput" value="#00e5ff" oninput="setCustomAccent(this.value)">
+            <input type="color" id="customAccentInput" value="#6366f1" oninput="setCustomAccent(this.value)">
         </label>
 
         <button class="theme-custom-reset" id="customAccentReset" title="Reset accent color" onclick="clearCustomAccent()">&#10005;</button>
@@ -740,26 +490,7 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
 
         <div class="brand">
 
-            <svg class="logo" viewBox="0 0 100 100">
-                <defs>
-                    <linearGradient id="voidzMarkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" style="stop-color:var(--blue)"/>
-                        <stop offset="100%" style="stop-color:var(--purple)"/>
-                    </linearGradient>
-                    <filter id="voidzMarkGlow" x="-60%" y="-60%" width="220%" height="220%">
-                        <feGaussianBlur stdDeviation="2.1" result="blur"/>
-                        <feMerge>
-                            <feMergeNode in="blur"/>
-                            <feMergeNode in="SourceGraphic"/>
-                        </feMerge>
-                    </filter>
-                </defs>
-                <polygon points="50,3 95,26 95,74 50,97 5,74 5,26" fill="none" stroke="url(#voidzMarkGrad)" stroke-width="3.2" stroke-linejoin="round" filter="url(#voidzMarkGlow)"/>
-                <path d="M28 25 L50 79" fill="none" stroke="url(#voidzMarkGrad)" stroke-width="12" stroke-linecap="square" filter="url(#voidzMarkGlow)"/>
-                <path d="M72 25 L50 79" fill="none" stroke="url(#voidzMarkGrad)" stroke-width="12" stroke-linecap="square" filter="url(#voidzMarkGlow)"/>
-                <circle cx="50" cy="79" r="10" fill="var(--panel-solid)" stroke="var(--teal)" stroke-width="1.6" opacity="0.95"/>
-                <circle cx="50" cy="79" r="2.4" fill="var(--text)"/>
-            </svg>
+            <div class="logo">V</div>
 
             <div>
                 <h1>Voidz.IO</h1>
@@ -779,7 +510,7 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
                     name="username"
                     type="text"
                     autocomplete="username"
-                    placeholder="USERNAME"
+                    placeholder="Username"
                     required
                 >
             </div>
@@ -791,7 +522,7 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
                     name="password"
                     type="password"
                     autocomplete="current-password"
-                    placeholder="PASSWORD"
+                    placeholder="Password"
                     required
                 >
             </div>
@@ -817,10 +548,7 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
         // ==================================================
 
         const THEMES = ['dark', 'light', 'midnight', 'aurora', 'sunset']
-        const CUSTOM_ACCENT_PROPS = [
-            '--blue', '--border', '--border-strong',
-            '--bg-glow-1', '--shadow', '--shadow-lg'
-        ]
+        const CUSTOM_ACCENT_PROPS = ['--blue', '--border', '--border-strong']
 
         function applyTheme(theme) {
 
@@ -895,9 +623,6 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
             root.style.setProperty('--blue', hex)
             root.style.setProperty('--border', `rgba(${r}, ${g}, ${b}, 0.28)`)
             root.style.setProperty('--border-strong', `rgba(${r}, ${g}, ${b}, 0.6)`)
-            root.style.setProperty('--bg-glow-1', `rgba(${r}, ${g}, ${b}, 0.16)`)
-            root.style.setProperty('--shadow', `0 0 24px rgba(${r}, ${g}, ${b}, 0.18), 0 10px 30px rgba(0, 0, 0, 0.55)`)
-            root.style.setProperty('--shadow-lg', `0 0 40px rgba(${r}, ${g}, ${b}, 0.28), 0 20px 55px rgba(0, 0, 0, 0.65)`)
 
             document.querySelectorAll('.theme-swatch').forEach(
                 el => el.classList.remove('active')
@@ -979,117 +704,8 @@ y        href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;60
         initTheme()
 
         // ==================================================
-        // CURSOR-REACTIVE BACKGROUND
+        // LOGIN FORM
         // ==================================================
-
-        const reduceMotion =
-            window.matchMedia &&
-            window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-        if (!reduceMotion) {
-
-            const root = document.documentElement
-
-            let pointerX = window.innerWidth / 2
-            let pointerY = window.innerHeight / 2
-
-            let frameQueued = false
-
-            function applyPointer() {
-
-                frameQueued = false
-
-                const gx = (pointerX / window.innerWidth) * 100
-                const gy = (pointerY / window.innerHeight) * 100
-
-                root.style.setProperty('--gx', `${gx}%`)
-                root.style.setProperty('--gy', `${gy}%`)
-
-                const dx = pointerX - window.innerWidth / 2
-                const dy = pointerY - window.innerHeight / 2
-
-                const mx = Math.max(-22, Math.min(22, dx * 0.035))
-                const my = Math.max(-22, Math.min(22, dy * 0.035))
-
-                root.style.setProperty('--mx', `${mx}px`)
-                root.style.setProperty('--my', `${my}px`)
-
-            }
-
-            function onPointerMove(x, y) {
-
-                pointerX = x
-                pointerY = y
-
-                if (!frameQueued) {
-
-                    frameQueued = true
-
-                    requestAnimationFrame(applyPointer)
-
-                }
-
-            }
-
-            window.addEventListener('mousemove', event => {
-
-                onPointerMove(event.clientX, event.clientY)
-
-            })
-
-            window.addEventListener('touchmove', event => {
-
-                const touch = event.touches[0]
-
-                if (touch) {
-                    onPointerMove(touch.clientX, touch.clientY)
-                }
-
-            }, { passive: true })
-
-            // ----------------------------------------------
-            // CARD TILT + SHEEN
-            // ----------------------------------------------
-
-            const cardEl = document.querySelector('.card')
-
-            if (cardEl) {
-
-                cardEl.addEventListener('mousemove', event => {
-
-                    const rect = cardEl.getBoundingClientRect()
-
-                    const relX = (event.clientX - rect.left) / rect.width
-                    const relY = (event.clientY - rect.top) / rect.height
-
-                    const rotateY = (relX - 0.5) * 14
-                    const rotateX = (0.5 - relY) * 14
-
-                    cardEl.style.setProperty('--sx', `${relX * 100}%`)
-                    cardEl.style.setProperty('--sy', `${relY * 100}%`)
-
-                    cardEl.style.transform =
-                        `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`
-
-                })
-
-                cardEl.addEventListener('mouseenter', () => {
-
-                    cardEl.classList.add('tilting')
-
-                })
-
-                cardEl.addEventListener('mouseleave', () => {
-
-                    cardEl.classList.remove('tilting')
-
-                    cardEl.style.transform = ''
-
-                })
-
-            }
-
-        }
 
         const form = document.getElementById('loginForm')
         const errorBox = document.getElementById('error')

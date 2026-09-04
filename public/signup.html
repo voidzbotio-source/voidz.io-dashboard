@@ -7,7 +7,7 @@
 
     <meta
         name="viewport"
-        content="width=device-width, initial-scale=1.0"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     >
 
     <title>Voidz.IO Dashboard — Sign Up</title>
@@ -26,7 +26,7 @@
     >
 
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
         rel="stylesheet"
     >
 
@@ -37,124 +37,105 @@
         }
 
         :root {
-            --background: #0a0a12;
-            --bg-glow-1: rgba(99, 102, 241, 0.16);
-            --bg-glow-2: rgba(168, 85, 247, 0.1);
+            --background: #0b0c10;
 
-            --panel: rgba(255, 255, 255, 0.09);
-            --panel-2: rgba(255, 255, 255, 0.06);
-            --panel-2-solid: #1d1e26;
-            --panel-solid: #17181f;
+            --panel: #17181e;
+            --panel-2: #1b1c23;
+            --panel-solid: #17181e;
 
-            --border: rgba(255, 255, 255, 0.22);
-            --border-strong: rgba(255, 255, 255, 0.4);
+            --border: #262731;
+            --border-strong: #33343f;
 
-            --text: #f5f6fa;
-            --muted: #a3a5b5;
+            --text: #eceef2;
+            --muted: #8b8d98;
 
             --red: #f87171;
-            --blue: #818cf8;
+            --blue: #6366f1;
             --purple: #c084fc;
             --teal: #2dd4bf;
 
-            --radius: 22px;
+            --radius: 12px;
+            --radius-sm: 8px;
 
-            --shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
-            --shadow-lg: 0 16px 56px rgba(0, 0, 0, 0.4);
-
-            --gx: 50%;
-            --gy: 40%;
-            --mx: 0px;
-            --my: 0px;
+            --shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.28);
         }
 
         :root[data-theme="light"] {
-            --background: #eef0f7;
-            --bg-glow-1: rgba(99, 102, 241, 0.14);
-            --bg-glow-2: rgba(192, 132, 252, 0.1);
+            --background: #f7f7f9;
 
-            --panel: rgba(255, 255, 255, 0.55);
-            --panel-2: rgba(255, 255, 255, 0.35);
-            --panel-2-solid: #f5f6fb;
+            --panel: #ffffff;
+            --panel-2: #f2f3f6;
             --panel-solid: #ffffff;
 
-            --border: rgba(255, 255, 255, 0.65);
-            --border-strong: rgba(255, 255, 255, 0.9);
+            --border: #e5e6eb;
+            --border-strong: #d3d4dc;
 
-            --text: #1c1d2b;
-            --muted: #5c5e70;
+            --text: #14151a;
+            --muted: #6b6d78;
 
             --blue: #6366f1;
 
-            --shadow: 0 8px 32px rgba(30, 32, 60, 0.1);
-            --shadow-lg: 0 16px 56px rgba(30, 32, 60, 0.16);
+            --shadow: 0 1px 2px rgba(20, 21, 26, 0.06);
+            --shadow-lg: 0 8px 24px rgba(20, 21, 26, 0.1);
         }
 
         :root[data-theme="midnight"] {
-            --background: #140f1e;
-            --bg-glow-1: rgba(192, 132, 252, 0.18);
-            --bg-glow-2: rgba(232, 121, 249, 0.1);
+            --background: #0e0c14;
 
-            --panel: rgba(255, 255, 255, 0.08);
-            --panel-2: rgba(192, 132, 252, 0.08);
-            --panel-2-solid: #241d33;
-            --panel-solid: #1c1628;
+            --panel: #191521;
+            --panel-2: #1c1826;
+            --panel-solid: #191521;
 
-            --border: rgba(192, 132, 252, 0.3);
-            --border-strong: rgba(192, 132, 252, 0.5);
+            --border: #292233;
+            --border-strong: #362d43;
 
-            --text: #f5eeff;
-            --muted: #b3a6c4;
+            --text: #f0ecf7;
+            --muted: #938aa3;
 
             --blue: #c084fc;
             --purple: #c084fc;
 
-            --shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
-            --shadow-lg: 0 16px 56px rgba(0, 0, 0, 0.4);
+            --shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.28);
         }
 
         :root[data-theme="aurora"] {
-            --background: #0a1614;
-            --bg-glow-1: rgba(45, 212, 191, 0.18);
-            --bg-glow-2: rgba(52, 211, 153, 0.1);
+            --background: #08120f;
 
-            --panel: rgba(255, 255, 255, 0.08);
-            --panel-2: rgba(45, 212, 191, 0.08);
-            --panel-2-solid: #182b25;
-            --panel-solid: #12211d;
+            --panel: #131f1b;
+            --panel-2: #16221d;
+            --panel-solid: #131f1b;
 
-            --border: rgba(45, 212, 191, 0.3);
-            --border-strong: rgba(45, 212, 191, 0.5);
+            --border: #223330;
+            --border-strong: #2c433f;
 
-            --text: #eafff9;
-            --muted: #93bdb0;
+            --text: #eafaf5;
+            --muted: #82a89c;
 
             --blue: #2dd4bf;
 
-            --shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
-            --shadow-lg: 0 16px 56px rgba(0, 0, 0, 0.4);
+            --shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.28);
         }
 
         :root[data-theme="sunset"] {
-            --background: #170f0a;
-            --bg-glow-1: rgba(251, 146, 60, 0.18);
-            --bg-glow-2: rgba(248, 113, 113, 0.1);
+            --background: #140d09;
 
-            --panel: rgba(255, 255, 255, 0.08);
-            --panel-2: rgba(251, 146, 60, 0.08);
-            --panel-2-solid: #2b1e15;
-            --panel-solid: #221710;
+            --panel: #1f1710;
+            --panel-2: #221a12;
+            --panel-solid: #1f1710;
 
-            --border: rgba(251, 146, 60, 0.3);
-            --border-strong: rgba(251, 146, 60, 0.5);
+            --border: #332417;
+            --border-strong: #42311f;
 
-            --text: #fff3ea;
-            --muted: #c2a695;
+            --text: #faf0e6;
+            --muted: #af9987;
 
             --blue: #fb923c;
 
-            --shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
-            --shadow-lg: 0 16px 56px rgba(0, 0, 0, 0.4);
+            --shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.28);
         }
 
         html {
@@ -173,9 +154,6 @@
             margin: 0;
             min-height: 100vh;
 
-            position: relative;
-            overflow: hidden;
-
             display: flex;
             align-items: center;
             justify-content: center;
@@ -188,120 +166,7 @@
 
             font-family: 'Inter', Arial, sans-serif;
 
-            perspective: 1200px;
-
             transition: background-color 0.25s ease, color 0.25s ease;
-        }
-
-        /* ================================================= */
-        /* ANIMATED BACKGROUND */
-        /* ================================================= */
-
-        .bg {
-            position: fixed;
-            inset: 0;
-            z-index: 0;
-
-            overflow: hidden;
-            pointer-events: none;
-        }
-
-        .bg::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-
-            background-image:
-                linear-gradient(color-mix(in srgb, var(--purple) 6%, transparent) 1px, transparent 1px),
-                linear-gradient(90deg, color-mix(in srgb, var(--purple) 6%, transparent) 1px, transparent 1px);
-
-            background-size: 42px 42px;
-
-            -webkit-mask-image: radial-gradient(circle at var(--gx) var(--gy), black, transparent 60%);
-            mask-image: radial-gradient(circle at var(--gx) var(--gy), black, transparent 60%);
-        }
-
-        .cursor-glow {
-            position: absolute;
-            inset: 0;
-
-            background:
-                radial-gradient(
-                    circle at var(--gx) var(--gy),
-                    color-mix(in srgb, var(--purple) 18%, transparent),
-                    transparent 32%
-                );
-
-            mix-blend-mode: screen;
-        }
-
-        .orb-shift {
-            transform:
-                translate3d(
-                    calc(var(--mx) * var(--depth, 1)),
-                    calc(var(--my) * var(--depth, 1)),
-                    0
-                );
-
-            transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-        }
-
-        .orb {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(130px);
-            opacity: 0.55;
-            will-change: transform;
-        }
-
-        .orb-1 {
-            width: 540px;
-            height: 540px;
-            top: -170px;
-            right: -150px;
-            background: radial-gradient(circle, var(--purple), transparent 70%);
-            animation: float-a 24s ease-in-out infinite;
-        }
-
-        .orb-2 {
-            width: 480px;
-            height: 480px;
-            bottom: -170px;
-            left: -150px;
-            background: radial-gradient(circle, var(--blue), transparent 70%);
-            animation: float-b 28s ease-in-out infinite;
-        }
-
-        .orb-3 {
-            width: 380px;
-            height: 380px;
-            top: 45%;
-            left: 55%;
-            background: radial-gradient(circle, var(--teal), transparent 70%);
-            opacity: 0.4;
-            animation: float-c 32s ease-in-out infinite;
-        }
-
-        @keyframes float-a {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            50% { transform: translate(-60px, 50px) scale(1.12); }
-        }
-
-        @keyframes float-b {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            50% { transform: translate(50px, -40px) scale(1.08); }
-        }
-
-        @keyframes float-c {
-            0%, 100% { transform: translate(-50%, -50%) scale(1); }
-            50% { transform: translate(-55%, -45%) scale(1.2); }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            .orb {
-                animation: none;
-                display: none;
-            }
         }
 
         /* ================================================= */
@@ -321,7 +186,6 @@
             padding: 9px 12px;
 
             background: var(--panel);
-            backdrop-filter: blur(24px) saturate(180%);
 
             border: 1px solid var(--border);
             border-radius: 999px;
@@ -347,8 +211,7 @@
         }
 
         .theme-swatch:hover {
-            transform: scale(1.14);
-            box-shadow: 0 0 0 1px var(--border-strong);
+            transform: scale(1.1);
         }
 
         .theme-swatch.active {
@@ -360,7 +223,7 @@
 
             background: conic-gradient(
                 from 180deg,
-                #ef4444, #eab308, #22c55e, #6366f1, #a855f7, #ef4444
+                #f87171, #fbbf24, #34d399, #6366f1, #c084fc, #f87171
             );
         }
 
@@ -415,62 +278,18 @@
 
         .card {
             position: relative;
-            z-index: 1;
 
             width: 100%;
             max-width: 380px;
 
             background: var(--panel);
-            backdrop-filter: blur(28px) saturate(180%);
 
             border: 1px solid var(--border);
             border-radius: var(--radius);
 
             padding: 32px 28px;
 
-            box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-
-            overflow: hidden;
-            transform-style: preserve-3d;
-
-            transition:
-                transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
-                box-shadow 0.35s ease,
-                background-color 0.25s ease,
-                border-color 0.25s ease;
-        }
-
-        .card.tilting {
-            border-color: var(--border-strong);
-        }
-
-        .card::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-
-            background:
-                radial-gradient(
-                    circle at var(--sx, 50%) var(--sy, 40%),
-                    color-mix(in srgb, var(--purple) 30%, transparent),
-                    transparent 55%
-                );
-
-            opacity: 0;
-
-            transition: opacity 0.3s ease;
-
-            pointer-events: none;
-
-            mix-blend-mode: screen;
-        }
-
-        .card.tilting::before {
-            opacity: 1;
-        }
-
-        .card > * {
-            position: relative;
+            box-shadow: var(--shadow-lg);
         }
 
         .brand {
@@ -482,18 +301,27 @@
         }
 
         .logo {
-            width: 46px;
-            height: 46px;
+            width: 42px;
+            height: 42px;
             flex-shrink: 0;
 
-            filter: drop-shadow(0 6px 16px color-mix(in srgb, var(--purple) 25%, transparent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border-radius: var(--radius-sm);
+
+            background: linear-gradient(135deg, var(--blue), var(--purple));
+
+            font-size: 17px;
+            font-weight: 800;
+            color: #fff;
         }
 
         .brand h1 {
             margin: 0;
 
-            font-family: 'Inter', sans-serif;
-            font-size: 19px;
+            font-size: 18px;
             font-weight: 700;
             letter-spacing: -0.01em;
         }
@@ -501,18 +329,18 @@
         .brand p {
             margin: 3px 0 0;
             color: var(--muted);
-            font-size: 12px;
+            font-size: 12.5px;
         }
 
         label {
             display: block;
 
-            font-size: 11.5px;
+            font-size: 11px;
             font-weight: 700;
             color: var(--muted);
 
             text-transform: uppercase;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.06em;
 
             margin-bottom: 6px;
         }
@@ -530,16 +358,16 @@
         input {
             width: 100%;
 
-            padding: 13px 14px;
+            padding: 12px 14px;
 
             border: 1px solid var(--border);
-            border-radius: var(--radius);
+            border-radius: var(--radius-sm);
 
             background: var(--panel-2);
             color: var(--text);
 
-            font-family: 'Inter', sans-serif;
-            font-size: 15px;
+            font-family: inherit;
+            font-size: 14px;
             font-weight: 500;
 
             outline: none;
@@ -554,8 +382,8 @@
         }
 
         input:focus {
-            border-color: var(--purple);
-            box-shadow: 0 0 0 3px color-mix(in srgb, var(--purple) 18%, transparent);
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent);
         }
 
         button {
@@ -563,38 +391,35 @@
 
             margin-top: 6px;
 
-            padding: 14px;
+            padding: 13px;
 
-            border-radius: var(--radius);
-            border: 1px solid transparent;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-strong);
 
-            background: var(--purple);
+            background: var(--blue);
             color: #fff;
 
-            font-family: 'Inter', sans-serif;
-            font-size: 14px;
-            font-weight: 600;
+            font-family: inherit;
+            font-size: 13.5px;
+            font-weight: 700;
 
             cursor: pointer;
 
             transition:
-                background-color 0.15s ease,
-                transform 0.15s ease,
-                box-shadow 0.15s ease;
+                opacity 0.15s ease,
+                transform 0.15s ease;
         }
 
         button:hover:not(:disabled) {
-            background: color-mix(in srgb, var(--purple) 88%, black);
-            box-shadow: var(--shadow);
-            transform: translateY(-1px);
+            opacity: 0.9;
         }
 
         button:active:not(:disabled) {
-            transform: translateY(0);
+            transform: translateY(1px);
         }
 
         button:disabled {
-            opacity: 0.55;
+            opacity: 0.5;
             cursor: default;
         }
 
@@ -604,10 +429,10 @@
             margin-bottom: 16px;
             padding: 10px 12px;
 
-            border-radius: var(--radius);
+            border-radius: var(--radius-sm);
 
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.35);
+            background: color-mix(in srgb, var(--red) 12%, transparent);
+            border: 1px solid color-mix(in srgb, var(--red) 35%, transparent);
 
             color: var(--red);
 
@@ -645,31 +470,13 @@
 
 <body>
 
-    <div class="bg">
-
-        <div class="cursor-glow"></div>
-
-        <div class="orb-shift" style="--depth: 1;">
-            <div class="orb orb-1"></div>
-        </div>
-
-        <div class="orb-shift" style="--depth: -0.7;">
-            <div class="orb orb-2"></div>
-        </div>
-
-        <div class="orb-shift" style="--depth: 1.6;">
-            <div class="orb orb-3"></div>
-        </div>
-
-    </div>
-
     <div class="theme-picker-float" id="themeSwatches">
 
-        <button class="theme-swatch" data-theme-value="dark" onclick="setTheme('dark')" title="Dark" style="background: linear-gradient(135deg, #0b0c0f 50%, #6366f1 50%);"></button>
-        <button class="theme-swatch" data-theme-value="light" onclick="setTheme('light')" title="Light" style="background: linear-gradient(135deg, #fafafa 50%, #4f46e5 50%);"></button>
-        <button class="theme-swatch" data-theme-value="midnight" onclick="setTheme('midnight')" title="Midnight" style="background: linear-gradient(135deg, #0e0b14 50%, #a855f7 50%);"></button>
-        <button class="theme-swatch" data-theme-value="aurora" onclick="setTheme('aurora')" title="Aurora" style="background: linear-gradient(135deg, #0a1210 50%, #22c55e 50%);"></button>
-        <button class="theme-swatch" data-theme-value="sunset" onclick="setTheme('sunset')" title="Sunset" style="background: linear-gradient(135deg, #120d0a 50%, #f97316 50%);"></button>
+        <button class="theme-swatch" data-theme-value="dark" onclick="setTheme('dark')" title="Dark" style="background: linear-gradient(135deg, #0b0c10 50%, #6366f1 50%);"></button>
+        <button class="theme-swatch" data-theme-value="light" onclick="setTheme('light')" title="Light" style="background: linear-gradient(135deg, #f7f7f9 50%, #6366f1 50%);"></button>
+        <button class="theme-swatch" data-theme-value="midnight" onclick="setTheme('midnight')" title="Midnight" style="background: linear-gradient(135deg, #0e0c14 50%, #c084fc 50%);"></button>
+        <button class="theme-swatch" data-theme-value="aurora" onclick="setTheme('aurora')" title="Aurora" style="background: linear-gradient(135deg, #08120f 50%, #2dd4bf 50%);"></button>
+        <button class="theme-swatch" data-theme-value="sunset" onclick="setTheme('sunset')" title="Sunset" style="background: linear-gradient(135deg, #140d09 50%, #fb923c 50%);"></button>
 
         <label class="theme-swatch custom-swatch" id="customAccentSwatch" title="Custom accent color">
             <input type="color" id="customAccentInput" value="#6366f1" oninput="setCustomAccent(this.value)">
@@ -683,19 +490,7 @@
 
         <div class="brand">
 
-            <svg class="logo" viewBox="0 0 100 100">
-                <defs>
-                    <linearGradient id="voidzMarkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" style="stop-color:var(--purple)"/>
-                        <stop offset="100%" style="stop-color:var(--blue)"/>
-                    </linearGradient>
-                </defs>
-                <polygon points="50,3 95,26 95,74 50,97 5,74 5,26" fill="none" stroke="url(#voidzMarkGrad)" stroke-width="3.2" stroke-linejoin="round"/>
-                <path d="M28 25 L50 79" fill="none" stroke="url(#voidzMarkGrad)" stroke-width="12" stroke-linecap="square"/>
-                <path d="M72 25 L50 79" fill="none" stroke="url(#voidzMarkGrad)" stroke-width="12" stroke-linecap="square"/>
-                <circle cx="50" cy="79" r="10" fill="var(--panel-solid)" stroke="var(--teal)" stroke-width="1.6" opacity="0.95"/>
-                <circle cx="50" cy="79" r="2.4" fill="var(--text)"/>
-            </svg>
+            <div class="logo">V</div>
 
             <div>
                 <h1>Voidz.IO</h1>
@@ -715,7 +510,7 @@
                     name="username"
                     type="text"
                     autocomplete="username"
-                    placeholder="USERNAME"
+                    placeholder="Username"
                     minlength="3"
                     maxlength="20"
                     required
@@ -731,7 +526,7 @@
                     name="password"
                     type="password"
                     autocomplete="new-password"
-                    placeholder="PASSWORD"
+                    placeholder="Password"
                     minlength="8"
                     required
                 >
@@ -744,7 +539,7 @@
                     name="confirmPassword"
                     type="password"
                     autocomplete="new-password"
-                    placeholder="CONFIRM PASSWORD"
+                    placeholder="Confirm password"
                     minlength="8"
                     required
                 >
@@ -773,10 +568,7 @@
         // ==================================================
 
         const THEMES = ['dark', 'light', 'midnight', 'aurora', 'sunset']
-        const CUSTOM_ACCENT_PROPS = [
-            '--blue', '--border', '--border-strong',
-            '--bg-glow-1', '--shadow', '--shadow-lg'
-        ]
+        const CUSTOM_ACCENT_PROPS = ['--blue', '--border', '--border-strong']
 
         function applyTheme(theme) {
 
@@ -851,9 +643,6 @@
             root.style.setProperty('--blue', hex)
             root.style.setProperty('--border', `rgba(${r}, ${g}, ${b}, 0.28)`)
             root.style.setProperty('--border-strong', `rgba(${r}, ${g}, ${b}, 0.6)`)
-            root.style.setProperty('--bg-glow-1', `rgba(${r}, ${g}, ${b}, 0.16)`)
-            root.style.setProperty('--shadow', `0 0 24px rgba(${r}, ${g}, ${b}, 0.18), 0 10px 30px rgba(0, 0, 0, 0.55)`)
-            root.style.setProperty('--shadow-lg', `0 0 40px rgba(${r}, ${g}, ${b}, 0.28), 0 20px 55px rgba(0, 0, 0, 0.65)`)
 
             document.querySelectorAll('.theme-swatch').forEach(
                 el => el.classList.remove('active')
@@ -935,117 +724,8 @@
         initTheme()
 
         // ==================================================
-        // CURSOR-REACTIVE BACKGROUND
+        // SIGNUP FORM
         // ==================================================
-
-        const reduceMotion =
-            window.matchMedia &&
-            window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-        if (!reduceMotion) {
-
-            const root = document.documentElement
-
-            let pointerX = window.innerWidth / 2
-            let pointerY = window.innerHeight / 2
-
-            let frameQueued = false
-
-            function applyPointer() {
-
-                frameQueued = false
-
-                const gx = (pointerX / window.innerWidth) * 100
-                const gy = (pointerY / window.innerHeight) * 100
-
-                root.style.setProperty('--gx', `${gx}%`)
-                root.style.setProperty('--gy', `${gy}%`)
-
-                const dx = pointerX - window.innerWidth / 2
-                const dy = pointerY - window.innerHeight / 2
-
-                const mx = Math.max(-22, Math.min(22, dx * 0.035))
-                const my = Math.max(-22, Math.min(22, dy * 0.035))
-
-                root.style.setProperty('--mx', `${mx}px`)
-                root.style.setProperty('--my', `${my}px`)
-
-            }
-
-            function onPointerMove(x, y) {
-
-                pointerX = x
-                pointerY = y
-
-                if (!frameQueued) {
-
-                    frameQueued = true
-
-                    requestAnimationFrame(applyPointer)
-
-                }
-
-            }
-
-            window.addEventListener('mousemove', event => {
-
-                onPointerMove(event.clientX, event.clientY)
-
-            })
-
-            window.addEventListener('touchmove', event => {
-
-                const touch = event.touches[0]
-
-                if (touch) {
-                    onPointerMove(touch.clientX, touch.clientY)
-                }
-
-            }, { passive: true })
-
-            // ----------------------------------------------
-            // CARD TILT + SHEEN
-            // ----------------------------------------------
-
-            const cardEl = document.querySelector('.card')
-
-            if (cardEl) {
-
-                cardEl.addEventListener('mousemove', event => {
-
-                    const rect = cardEl.getBoundingClientRect()
-
-                    const relX = (event.clientX - rect.left) / rect.width
-                    const relY = (event.clientY - rect.top) / rect.height
-
-                    const rotateY = (relX - 0.5) * 14
-                    const rotateX = (0.5 - relY) * 14
-
-                    cardEl.style.setProperty('--sx', `${relX * 100}%`)
-                    cardEl.style.setProperty('--sy', `${relY * 100}%`)
-
-                    cardEl.style.transform =
-                        `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`
-
-                })
-
-                cardEl.addEventListener('mouseenter', () => {
-
-                    cardEl.classList.add('tilting')
-
-                })
-
-                cardEl.addEventListener('mouseleave', () => {
-
-                    cardEl.classList.remove('tilting')
-
-                    cardEl.style.transform = ''
-
-                })
-
-            }
-
-        }
 
         const form = document.getElementById('signupForm')
         const errorBox = document.getElementById('error')

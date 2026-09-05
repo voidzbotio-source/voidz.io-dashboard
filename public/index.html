@@ -2342,52 +2342,64 @@
             margin-bottom: 6px;
         }
 
-        .inventory-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-
-            padding: 6px 0;
-
-            font-size: 13px;
-
-            border-bottom: 1px solid var(--border);
+        .inv-slot-grid {
+            display: grid;
+            gap: 4px;
         }
 
-        .inventory-item:last-child {
-            border-bottom: none;
-        }
+        .inv-slot {
+            position: relative;
 
-        .inventory-item-name {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .inventory-item-meta {
-            color: var(--muted);
-            font-size: 12px;
-            flex-shrink: 0;
+            aspect-ratio: 1;
 
             display: flex;
             align-items: center;
-            gap: 6px;
-        }
+            justify-content: center;
 
-        .enchant-badge {
-            background: var(--panel-2);
+            background: var(--panel-solid);
             border: 1px solid var(--border);
-            border-radius: 12px;
+            border-radius: 6px;
 
-            padding: 2px 6px;
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+        }
 
-            font-size: 10px;
+        .inv-slot-icon {
+            width: 70%;
+            height: 70%;
+
+            image-rendering: pixelated;
+
+            pointer-events: none;
+        }
+
+        .inv-slot-count {
+            position: absolute;
+            right: 2px;
+            bottom: 1px;
+
+            color: #fff;
+            font-family: var(--font-display);
+            font-size: 10.5px;
             font-weight: 700;
 
-            color: var(--purple);
+            text-shadow:
+                1px 1px 0 rgba(0, 0, 0, 0.85),
+                -1px -1px 0 rgba(0, 0, 0, 0.85),
+                1px -1px 0 rgba(0, 0, 0, 0.85),
+                -1px 1px 0 rgba(0, 0, 0, 0.85);
 
-            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .inv-slot-enchant {
+            position: absolute;
+            inset: 0;
+
+            border-radius: 6px;
+
+            box-shadow: inset 0 0 0 1px var(--purple);
+
+            pointer-events: none;
         }
 
         /* ================================================= */
@@ -6795,6 +6807,41 @@
             'other': 'Other'
         }
 
+        // How many slots wide each region's grid renders as, to loosely
+        // match the shape of the real in-game inventory screen.
+        const INVENTORY_REGION_COLUMNS = {
+            'hotbar': 9,
+            'main': 9,
+            'armor': 4,
+            'crafting': 2,
+            'crafting-output': 1,
+            'offhand': 1,
+            'other': 9
+        }
+
+        // Real item icons, pulled from Minecraft's own texture files via
+        // the same public misode/mcmeta GitHub mirror used for the
+        // Blanks trivia wordlist (tracks the latest release). Items try
+        // their dedicated item texture first; blocks generally don't
+        // have one, so this falls back to the block texture, and
+        // finally just hides the image if neither exists.
+        const MC_TEXTURE_BASE = 'https://raw.githubusercontent.com/misode/mcmeta/assets/assets/minecraft/textures'
+
+        function itemIconUrl(name, kind) {
+            return `${MC_TEXTURE_BASE}/${kind}/${name}.png`
+        }
+
+        function handleItemIconError(img, name) {
+
+            if (img.dataset.fallback !== 'block') {
+                img.dataset.fallback = 'block'
+                img.src = itemIconUrl(name, 'block')
+            } else {
+                img.style.visibility = 'hidden'
+            }
+
+        }
+
         let lastInventorySignature = null
 
         function renderInventory(items) {
@@ -6860,31 +6907,38 @@
                                 <div class="inventory-region-label">
                                     ${INVENTORY_REGION_LABELS[region] || region} (${grouped[region].length})
                                 </div>
-                                ${
-                                    grouped[region]
-                                        .sort((a, b) => a.slot - b.slot)
-                                        .map(
-                                            item => `
-                                                <div class="inventory-item">
-                                                    <span class="inventory-item-name">
-                                                        #${item.slot} ${escapeHtml(item.displayName || item.name)}
-                                                    </span>
-                                                    <span class="inventory-item-meta">
-                                                        x${item.count}
-                                                        ${
-                                                            (item.enchants || [])
-                                                                .map(
-                                                                    enchant =>
-                                                                        `<span class="enchant-badge">${escapeHtml(enchant.name)}${enchant.level ? ' ' + enchant.level : ''}</span>`
-                                                                )
-                                                                .join('')
-                                                        }
-                                                    </span>
-                                                </div>
-                                            `
-                                        )
-                                        .join('')
-                                }
+                                <div class="inv-slot-grid" style="grid-template-columns: repeat(${INVENTORY_REGION_COLUMNS[region] || 9}, 1fr);">
+                                    ${
+                                        grouped[region]
+                                            .sort((a, b) => a.slot - b.slot)
+                                            .map(item => {
+
+                                                const name = item.displayName || item.name
+                                                const enchantText = (item.enchants || [])
+                                                    .map(enchant => `${enchant.name}${enchant.level ? ' ' + enchant.level : ''}`)
+                                                    .join(', ')
+
+                                                const title = enchantText
+                                                    ? `${name} x${item.count} (${enchantText})`
+                                                    : `${name} x${item.count}`
+
+                                                return `
+                                                    <div class="inv-slot" title="${escapeHtml(title)}">
+                                                        <img
+                                                            class="inv-slot-icon"
+                                                            src="${itemIconUrl(item.name, 'item')}"
+                                                            onerror="handleItemIconError(this, '${item.name}')"
+                                                            alt=""
+                                                        >
+                                                        ${item.count > 1 ? `<span class="inv-slot-count">${item.count}</span>` : ''}
+                                                        ${item.enchants && item.enchants.length ? '<span class="inv-slot-enchant"></span>' : ''}
+                                                    </div>
+                                                `
+
+                                            })
+                                            .join('')
+                                    }
+                                </div>
                             </div>
                         `
                     )

@@ -2119,6 +2119,8 @@
         }
 
         .detail-chart-wrap {
+            position: relative;
+
             margin: 4px 0 6px;
         }
 
@@ -2126,11 +2128,13 @@
             display: block;
             width: 100%;
             height: auto;
+
+            cursor: crosshair;
         }
 
         .detail-chart-labels {
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-end;
             gap: 10px;
 
             margin-top: 6px;
@@ -2139,6 +2143,56 @@
             font-size: 11.5px;
             font-weight: 600;
         }
+
+        .chart-tooltip {
+            position: absolute;
+            transform: translate(-50%, -135%);
+            display: none;
+            z-index: 5;
+
+            padding: 4px 9px;
+
+            border-radius: var(--radius-sm);
+
+            background: var(--panel-solid);
+            border: 1px solid var(--border-strong);
+            box-shadow: var(--shadow-lg);
+
+            color: var(--text);
+            font-family: var(--font-display);
+            font-size: 12.5px;
+            font-weight: 700;
+
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .stat-modal-hero {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            flex-wrap: wrap;
+
+            margin: 2px 0 14px;
+        }
+
+        .stat-modal-value {
+            font-family: var(--font-display);
+            font-size: 42px;
+            font-weight: 700;
+            line-height: 1;
+
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stat-modal-delta {
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .stat-modal-delta.positive { color: var(--green); }
+        .stat-modal-delta.negative { color: var(--red); }
+        .stat-modal-delta.neutral { color: var(--muted); }
 
         .team-stat-label {
             color: var(--muted);
@@ -4178,7 +4232,10 @@
                 <span id="teamStatModalTitle">Points History</span>
             </h3>
 
-            <p>Current: <strong id="teamStatModalCurrent">-</strong></p>
+            <div class="stat-modal-hero">
+                <div class="stat-modal-value" id="teamStatModalCurrent">-</div>
+                <div class="stat-modal-delta" id="teamStatModalDelta"></div>
+            </div>
 
             <div id="teamStatModalBody" class="detail-chart-wrap"></div>
 
@@ -6693,7 +6750,7 @@
             )
 
             if (points.length < 2) {
-                return '<div class="empty-state">Not enough history yet.</div>'
+                return { html: '<div class="empty-state">Not enough history yet.</div>' }
             }
 
             const min = Math.min(...points)
@@ -6701,7 +6758,7 @@
             const range = max - min || 1
 
             const xPad = 12
-            const yPad = 16
+            const yPad = 14
 
             const innerWidth = width - xPad * 2
             const innerHeight = height - yPad * 2
@@ -6724,45 +6781,143 @@
 
             const areaPath = `${linePath} L${lastX.toFixed(1)},${(yPad + innerHeight).toFixed(1)} L${firstX.toFixed(1)},${(yPad + innerHeight).toFixed(1)} Z`
 
-            const gridLines = [0.25, 0.5, 0.75]
-                .map(fraction => {
+            const gridRows = [
+                { fraction: 0, value: max },
+                { fraction: 0.5, value: Math.round((max + min) / 2) },
+                { fraction: 1, value: min }
+            ]
+
+            const gridLines = gridRows
+                .map(({ fraction, value }) => {
+
                     const y = yPad + innerHeight * fraction
-                    return `<line x1="${xPad}" y1="${y.toFixed(1)}" x2="${width - xPad}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`
+
+                    return `
+                        <line x1="${xPad}" y1="${y.toFixed(1)}" x2="${width - xPad}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
+                        <text x="${width - xPad}" y="${(y - 3).toFixed(1)}" text-anchor="end" fill="var(--faint)" font-size="9" font-family="'JetBrains Mono', monospace">${value}</text>
+                    `
+
                 })
                 .join('')
 
-            const dots = coords
-                .slice(0, -1)
-                .map(([x, y]) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="var(--faint)"/>`)
-                .join('')
+            return {
+                html: `
+                    <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="detail-chart" id="teamDetailChartSvg">
+                        <defs>
+                            <linearGradient id="teamChartFade" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="var(--blue)" stop-opacity="0.28"/>
+                                <stop offset="100%" stop-color="var(--blue)" stop-opacity="0"/>
+                            </linearGradient>
+                        </defs>
+                        ${gridLines}
+                        <path d="${areaPath}" fill="url(#teamChartFade)" stroke="none"/>
+                        <path d="${linePath}" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+                        <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="5" fill="var(--blue)" stroke="var(--panel-2)" stroke-width="2"/>
+                        <line id="teamDetailHoverLine" x1="0" y1="${yPad}" x2="0" y2="${(yPad + innerHeight).toFixed(1)}" stroke="var(--border-strong)" stroke-width="1" style="display: none;"/>
+                        <circle id="teamDetailHoverDot" r="5" fill="var(--text)" stroke="var(--blue)" stroke-width="2" style="display: none;"/>
+                    </svg>
+                    <div class="detail-chart-labels">
+                        <span>${points.length} reading${points.length === 1 ? '' : 's'}</span>
+                    </div>
+                    <div class="chart-tooltip" id="teamStatChartTooltip"></div>
+                `,
+                coords,
+                points,
+                width,
+                height
+            }
 
-            return `
-                <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="detail-chart">
-                    ${gridLines}
-                    <path d="${areaPath}" fill="var(--blue)" opacity="0.12" stroke="none"/>
-                    <path d="${linePath}" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-                    ${dots}
-                    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="5" fill="var(--blue)" stroke="var(--panel-2)" stroke-width="2"/>
-                </svg>
-                <div class="detail-chart-labels">
-                    <span>Min ${min}</span>
-                    <span>Max ${max}</span>
-                    <span>${points.length} reading${points.length === 1 ? '' : 's'}</span>
-                </div>
-            `
+        }
+
+        // Crosshair + tooltip on hover, snapping to the nearest reading -
+        // a static line chart with no way to read individual values
+        // isn't much more useful than the small sparkline on the card.
+        function attachChartHover(chart) {
+
+            const svg = $('teamDetailChartSvg')
+            const hoverLine = $('teamDetailHoverLine')
+            const hoverDot = $('teamDetailHoverDot')
+            const tooltip = $('teamStatChartTooltip')
+
+            if (!svg || !chart.coords) return
+
+            svg.addEventListener('mousemove', event => {
+
+                const rect = svg.getBoundingClientRect()
+                const mouseX = ((event.clientX - rect.left) / rect.width) * chart.width
+
+                let nearest = 0
+                let nearestDist = Infinity
+
+                chart.coords.forEach(([x], index) => {
+                    const dist = Math.abs(x - mouseX)
+                    if (dist < nearestDist) {
+                        nearestDist = dist
+                        nearest = index
+                    }
+                })
+
+                const [x, y] = chart.coords[nearest]
+
+                hoverLine.setAttribute('x1', x)
+                hoverLine.setAttribute('x2', x)
+                hoverLine.style.display = ''
+
+                hoverDot.setAttribute('cx', x)
+                hoverDot.setAttribute('cy', y)
+                hoverDot.style.display = ''
+
+                tooltip.textContent = chart.points[nearest]
+                tooltip.style.display = 'block'
+                tooltip.style.left = `${(x / chart.width) * 100}%`
+                tooltip.style.top = `${(y / chart.height) * 100}%`
+
+            })
+
+            svg.addEventListener('mouseleave', () => {
+
+                hoverLine.style.display = 'none'
+                hoverDot.style.display = 'none'
+                tooltip.style.display = 'none'
+
+            })
 
         }
 
         function openTeamStatDetail() {
 
             const values = lastTeamHistory.map(entry => entry.points)
+                .filter(value => typeof value === 'number' && Number.isFinite(value))
+
             const current = values.length ? values[values.length - 1] : null
+            const previous = values.length > 1 ? values[values.length - 2] : null
 
             $('teamStatModalTitle').textContent = 'Points History'
             $('teamStatModalCurrent').textContent = current ?? '-'
-            $('teamStatModalBody').innerHTML = buildDetailedChart(values, 520, 200)
+
+            const deltaEl = $('teamStatModalDelta')
+
+            if (current !== null && previous !== null) {
+
+                const delta = current - previous
+
+                deltaEl.textContent = `${delta > 0 ? '+' : ''}${delta} since last reading`
+                deltaEl.className = 'stat-modal-delta ' + (delta > 0 ? 'positive' : delta < 0 ? 'negative' : 'neutral')
+                deltaEl.style.display = ''
+
+            } else {
+
+                deltaEl.style.display = 'none'
+
+            }
+
+            const chart = buildDetailedChart(values, 520, 200)
+
+            $('teamStatModalBody').innerHTML = chart.html
 
             $('teamStatModalOverlay').classList.add('show')
+
+            attachChartHover(chart)
 
         }
 

@@ -374,6 +374,18 @@ function saveTeamHistory(username, history) {
     saveBotConfigs(configs)
 }
 
+function getKothHistory(username) {
+    const configs = loadBotConfigs()
+    const history = configs[username]?.kothHistory
+    return Array.isArray(history) ? history : []
+}
+
+function saveKothHistory(username, history) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], kothHistory: history }
+    saveBotConfigs(configs)
+}
+
 // Everything the dashboard used to keep in localStorage only
 // (Threats, Allies, and the Appearance tab) - now synced through
 // here too, so it follows the account across devices/browsers.
@@ -725,6 +737,11 @@ class BotSession {
         this.teamHistory = getTeamHistory(username)
         this.lastTeamRefreshRequestAt = 0
 
+        // Who captured each KOTH, how many team points it was worth,
+        // and when - shown as a log alongside the Points detail chart.
+        // Persisted the same way as teamHistory.
+        this.kothHistory = getKothHistory(username)
+
         // Last known-settled inventory read (see getInventorySnapshot/
         // getKeyAmounts) - served back out during a mid-update burst
         // instead of a possibly-inconsistent live read.
@@ -973,7 +990,8 @@ class BotSession {
                     totalCount: this.teamRoster.totalCount,
                     roles: this.teamRoster.roles,
                     updatedAt: this.teamRoster.updatedAt,
-                    history: this.teamHistory
+                    history: this.teamHistory,
+                    kothHistory: this.kothHistory
                 }
                 : null,
 
@@ -1745,6 +1763,33 @@ class BotSession {
 
     }
 
+    // Logs who captured a KOTH and how many team points it was worth,
+    // parsed from "<player> has received Nx PvP Keys and N Team
+    // Points!" - shown as a history list alongside the Points detail
+    // chart on the dashboard. Not anchored to a specific prefix since
+    // the exact glyph/icon in front of the player name isn't known.
+    checkKothCapture(text) {
+
+        const match = cleanMessage(text).match(
+            /([A-Za-z0-9_]{1,16}) has received \d+x PvP Keys and (\d+) Team Points!?/i
+        )
+
+        if (!match) return
+
+        this.kothHistory.push({
+            timestamp: Date.now(),
+            player: match[1],
+            points: Number(match[2])
+        })
+
+        this.kothHistory = this.kothHistory.slice(-50)
+
+        saveKothHistory(this.username, this.kothHistory)
+
+        this.log(`KOTH captured by ${match[1]} (+${match[2]} team points)`)
+
+    }
+
     // Runs every dashboard tick (~1s) while connected. Any Auto-Invite
     // tracked player whose tab-list HP drops below 2.5 hearts (5 HP)
     // gets kicked off the team and immediately reinvited - kicking
@@ -2128,6 +2173,7 @@ class BotSession {
             this.tryParseTeamInfoLine(text, message.json)
             this.checkAutoReinvite(text)
             this.checkTeamRosterChange(text)
+            this.checkKothCapture(text)
             this.checkBlackMarket(text)
 
             // Player chat (position 'chat') is already broadcast by

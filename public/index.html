@@ -2194,6 +2194,79 @@
         .stat-modal-delta.negative { color: var(--red); }
         .stat-modal-delta.neutral { color: var(--muted); }
 
+        .stat-modal-card {
+            max-width: 420px;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        .koth-history {
+            margin-top: 18px;
+            padding-top: 14px;
+
+            border-top: 1px solid var(--border);
+        }
+
+        .koth-history-label {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+
+            margin-bottom: 8px;
+        }
+
+        .koth-history-list {
+            max-height: 200px;
+            overflow-y: auto;
+
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .koth-history-row {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+
+            padding: 8px 10px;
+
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+
+            font-size: 13px;
+        }
+
+        .koth-history-player {
+            flex: 1;
+            min-width: 0;
+
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+
+            font-weight: 700;
+        }
+
+        .koth-history-points {
+            flex-shrink: 0;
+
+            color: var(--green);
+            font-family: var(--font-display);
+            font-weight: 700;
+        }
+
+        .koth-history-date {
+            flex-shrink: 0;
+
+            color: var(--muted);
+            font-size: 11.5px;
+            white-space: nowrap;
+        }
+
         .team-stat-label {
             color: var(--muted);
             font-size: 10.5px;
@@ -4225,7 +4298,7 @@
 
     <div id="teamStatModalOverlay" class="modal-overlay">
 
-        <div class="modal-card">
+        <div class="modal-card stat-modal-card">
 
             <h3>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8 13 13.7l-3-3L4.7 16"/></svg>
@@ -4238,6 +4311,11 @@
             </div>
 
             <div id="teamStatModalBody" class="detail-chart-wrap"></div>
+
+            <div class="koth-history">
+                <div class="koth-history-label">Recent KOTH Captures</div>
+                <div id="teamStatKothList" class="koth-history-list scroll"></div>
+            </div>
 
             <div class="modal-actions">
                 <button class="logout-button" onclick="closeTeamStatModal()" style="flex: 1;">
@@ -6594,6 +6672,7 @@
         // ==================================================
 
         let lastTeamHistory = []
+        let lastKothHistory = []
 
         function buildSparkline(values, width, height) {
 
@@ -6711,6 +6790,7 @@
             const history = Array.isArray(team.history) ? team.history : []
 
             lastTeamHistory = history
+            lastKothHistory = Array.isArray(team.kothHistory) ? team.kothHistory : []
 
             const pointsSpark = buildSparkline(history.map(entry => entry.points), 140, 32)
 
@@ -6918,6 +6998,44 @@
             $('teamStatModalOverlay').classList.add('show')
 
             attachChartHover(chart)
+
+            renderKothHistoryList()
+
+        }
+
+        function formatKothDate(timestamp) {
+
+            return new Date(timestamp).toLocaleString(undefined, {
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit'
+            })
+
+        }
+
+        function renderKothHistoryList() {
+
+            const container = $('teamStatKothList')
+
+            if (!container) return
+
+            if (!lastKothHistory.length) {
+                container.innerHTML = '<div class="empty-state">No KOTH captures logged yet.</div>'
+                return
+            }
+
+            container.innerHTML = [...lastKothHistory]
+                .reverse()
+                .slice(0, 20)
+                .map(entry => `
+                    <div class="koth-history-row">
+                        <span class="koth-history-player">${escapeHtml(entry.player)}</span>
+                        <span class="koth-history-points">+${entry.points}</span>
+                        <span class="koth-history-date">${formatKothDate(entry.timestamp)}</span>
+                    </div>
+                `)
+                .join('')
 
         }
 

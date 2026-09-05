@@ -1046,6 +1046,7 @@
         .card[data-card-id="commands"] { --card-accent: var(--purple); }
         .card[data-card-id="movement"] { --card-accent: var(--green); }
         .card[data-card-id="flags"] { --card-accent: var(--teal); }
+        .card[data-card-id="danger"] { --card-accent: var(--red); }
         .card[data-card-id="keys"] { --card-accent: var(--yellow); }
         .card[data-card-id="players"] { --card-accent: var(--blue); }
         .card[data-card-id="team"] { --card-accent: var(--purple); }
@@ -2354,6 +2355,58 @@
         .leaderboard-net.positive { color: var(--green); }
         .leaderboard-net.negative { color: var(--red); }
         .leaderboard-net.neutral { color: var(--muted); }
+
+        /* ================================================= */
+        /* DANGER METER */
+        /* ================================================= */
+
+        .danger-meter-track {
+            height: 10px;
+
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+
+            overflow: hidden;
+        }
+
+        .danger-meter-fill {
+            height: 100%;
+            width: 0%;
+
+            background: var(--green);
+            border-radius: 999px;
+
+            transition: width 0.4s ease, background-color 0.4s ease;
+        }
+
+        .danger-meter-label {
+            margin-top: 10px;
+
+            font-family: var(--font-display);
+            font-size: 17px;
+            font-weight: 700;
+
+            color: var(--green);
+        }
+
+        .danger-reasons {
+            margin-top: 8px;
+
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .danger-reason {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .danger-reason.muted {
+            color: var(--faint);
+        }
 
         .team-stat-label {
             color: var(--muted);
@@ -3876,6 +3929,27 @@
             <!-- ========================================== -->
             <!-- RECONNECTS -->
             <!-- ========================================== -->
+
+            <!-- ========================================== -->
+            <!-- DANGER METER -->
+            <!-- ========================================== -->
+
+            <section class="card col-1" data-card-id="danger" draggable="true" style="animation-delay: 0.08s;">
+
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    Danger Level
+                </div>
+
+                <div class="danger-meter-track">
+                    <div id="dangerMeterFill" class="danger-meter-fill"></div>
+                </div>
+
+                <div id="dangerMeterLabel" class="danger-meter-label">Safe · 0</div>
+
+                <div id="dangerMeterReasons" class="danger-reasons"></div>
+
+            </section>
 
             <!-- ========================================== -->
             <!-- RECONNECTS / PROXY / LIFESTEAL FLAGS -->
@@ -6268,6 +6342,11 @@
                 'health'
             )
 
+            lastBotHealth = data.health ?? null
+            lastBotMaxHealth = data.maxHealth || 20
+
+            renderDangerMeter()
+
             updateMeter(
                 'foodMeter',
                 data.food,
@@ -6776,6 +6855,9 @@
         // TEAM
         // ==================================================
 
+        let lastBotHealth = null
+        let lastBotMaxHealth = 20
+
         let lastTeamHistory = []
         let lastKothHistory = []
         let lastDeathHistory = []
@@ -6900,6 +6982,7 @@
             lastDeathHistory = Array.isArray(team.deathHistory) ? team.deathHistory : []
 
             renderLeaderboard()
+            renderDangerMeter()
 
             const pointsSpark = buildSparkline(history.map(entry => entry.points), 140, 32)
 
@@ -7177,6 +7260,102 @@
                 .join('')
 
         }
+
+        // ==================================================
+        // DANGER METER
+        // ==================================================
+        // A single "how risky is right now" score combining signals
+        // that already exist as separate cards (bot HP, threats
+        // online, recent team deaths) into one glance, instead of
+        // making you piece it together yourself.
+
+        const DANGER_RECENT_DEATH_WINDOW_MS = 5 * 60 * 1000
+
+        function computeDangerScore() {
+
+            let score = 0
+            const reasons = []
+
+            if (lastBotHealth !== null && lastBotMaxHealth) {
+
+                const pct = lastBotHealth / lastBotMaxHealth
+
+                if (pct <= 0.25) {
+                    score += 40
+                    reasons.push('Bot HP critically low')
+                } else if (pct <= 0.5) {
+                    score += 20
+                    reasons.push('Bot HP below half')
+                }
+
+            }
+
+            if (lastThreatsOnlineCount > 0) {
+
+                score += Math.min(lastThreatsOnlineCount * 25, 50)
+
+                reasons.push(`${lastThreatsOnlineCount} threat${lastThreatsOnlineCount === 1 ? '' : 's'} online`)
+
+            }
+
+            const cutoff = Date.now() - DANGER_RECENT_DEATH_WINDOW_MS
+
+            const recentDeaths = lastDeathHistory.filter(entry => entry.timestamp >= cutoff)
+
+            if (recentDeaths.length) {
+
+                score += Math.min(recentDeaths.length * 15, 30)
+
+                reasons.push(`${recentDeaths.length} team death${recentDeaths.length === 1 ? '' : 's'} in the last 5m`)
+
+            }
+
+            return { score: Math.min(100, score), reasons }
+
+        }
+
+        function renderDangerMeter() {
+
+            const fill = $('dangerMeterFill')
+            const label = $('dangerMeterLabel')
+            const reasonsEl = $('dangerMeterReasons')
+
+            if (!fill || !label || !reasonsEl) return
+
+            const { score, reasons } = computeDangerScore()
+
+            let band, color
+
+            if (score >= 75) {
+                band = 'Critical'
+                color = 'var(--red)'
+            } else if (score >= 50) {
+                band = 'Danger'
+                color = 'var(--orange)'
+            } else if (score >= 25) {
+                band = 'Caution'
+                color = 'var(--yellow)'
+            } else {
+                band = 'Safe'
+                color = 'var(--green)'
+            }
+
+            fill.style.width = `${score}%`
+            fill.style.background = color
+
+            label.textContent = `${band} · ${score}`
+            label.style.color = color
+
+            reasonsEl.innerHTML = reasons.length
+                ? reasons.map(reason => `<div class="danger-reason">${escapeHtml(reason)}</div>`).join('')
+                : '<div class="danger-reason muted">All clear</div>'
+
+        }
+
+        // Recent-death entries age out of the 5-minute window on their
+        // own, with no new event to trigger a recompute - keep the
+        // score honest as time passes.
+        setInterval(renderDangerMeter, 30000)
 
         function formatKothDate(timestamp) {
 
@@ -7793,6 +7972,7 @@
         }
 
         let lastKnownThreatPlayers = []
+        let lastThreatsOnlineCount = 0
 
         function updateThreats(players) {
 
@@ -7860,6 +8040,10 @@
                 }
 
             }
+
+            lastThreatsOnlineCount = onlineCount
+
+            renderDangerMeter()
 
             renderThreats(lastKnownThreatPlayers)
 

@@ -2251,12 +2251,25 @@
             font-weight: 700;
         }
 
+        .koth-history-verb {
+            margin-left: 6px;
+
+            color: var(--muted);
+            font-size: 11.5px;
+            font-weight: 600;
+            text-transform: none;
+        }
+
         .koth-history-points {
             flex-shrink: 0;
 
             color: var(--green);
             font-family: var(--font-display);
             font-weight: 700;
+        }
+
+        .koth-history-row.death .koth-history-points {
+            color: var(--red);
         }
 
         .koth-history-date {
@@ -4313,7 +4326,7 @@
             <div id="teamStatModalBody" class="detail-chart-wrap"></div>
 
             <div class="koth-history">
-                <div class="koth-history-label">Recent KOTH Captures</div>
+                <div class="koth-history-label">Recent Points Events</div>
                 <div id="teamStatKothList" class="koth-history-list scroll"></div>
             </div>
 
@@ -6673,6 +6686,7 @@
 
         let lastTeamHistory = []
         let lastKothHistory = []
+        let lastDeathHistory = []
 
         function buildSparkline(values, width, height) {
 
@@ -6791,6 +6805,7 @@
 
             lastTeamHistory = history
             lastKothHistory = Array.isArray(team.kothHistory) ? team.kothHistory : []
+            lastDeathHistory = Array.isArray(team.deathHistory) ? team.deathHistory : []
 
             const pointsSpark = buildSparkline(history.map(entry => entry.points), 140, 32)
 
@@ -7020,21 +7035,35 @@
 
             if (!container) return
 
-            if (!lastKothHistory.length) {
-                container.innerHTML = '<div class="empty-state">No KOTH captures logged yet.</div>'
+            const events = [
+                ...lastKothHistory.map(entry => ({ ...entry, type: 'koth' })),
+                ...lastDeathHistory.map(entry => ({ ...entry, type: 'death' }))
+            ].sort((a, b) => b.timestamp - a.timestamp)
+
+            if (!events.length) {
+                container.innerHTML = '<div class="empty-state">No KOTH captures or deaths logged yet.</div>'
                 return
             }
 
-            container.innerHTML = [...lastKothHistory]
-                .reverse()
+            container.innerHTML = events
                 .slice(0, 20)
-                .map(entry => `
-                    <div class="koth-history-row">
-                        <span class="koth-history-player">${escapeHtml(entry.player)}</span>
-                        <span class="koth-history-points">+${entry.points}</span>
-                        <span class="koth-history-date">${formatKothDate(entry.timestamp)}</span>
-                    </div>
-                `)
+                .map(entry => {
+
+                    const verb = entry.type === 'koth' ? 'captured a KOTH' : 'died'
+                    const sign = entry.points > 0 ? '+' : ''
+
+                    return `
+                        <div class="koth-history-row ${entry.type}">
+                            <span class="koth-history-player">
+                                ${escapeHtml(entry.player)}
+                                <span class="koth-history-verb">${verb}</span>
+                            </span>
+                            <span class="koth-history-points">${sign}${entry.points}</span>
+                            <span class="koth-history-date">${formatKothDate(entry.timestamp)}</span>
+                        </div>
+                    `
+
+                })
                 .join('')
 
         }

@@ -386,6 +386,18 @@ function saveKothHistory(username, history) {
     saveBotConfigs(configs)
 }
 
+function getDeathHistory(username) {
+    const configs = loadBotConfigs()
+    const history = configs[username]?.deathHistory
+    return Array.isArray(history) ? history : []
+}
+
+function saveDeathHistory(username, history) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], deathHistory: history }
+    saveBotConfigs(configs)
+}
+
 // Everything the dashboard used to keep in localStorage only
 // (Threats, Allies, and the Appearance tab) - now synced through
 // here too, so it follows the account across devices/browsers.
@@ -742,6 +754,12 @@ class BotSession {
         // Persisted the same way as teamHistory.
         this.kothHistory = getKothHistory(username)
 
+        // Team deaths that cost points ("Your team has lost 5 points
+        // due to <player>'s death."), same shape/persistence as
+        // kothHistory - shown merged with it in the Points detail
+        // modal so it reads as one "why did our points change" log.
+        this.deathHistory = getDeathHistory(username)
+
         // Last known-settled inventory read (see getInventorySnapshot/
         // getKeyAmounts) - served back out during a mid-update burst
         // instead of a possibly-inconsistent live read.
@@ -991,7 +1009,8 @@ class BotSession {
                     roles: this.teamRoster.roles,
                     updatedAt: this.teamRoster.updatedAt,
                     history: this.teamHistory,
-                    kothHistory: this.kothHistory
+                    kothHistory: this.kothHistory,
+                    deathHistory: this.deathHistory
                 }
                 : null,
 
@@ -1741,14 +1760,17 @@ class BotSession {
     // single exact phrase. Also covers KOTH captures ("<Name> KOTH
     // has been captured!" / "<player> has received 3x PvP Keys and
     // 25 Team Points!") - not anchored to a specific KOTH name since
-    // there are several (Greek, Colosseum, Temple, CPvP, Agora, ...).
+    // there are several (Greek, Colosseum, Temple, CPvP, Agora, ...) -
+    // and team deaths ("Your team has lost 5 points due to <player>'s
+    // death.").
     checkTeamRosterChange(text) {
 
         const isRosterChange =
             /^TEAMS ➟ .+ has (joined|left) the team\.?$/i.test(text) ||
             /^TEAMS ➟ .+ has been kicked\b/i.test(text) ||
             /\bKOTH has been captured!?$/i.test(text) ||
-            /\bhas received\b.*\bteam points\b/i.test(text)
+            /\bhas received\b.*\bteam points\b/i.test(text) ||
+            /\byour team has lost \d+ points? due to\b/i.test(text)
 
         if (!isRosterChange) return
 
@@ -1787,6 +1809,31 @@ class BotSession {
         saveKothHistory(this.username, this.kothHistory)
 
         this.log(`KOTH captured by ${match[1]} (+${match[2]} team points)`)
+
+    }
+
+    // Logs who died and how many points it cost the team, parsed from
+    // "Your team has lost N points due to <player>'s death." - shown
+    // merged with kothHistory in the Points detail modal.
+    checkTeamDeath(text) {
+
+        const match = cleanMessage(text).match(
+            /your team has lost (\d+) points? due to ([A-Za-z0-9_]{1,16})'s death/i
+        )
+
+        if (!match) return
+
+        this.deathHistory.push({
+            timestamp: Date.now(),
+            player: match[2],
+            points: -Number(match[1])
+        })
+
+        this.deathHistory = this.deathHistory.slice(-50)
+
+        saveDeathHistory(this.username, this.deathHistory)
+
+        this.log(`${match[2]} died (-${match[1]} team points)`)
 
     }
 
@@ -2174,6 +2221,7 @@ class BotSession {
             this.checkAutoReinvite(text)
             this.checkTeamRosterChange(text)
             this.checkKothCapture(text)
+            this.checkTeamDeath(text)
             this.checkBlackMarket(text)
 
             // Player chat (position 'chat') is already broadcast by

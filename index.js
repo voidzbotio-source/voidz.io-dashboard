@@ -1022,6 +1022,39 @@ class BotSession {
     }
 
     // --------------------------------------------------------
+    // MOVEMENT
+    // --------------------------------------------------------
+    // Real-time directional control from the dashboard's D-pad -
+    // press-and-hold sends {direction, active:true}, release sends
+    // {direction, active:false}, mapped straight onto mineflayer's
+    // own control state (the same interface used for actual
+    // keyboard input), not a scripted walk-to-coordinates path.
+
+    static MOVEMENT_CONTROLS = ['forward', 'back', 'left', 'right', 'jump', 'sprint', 'sneak']
+
+    setMovement(direction, active) {
+
+        if (!this.bot || !this.bot.entity) return
+        if (!BotSession.MOVEMENT_CONTROLS.includes(direction)) return
+
+        this.bot.setControlState(direction, !!active)
+
+    }
+
+    // Safety net for a dropped dashboard connection while a direction
+    // was held down - without this the bot would just keep walking
+    // forever in that direction.
+    stopAllMovement() {
+
+        if (!this.bot || !this.bot.entity) return
+
+        for (const control of BotSession.MOVEMENT_CONTROLS) {
+            this.bot.setControlState(control, false)
+        }
+
+    }
+
+    // --------------------------------------------------------
     // TIMER HELPERS
     // --------------------------------------------------------
 
@@ -2878,8 +2911,26 @@ io.on('connection', socket => {
 
     })
 
+    socket.on('move', payload => {
+
+        if (!payload || typeof payload.direction !== 'string') return
+
+        const activeSession = sessions.get(username)
+
+        if (!activeSession) return
+
+        activeSession.setMovement(payload.direction, !!payload.active)
+
+    })
+
     socket.on('disconnect', () => {
+
         originalLog(`[WEB] Dashboard disconnected: ${username}`)
+
+        // If this was the tab holding a direction down, don't leave
+        // the bot walking forever with nobody there to release it.
+        sessions.get(username)?.stopAllMovement()
+
     })
 
 })

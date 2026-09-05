@@ -38,7 +38,7 @@
     >
 
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;600&display=swap"
         rel="stylesheet"
     >
 
@@ -82,11 +82,13 @@
             --purple: #c084fc;
             --teal: #2dd4bf;
 
-            --radius: 12px;
-            --radius-sm: 8px;
+            --radius: 20px;
+            --radius-sm: 14px;
 
             --shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
             --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.28);
+
+            --font-display: 'Space Grotesk', 'Inter', sans-serif;
 
             --gx: 50%;
             --gy: 40%;
@@ -439,9 +441,9 @@
                     var(--purple)
                 );
 
-            font-family: 'Inter', sans-serif;
+            font-family: var(--font-display);
             font-size: 17px;
-            font-weight: 800;
+            font-weight: 700;
             color: #fff;
 
             box-shadow: var(--shadow);
@@ -450,8 +452,8 @@
         .brand h1 {
             margin: 0;
 
-            font-family: 'Inter', sans-serif;
-            font-size: 16px;
+            font-family: var(--font-display);
+            font-size: 17px;
             font-weight: 700;
             letter-spacing: -0.01em;
         }
@@ -1004,15 +1006,19 @@
         .card {
             position: relative;
 
+            --card-accent: var(--blue);
+
             background: var(--panel);
 
             border:
                 1px solid
                 var(--border);
 
+            border-top: 3px solid var(--card-accent);
+
             border-radius: var(--radius);
 
-            padding: 20px;
+            padding: 22px;
 
             box-shadow: var(--shadow);
 
@@ -1027,7 +1033,25 @@
 
         .card:hover {
             border-color: var(--border-strong);
+            border-top-color: var(--card-accent);
         }
+
+        /* Bento-style color coding - each card type gets its own
+           accent stripe instead of a uniform gray top edge, so the
+           grid reads as distinct zones rather than identical boxes. */
+        .card[data-card-id="status"] { --card-accent: var(--blue); }
+        .card[data-card-id="commands"] { --card-accent: var(--purple); }
+        .card[data-card-id="flags"] { --card-accent: var(--teal); }
+        .card[data-card-id="keys"] { --card-accent: var(--yellow); }
+        .card[data-card-id="players"] { --card-accent: var(--blue); }
+        .card[data-card-id="team"] { --card-accent: var(--purple); }
+        .card[data-card-id="inventory"] { --card-accent: var(--orange); }
+        .card[data-card-id="threats"] { --card-accent: var(--red); }
+        .card[data-card-id="allies"] { --card-accent: var(--green); }
+        .card[data-card-id="autoinvite"] { --card-accent: var(--green); }
+        .card[data-card-id="chat"] { --card-accent: var(--teal); }
+        .card[data-card-id="activity"] { --card-accent: var(--orange); }
+        .card[data-card-id="lastActivity"] { --card-accent: var(--yellow); }
 
         .card::before {
             content: '';
@@ -1143,10 +1167,10 @@
         }
 
         .hero-state {
-            font-family: 'Inter', sans-serif;
-            font-size: 28px;
-            font-weight: 800;
-            letter-spacing: 0.03em;
+            font-family: var(--font-display);
+            font-size: 38px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
 
             display: flex;
             align-items: center;
@@ -1248,7 +1272,8 @@
         }
 
         .hero-stat-value {
-            font-size: 15px;
+            font-family: var(--font-display);
+            font-size: 17px;
             font-weight: 700;
 
             font-variant-numeric: tabular-nums;
@@ -1493,9 +1518,9 @@
         .key-count {
             position: relative;
 
-            font-family: 'Inter', sans-serif;
-            font-size: 24px;
-            font-weight: 800;
+            font-family: var(--font-display);
+            font-size: 26px;
+            font-weight: 700;
 
             font-variant-numeric: tabular-nums;
         }
@@ -2031,8 +2056,8 @@
         }
 
         .team-stat-value {
-            font-family: 'Inter', sans-serif;
-            font-size: 15px;
+            font-family: var(--font-display);
+            font-size: 17px;
             font-weight: 700;
         }
 
@@ -3188,7 +3213,7 @@
             }
 
             .hero-state {
-                font-size: 26px;
+                font-size: 30px;
             }
 
             .toast-container {

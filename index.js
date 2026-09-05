@@ -1687,12 +1687,17 @@ class BotSession {
     // kicked" broadcast triggers a fresh /t info. The "kicked" wording
     // isn't confirmed against a live example, so this matches loosely
     // (with or without a trailing "from the team") rather than a
-    // single exact phrase.
+    // single exact phrase. Also covers KOTH captures ("<Name> KOTH
+    // has been captured!" / "<player> has received 3x PvP Keys and
+    // 25 Team Points!") - not anchored to a specific KOTH name since
+    // there are several (Greek, Colosseum, Temple, CPvP, Agora, ...).
     checkTeamRosterChange(text) {
 
         const isRosterChange =
             /^TEAMS ➟ .+ has (joined|left) the team\.?$/i.test(text) ||
-            /^TEAMS ➟ .+ has been kicked\b/i.test(text)
+            /^TEAMS ➟ .+ has been kicked\b/i.test(text) ||
+            /\bKOTH has been captured!?$/i.test(text) ||
+            /\bhas received\b.*\bteam points\b/i.test(text)
 
         if (!isRosterChange) return
 

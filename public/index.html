@@ -2344,28 +2344,38 @@
 
         .inv-slot-grid {
             display: grid;
-            gap: 4px;
+            grid-auto-rows: 34px;
+            gap: 2px;
         }
 
+        /* Deliberately styled like the actual Minecraft inventory
+           texture (flat gray, sharp corners, a pressed-in bevel)
+           rather than the site's own dark rounded-card look - that's
+           what makes it read as "an inventory" instead of just another
+           panel. Slots are a fixed pixel size regardless of how many
+           columns a region has (armor=4, offhand=1, etc.) since real
+           slots never stretch to fill space. */
         .inv-slot {
             position: relative;
 
-            aspect-ratio: 1;
+            width: 34px;
+            height: 34px;
 
             display: flex;
             align-items: center;
             justify-content: center;
 
-            background: var(--panel-solid);
-            border: 1px solid var(--border);
-            border-radius: 6px;
+            background: #8b8b8b;
+            border-radius: 0;
 
-            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+            box-shadow:
+                inset 2px 2px 0 rgba(0, 0, 0, 0.5),
+                inset -2px -2px 0 rgba(255, 255, 255, 0.3);
         }
 
         .inv-slot-icon {
-            width: 70%;
-            height: 70%;
+            width: 22px;
+            height: 22px;
 
             image-rendering: pixelated;
 
@@ -2375,29 +2385,24 @@
         .inv-slot-count {
             position: absolute;
             right: 2px;
-            bottom: 1px;
+            bottom: 0px;
 
             color: #fff;
-            font-family: var(--font-display);
-            font-size: 10.5px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
             font-weight: 700;
 
-            text-shadow:
-                1px 1px 0 rgba(0, 0, 0, 0.85),
-                -1px -1px 0 rgba(0, 0, 0, 0.85),
-                1px -1px 0 rgba(0, 0, 0, 0.85),
-                -1px 1px 0 rgba(0, 0, 0, 0.85);
+            text-shadow: 1.5px 1.5px 0 rgba(0, 0, 0, 0.9);
 
             pointer-events: none;
         }
 
         .inv-slot-enchant {
             position: absolute;
-            inset: 0;
+            inset: 3px;
 
-            border-radius: 6px;
-
-            box-shadow: inset 0 0 0 1px var(--purple);
+            background: rgba(155, 89, 235, 0.35);
+            mix-blend-mode: screen;
 
             pointer-events: none;
         }
@@ -6907,7 +6912,7 @@
                                 <div class="inventory-region-label">
                                     ${INVENTORY_REGION_LABELS[region] || region} (${grouped[region].length})
                                 </div>
-                                <div class="inv-slot-grid" style="grid-template-columns: repeat(${INVENTORY_REGION_COLUMNS[region] || 9}, 1fr);">
+                                <div class="inv-slot-grid" style="grid-template-columns: repeat(${INVENTORY_REGION_COLUMNS[region] || 9}, 34px);">
                                     ${
                                         grouped[region]
                                             .sort((a, b) => a.slot - b.slot)

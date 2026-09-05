@@ -1801,6 +1801,38 @@ class BotSession {
 
     }
 
+    // Clears one player's entries out of the KOTH/death history (and
+    // therefore the leaderboard) - a manual cleanup tool for data
+    // logged before isTeamMember filtering existed, or anything else
+    // that shouldn't be there.
+    removePlayerFromHistory(name) {
+
+        const lower = name.trim().toLowerCase()
+
+        if (!lower) return
+
+        const beforeKoth = this.kothHistory.length
+        const beforeDeath = this.deathHistory.length
+
+        this.kothHistory = this.kothHistory.filter(entry => entry.player.toLowerCase() !== lower)
+        this.deathHistory = this.deathHistory.filter(entry => entry.player.toLowerCase() !== lower)
+
+        const removed = (beforeKoth - this.kothHistory.length) + (beforeDeath - this.deathHistory.length)
+
+        saveKothHistory(this.username, this.kothHistory)
+        saveDeathHistory(this.username, this.deathHistory)
+
+        this.log(`Removed ${removed} history entr${removed === 1 ? 'y' : 'ies'} for ${name}`)
+
+        io.to(this.username).emit('notice', {
+            type: 'success',
+            text: `Removed ${removed} history entr${removed === 1 ? 'y' : 'ies'} for ${name}`
+        })
+
+        this.updateDashboard()
+
+    }
+
     // Logs who captured a KOTH and how many team points it was worth,
     // parsed from "<player> has received Nx PvP Keys and N Team
     // Points!" - shown as a history list alongside the Points detail
@@ -2668,6 +2700,8 @@ function handleWebCommand(username, command) {
 
             if (lower.startsWith('say ')) {
                 botSession.sendMinecraftChat(command.substring(4))
+            } else if (lower.startsWith('reset-player ')) {
+                botSession.removePlayerFromHistory(command.substring('reset-player '.length))
             }
 
             break

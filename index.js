@@ -1785,11 +1785,29 @@ class BotSession {
 
     }
 
+    // True if `name` is a member of the team as of the last completed
+    // /t info - used to keep the KOTH/death log and leaderboard scoped
+    // to our own team, since the capture broadcast is server-wide and
+    // would otherwise log players from every other team too.
+    isTeamMember(name) {
+
+        if (!this.teamRoster || !Array.isArray(this.teamRoster.members)) return false
+
+        const lower = name.toLowerCase()
+
+        return this.teamRoster.members.some(
+            member => (member.name || '').toLowerCase() === lower
+        )
+
+    }
+
     // Logs who captured a KOTH and how many team points it was worth,
     // parsed from "<player> has received Nx PvP Keys and N Team
     // Points!" - shown as a history list alongside the Points detail
     // chart on the dashboard. Not anchored to a specific prefix since
     // the exact glyph/icon in front of the player name isn't known.
+    // This broadcast is server-wide (any team's capture), so it's
+    // filtered to our own roster before logging.
     checkKothCapture(text) {
 
         const match = cleanMessage(text).match(
@@ -1797,6 +1815,7 @@ class BotSession {
         )
 
         if (!match) return
+        if (!this.isTeamMember(match[1])) return
 
         this.kothHistory.push({
             timestamp: Date.now(),
@@ -1814,7 +1833,11 @@ class BotSession {
 
     // Logs who died and how many points it cost the team, parsed from
     // "Your team has lost N points due to <player>'s death." - shown
-    // merged with kothHistory in the Points detail modal.
+    // merged with kothHistory in the Points detail modal. The "Your
+    // team" wording implies this is already scoped server-side to the
+    // affected team, but it's checked against the roster anyway for
+    // consistency with checkKothCapture (and in case that assumption
+    // is ever wrong).
     checkTeamDeath(text) {
 
         const match = cleanMessage(text).match(
@@ -1822,6 +1845,7 @@ class BotSession {
         )
 
         if (!match) return
+        if (!this.isTeamMember(match[2])) return
 
         this.deathHistory.push({
             timestamp: Date.now(),

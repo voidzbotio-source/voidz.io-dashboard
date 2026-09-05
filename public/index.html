@@ -1049,6 +1049,7 @@
         .card[data-card-id="keys"] { --card-accent: var(--yellow); }
         .card[data-card-id="players"] { --card-accent: var(--blue); }
         .card[data-card-id="team"] { --card-accent: var(--purple); }
+        .card[data-card-id="leaderboard"] { --card-accent: var(--yellow); }
         .card[data-card-id="inventory"] { --card-accent: var(--orange); }
         .card[data-card-id="threats"] { --card-accent: var(--red); }
         .card[data-card-id="allies"] { --card-accent: var(--green); }
@@ -2279,6 +2280,80 @@
             font-size: 11.5px;
             white-space: nowrap;
         }
+
+        /* ================================================= */
+        /* LEADERBOARD */
+        /* ================================================= */
+
+        .leaderboard-body {
+            max-height: 340px;
+            overflow-y: auto;
+
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .leaderboard-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+
+            padding: 9px 10px;
+
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+        }
+
+        .leaderboard-rank {
+            flex-shrink: 0;
+            width: 20px;
+
+            text-align: center;
+
+            font-family: var(--font-display);
+            font-size: 13px;
+            font-weight: 700;
+
+            color: var(--faint);
+        }
+
+        .leaderboard-row:nth-child(1) .leaderboard-rank { color: var(--yellow); }
+        .leaderboard-row:nth-child(2) .leaderboard-rank { color: #c9ccd6; }
+        .leaderboard-row:nth-child(3) .leaderboard-rank { color: var(--orange); }
+
+        .leaderboard-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .leaderboard-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        .leaderboard-meta {
+            color: var(--muted);
+            font-size: 11px;
+            margin-top: 1px;
+        }
+
+        .leaderboard-net {
+            flex-shrink: 0;
+
+            font-family: var(--font-display);
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .leaderboard-net.positive { color: var(--green); }
+        .leaderboard-net.negative { color: var(--red); }
+        .leaderboard-net.neutral { color: var(--muted); }
 
         .team-stat-label {
             color: var(--muted);
@@ -4035,6 +4110,23 @@
                     class="team-body scroll"
                 >
                     <div class="empty-state">No team info yet. Click refresh.</div>
+                </div>
+
+            </section>
+
+            <!-- ========================================== -->
+            <!-- TEAM LEADERBOARD -->
+            <!-- ========================================== -->
+
+            <section class="card col-1" data-card-id="leaderboard" draggable="true" style="animation-delay: 0.193s;">
+
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v6a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0 2 3.5"/><path d="M17 6h3a2 2 0 0 1-2 3.5"/></svg>
+                    Leaderboard
+                </div>
+
+                <div id="leaderboardBody" class="leaderboard-body scroll">
+                    <div class="empty-state">No KOTH captures or deaths logged yet.</div>
                 </div>
 
             </section>
@@ -6807,6 +6899,8 @@
             lastKothHistory = Array.isArray(team.kothHistory) ? team.kothHistory : []
             lastDeathHistory = Array.isArray(team.deathHistory) ? team.deathHistory : []
 
+            renderLeaderboard()
+
             const pointsSpark = buildSparkline(history.map(entry => entry.points), 140, 32)
 
             const sparklinesHtml = pointsSpark
@@ -7015,6 +7109,72 @@
             attachChartHover(chart)
 
             renderKothHistoryList()
+
+        }
+
+        // MVP ranking built from the same kothHistory/deathHistory
+        // data as the Points Events log - who's actually contributing
+        // team points versus costing them.
+        function renderLeaderboard() {
+
+            const container = $('leaderboardBody')
+
+            if (!container) return
+
+            const byPlayer = {}
+
+            const tally = (entry, isCapture) => {
+
+                const key = entry.player.toLowerCase()
+
+                if (!byPlayer[key]) {
+                    byPlayer[key] = { name: entry.player, captures: 0, deaths: 0, net: 0 }
+                }
+
+                byPlayer[key].net += entry.points
+
+                if (isCapture) {
+                    byPlayer[key].captures++
+                } else {
+                    byPlayer[key].deaths++
+                }
+
+            }
+
+            lastKothHistory.forEach(entry => tally(entry, true))
+            lastDeathHistory.forEach(entry => tally(entry, false))
+
+            const rows = Object.values(byPlayer).sort((a, b) => b.net - a.net)
+
+            if (!rows.length) {
+                container.innerHTML = '<div class="empty-state">No KOTH captures or deaths logged yet.</div>'
+                return
+            }
+
+            container.innerHTML = rows
+                .map((row, index) => {
+
+                    const netClass = row.net > 0 ? 'positive' : row.net < 0 ? 'negative' : 'neutral'
+                    const sign = row.net > 0 ? '+' : ''
+
+                    const metaParts = []
+
+                    if (row.captures) metaParts.push(`${row.captures} KOTH${row.captures === 1 ? '' : 's'}`)
+                    if (row.deaths) metaParts.push(`${row.deaths} death${row.deaths === 1 ? '' : 's'}`)
+
+                    return `
+                        <div class="leaderboard-row">
+                            <div class="leaderboard-rank">${index + 1}</div>
+                            <div class="leaderboard-info">
+                                <div class="leaderboard-name">${escapeHtml(row.name)}</div>
+                                <div class="leaderboard-meta">${metaParts.join(' · ')}</div>
+                            </div>
+                            <div class="leaderboard-net ${netClass}">${sign}${row.net}</div>
+                        </div>
+                    `
+
+                })
+                .join('')
 
         }
 

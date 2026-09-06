@@ -7914,6 +7914,13 @@
                 return
             }
 
+            // Only follow new messages down to the bottom if the user
+            // was already there - otherwise scrolling up to read
+            // something older gets yanked back down the moment the
+            // next message arrives.
+            const wasNearBottom =
+                box.scrollHeight - box.scrollTop - box.clientHeight < 40
+
             const message =
                 document.createElement(
                     'div'
@@ -7966,8 +7973,12 @@
 
             }
 
-            box.scrollTop =
-                box.scrollHeight
+            if (wasNearBottom) {
+
+                box.scrollTop =
+                    box.scrollHeight
+
+            }
 
         }
 

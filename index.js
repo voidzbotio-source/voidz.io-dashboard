@@ -1715,8 +1715,16 @@ class BotSession {
             return
         }
 
-        if (this.teamInfoCaptureTimer) {
-            clearTimeout(this.teamInfoCaptureTimer)
+        // A capture already in flight means an earlier /t info was
+        // just sent and its response hasn't arrived yet. Starting a
+        // fresh capture here doesn't stop that response from showing
+        // up - it lands in this new, empty capture instead, and can
+        // finalize it early with a missing header (points show as
+        // blank on the card). Let the in-flight one finish on its own
+        // rather than resetting it; join/leave/kick/KOTH triggers can
+        // fire in quick succession, especially during a mass leave.
+        if (this.teamInfoCapture) {
+            return
         }
 
         this.teamInfoCapture = { header: null, balance: null, roles: {} }

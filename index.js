@@ -399,6 +399,55 @@ function saveDeathHistory(username, history) {
     saveBotConfigs(configs)
 }
 
+// Every KOTH capture seen server-wide, not just our own team's -
+// separate from kothHistory so a Team card Reset doesn't wipe out the
+// wider activity feed, and vice versa.
+function getServerActivity(username) {
+    const configs = loadBotConfigs()
+    const history = configs[username]?.serverActivity
+    return Array.isArray(history) ? history : []
+}
+
+function saveServerActivity(username, history) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], serverActivity: history }
+    saveBotConfigs(configs)
+}
+
+// Lifetime counters + unlocked-badge state, kept separate from the
+// history arrays those counters derive from so a Team card Reset (or
+// reset-player) never takes an already-earned badge away.
+function getBadgeProgress(username) {
+
+    const configs = loadBotConfigs()
+    const progress = configs[username]?.badgeProgress
+
+    return {
+        totalKothCaptures: Number(progress?.totalKothCaptures) || 0,
+        maxPointsSeen: Number(progress?.maxPointsSeen) || 0,
+        unlockedBadges: (progress && typeof progress.unlockedBadges === 'object' && progress.unlockedBadges) || {}
+    }
+
+}
+
+function saveBadgeProgress(username, progress) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], badgeProgress: progress }
+    saveBotConfigs(configs)
+}
+
+// Every badge's unlock condition reads from the lifetime counters
+// above, never from the prunable history arrays - a badge earned
+// once stays earned even after a history reset.
+const BADGE_DEFINITIONS = [
+    { id: 'first-blood', name: 'First Blood', icon: '🏆', description: 'Capture your first KOTH', check: p => p.totalKothCaptures >= 1 },
+    { id: 'hat-trick', name: 'Hat Trick', icon: '🎩', description: 'Capture 3 KOTHs', check: p => p.totalKothCaptures >= 3 },
+    { id: 'dominator', name: 'Dominator', icon: '👑', description: 'Capture 10 KOTHs', check: p => p.totalKothCaptures >= 10 },
+    { id: 'century-club', name: 'Century Club', icon: '💯', description: 'Capture 100 KOTHs', check: p => p.totalKothCaptures >= 100 },
+    { id: 'point-leader', name: 'Point Leader', icon: '💰', description: 'Reach 500 team points', check: p => p.maxPointsSeen >= 500 },
+    { id: 'high-roller', name: 'High Roller', icon: '💎', description: 'Reach 1000 team points', check: p => p.maxPointsSeen >= 1000 }
+]
+
 // Everything the dashboard used to keep in localStorage only
 // (Threats, Allies, and the Appearance tab) - now synced through
 // here too, so it follows the account across devices/browsers.
@@ -761,6 +810,15 @@ class BotSession {
         // modal so it reads as one "why did our points change" log.
         this.deathHistory = getDeathHistory(username)
 
+        // Every KOTH capture seen server-wide (any team), for the
+        // Server Activity feed - kept separate from kothHistory since
+        // that one's scoped to our own team only.
+        this.serverActivity = getServerActivity(username)
+
+        // Lifetime badge-unlock counters, independent of the prunable
+        // history arrays above.
+        this.badgeProgress = getBadgeProgress(username)
+
         // Last known-settled inventory read (see getInventorySnapshot/
         // getKeyAmounts) - served back out during a mid-update burst
         // instead of a possibly-inconsistent live read.
@@ -1014,6 +1072,9 @@ class BotSession {
                     deathHistory: this.deathHistory
                 }
                 : null,
+
+            serverActivity: this.serverActivity,
+            badgeProgress: this.badgeProgress,
 
             timestamp: Date.now()
 
@@ -1802,6 +1863,38 @@ class BotSession {
 
     }
 
+    // Checks every badge definition against the current lifetime
+    // counters and unlocks any that just became true. Called after
+    // whatever counter it might affect changes (a KOTH capture, a new
+    // points high). Cheap to call unconditionally - it's a handful of
+    // number comparisons against an object already in memory.
+    checkBadges() {
+
+        let unlockedSomething = false
+
+        for (const badge of BADGE_DEFINITIONS) {
+
+            if (this.badgeProgress.unlockedBadges[badge.id]) continue
+            if (!badge.check(this.badgeProgress)) continue
+
+            this.badgeProgress.unlockedBadges[badge.id] = Date.now()
+            unlockedSomething = true
+
+            this.log(`Badge unlocked: ${badge.name}`)
+
+            io.to(this.username).emit('notice', {
+                type: 'success',
+                text: `${badge.icon} Badge unlocked: ${badge.name}`
+            })
+
+        }
+
+        if (unlockedSomething) {
+            saveBadgeProgress(this.username, this.badgeProgress)
+        }
+
+    }
+
     // Clears one player's entries out of the KOTH/death history (and
     // therefore the leaderboard) - a manual cleanup tool for data
     // logged before isTeamMember filtering existed, or anything else
@@ -1861,8 +1954,10 @@ class BotSession {
     // Points!" - shown as a history list alongside the Points detail
     // chart on the dashboard. Not anchored to a specific prefix since
     // the exact glyph/icon in front of the player name isn't known.
-    // This broadcast is server-wide (any team's capture), so it's
-    // filtered to our own roster before logging.
+    // This broadcast is server-wide (every team's captures show up in
+    // it), so it's logged to serverActivity regardless of team, but
+    // only counted toward our own kothHistory/leaderboard/badges when
+    // it's actually one of ours.
     checkKothCapture(text) {
 
         const match = cleanMessage(text).match(
@@ -1870,7 +1965,21 @@ class BotSession {
         )
 
         if (!match) return
-        if (!this.isTeamMember(match[1])) return
+
+        const isOwnTeam = this.isTeamMember(match[1])
+
+        this.serverActivity.push({
+            timestamp: Date.now(),
+            player: match[1],
+            points: Number(match[2]),
+            isOwnTeam
+        })
+
+        this.serverActivity = this.serverActivity.slice(-100)
+
+        saveServerActivity(this.username, this.serverActivity)
+
+        if (!isOwnTeam) return
 
         this.kothHistory.push({
             timestamp: Date.now(),
@@ -1883,6 +1992,12 @@ class BotSession {
         saveKothHistory(this.username, this.kothHistory)
 
         this.log(`KOTH captured by ${match[1]} (+${match[2]} team points)`)
+
+        this.badgeProgress.totalKothCaptures++
+
+        saveBadgeProgress(this.username, this.badgeProgress)
+
+        this.checkBadges()
 
     }
 
@@ -2057,6 +2172,12 @@ class BotSession {
             this.teamHistory = this.teamHistory.slice(-TEAM_HISTORY_MAX_ENTRIES)
 
             saveTeamHistory(this.username, this.teamHistory)
+
+            if (points > this.badgeProgress.maxPointsSeen) {
+                this.badgeProgress.maxPointsSeen = points
+                saveBadgeProgress(this.username, this.badgeProgress)
+                this.checkBadges()
+            }
 
         }
 

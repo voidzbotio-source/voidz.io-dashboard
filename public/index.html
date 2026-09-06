@@ -1051,6 +1051,8 @@
         .card[data-card-id="players"] { --card-accent: var(--blue); }
         .card[data-card-id="team"] { --card-accent: var(--purple); }
         .card[data-card-id="leaderboard"] { --card-accent: var(--yellow); }
+        .card[data-card-id="serveractivity"] { --card-accent: var(--blue); }
+        .card[data-card-id="badges"] { --card-accent: var(--purple); }
         .card[data-card-id="inventory"] { --card-accent: var(--orange); }
         .card[data-card-id="threats"] { --card-accent: var(--red); }
         .card[data-card-id="allies"] { --card-accent: var(--green); }
@@ -2196,6 +2198,16 @@
         .stat-modal-delta.negative { color: var(--red); }
         .stat-modal-delta.neutral { color: var(--muted); }
 
+        .stat-modal-bestday {
+            display: none;
+
+            margin: -6px 0 14px;
+
+            color: var(--muted);
+            font-size: 12.5px;
+            font-weight: 600;
+        }
+
         .stat-modal-card {
             max-width: 420px;
             max-height: 85vh;
@@ -2260,6 +2272,21 @@
             font-size: 11.5px;
             font-weight: 600;
             text-transform: none;
+        }
+
+        .server-activity-own {
+            margin-left: 6px;
+
+            padding: 1px 6px;
+
+            border-radius: 999px;
+
+            background: color-mix(in srgb, var(--blue) 18%, transparent);
+            color: var(--blue);
+
+            font-size: 9.5px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
         }
 
         .koth-history-points {
@@ -2355,6 +2382,60 @@
         .leaderboard-net.positive { color: var(--green); }
         .leaderboard-net.negative { color: var(--red); }
         .leaderboard-net.neutral { color: var(--muted); }
+
+        /* ================================================= */
+        /* BADGES */
+        /* ================================================= */
+
+        .badges-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .badge-tile {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+
+            padding: 12px 6px;
+
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+
+            text-align: center;
+        }
+
+        .badge-tile.locked {
+            opacity: 0.35;
+            filter: grayscale(1);
+        }
+
+        .badge-tile.unlocked {
+            border-color: var(--purple);
+        }
+
+        .badge-tile-icon {
+            font-size: 22px;
+            line-height: 1;
+        }
+
+        .badge-tile-name {
+            color: var(--muted);
+            font-size: 10px;
+            font-weight: 700;
+
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 100%;
+        }
+
+        .badge-tile.unlocked .badge-tile-name {
+            color: var(--text);
+        }
 
         /* ================================================= */
         /* DANGER METER */
@@ -4177,9 +4258,6 @@
                     <button class="title-action" id="teamRefreshBtn" title="Refresh team info (/t info)" onclick="refreshTeam()">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
                     </button>
-                    <button class="title-action" id="teamResetBtn" title="Reset points/KOTH/death history" onclick="sendCommand('reset-team-history', { confirm: 'Reset all Points history, KOTH captures, and deaths? This cannot be undone.' })">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-                    </button>
                 </div>
 
                 <div
@@ -4205,6 +4283,38 @@
                 <div id="leaderboardBody" class="leaderboard-body scroll">
                     <div class="empty-state">No KOTH captures or deaths logged yet.</div>
                 </div>
+
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SERVER ACTIVITY -->
+            <!-- ========================================== -->
+
+            <section class="card col-1" data-card-id="serveractivity" draggable="true" style="animation-delay: 0.194s;">
+
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    Server Activity
+                </div>
+
+                <div id="serverActivityBody" class="koth-history-list scroll">
+                    <div class="empty-state">No KOTH activity seen yet.</div>
+                </div>
+
+            </section>
+
+            <!-- ========================================== -->
+            <!-- ACHIEVEMENTS -->
+            <!-- ========================================== -->
+
+            <section class="card col-1" data-card-id="badges" draggable="true" style="animation-delay: 0.196s;">
+
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.5 13.5 17 22l-5-3-5 3 1.5-8.5"/></svg>
+                    Achievements
+                </div>
+
+                <div id="badgesBody" class="badges-grid"></div>
 
             </section>
 
@@ -4492,6 +4602,8 @@
                 <div class="stat-modal-delta" id="teamStatModalDelta"></div>
             </div>
 
+            <div id="teamStatBestDay" class="stat-modal-bestday"></div>
+
             <div id="teamStatModalBody" class="detail-chart-wrap"></div>
 
             <div class="koth-history">
@@ -4500,6 +4612,10 @@
             </div>
 
             <div class="modal-actions">
+                <button class="logout-button" id="teamResetBtn" title="Reset points/KOTH/death history" onclick="sendCommand('reset-team-history', { confirm: 'Reset all Points history, KOTH captures, and deaths? This cannot be undone.' })">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    Reset
+                </button>
                 <button class="logout-button" onclick="closeTeamStatModal()" style="flex: 1;">
                     Close
                 </button>
@@ -6424,6 +6540,9 @@
                 data.inventory || []
             )
 
+            renderServerActivity(data.serverActivity || [])
+            renderBadges(data.badgeProgress || null)
+
             // ----------------------------------------------
             // FLAGS
             // ----------------------------------------------
@@ -7196,6 +7315,50 @@
             attachChartHover(chart)
 
             renderKothHistoryList()
+            renderBestDay()
+
+        }
+
+        // Which single day had the best net points swing (KOTH
+        // captures minus deaths), from the same data already backing
+        // the Points Events log - a fun retrospective rather than
+        // another raw number.
+        function renderBestDay() {
+
+            const el = $('teamStatBestDay')
+
+            if (!el) return
+
+            const byDay = {}
+
+            for (const entry of [...lastKothHistory, ...lastDeathHistory]) {
+
+                const day = new Date(entry.timestamp).toDateString()
+
+                if (!byDay[day]) {
+                    byDay[day] = { net: 0, captures: 0, timestamp: entry.timestamp }
+                }
+
+                byDay[day].net += entry.points
+
+                if (entry.points > 0) {
+                    byDay[day].captures++
+                }
+
+            }
+
+            const days = Object.values(byDay).sort((a, b) => b.net - a.net)
+
+            if (!days.length || days[0].net <= 0) {
+                el.style.display = 'none'
+                return
+            }
+
+            const best = days[0]
+            const dateLabel = new Date(best.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+
+            el.textContent = `🏆 Best day: ${dateLabel} — +${best.net} pts (${best.captures} KOTH${best.captures === 1 ? '' : 's'})`
+            el.style.display = ''
 
         }
 
@@ -7257,6 +7420,79 @@
                                 <div class="leaderboard-meta">${metaParts.join(' · ')}</div>
                             </div>
                             <div class="leaderboard-net ${netClass}">${sign}${row.net}</div>
+                        </div>
+                    `
+
+                })
+                .join('')
+
+        }
+
+        // Every KOTH capture seen server-wide, not just ours - real
+        // competitive intel instead of just discarding what the
+        // isTeamMember filter excludes from the team-scoped log.
+        function renderServerActivity(activity) {
+
+            const container = $('serverActivityBody')
+
+            if (!container) return
+
+            if (!Array.isArray(activity) || !activity.length) {
+                container.innerHTML = '<div class="empty-state">No KOTH activity seen yet.</div>'
+                return
+            }
+
+            container.innerHTML = [...activity]
+                .reverse()
+                .slice(0, 20)
+                .map(entry => `
+                    <div class="koth-history-row">
+                        <span class="koth-history-player">
+                            ${escapeHtml(entry.player)}
+                            <span class="koth-history-verb">captured a KOTH</span>
+                            ${entry.isOwnTeam ? '<span class="server-activity-own">YOUR TEAM</span>' : ''}
+                        </span>
+                        <span class="koth-history-date">${formatKothDate(entry.timestamp)}</span>
+                    </div>
+                `)
+                .join('')
+
+        }
+
+        // Client-side mirror of the server's BADGE_DEFINITIONS - just
+        // the display metadata, since the actual unlock conditions are
+        // evaluated server-side against lifetime counters.
+        const BADGE_DEFINITIONS = [
+            { id: 'first-blood', name: 'First Blood', icon: '🏆', description: 'Capture your first KOTH' },
+            { id: 'hat-trick', name: 'Hat Trick', icon: '🎩', description: 'Capture 3 KOTHs' },
+            { id: 'dominator', name: 'Dominator', icon: '👑', description: 'Capture 10 KOTHs' },
+            { id: 'century-club', name: 'Century Club', icon: '💯', description: 'Capture 100 KOTHs' },
+            { id: 'point-leader', name: 'Point Leader', icon: '💰', description: 'Reach 500 team points' },
+            { id: 'high-roller', name: 'High Roller', icon: '💎', description: 'Reach 1000 team points' }
+        ]
+
+        function renderBadges(progress) {
+
+            const container = $('badgesBody')
+
+            if (!container) return
+
+            const unlocked = (progress && progress.unlockedBadges) || {}
+
+            container.innerHTML = BADGE_DEFINITIONS
+                .map(badge => {
+
+                    const unlockedAt = unlocked[badge.id]
+                    const isUnlocked = !!unlockedAt
+
+                    const title = isUnlocked
+                        ? `${badge.description} - Unlocked ${formatKothDate(unlockedAt)}`
+                        : badge.description
+
+                    return `
+                        <div class="badge-tile ${isUnlocked ? 'unlocked' : 'locked'}" title="${escapeHtml(title)}">
+                            <div class="badge-tile-icon">${badge.icon}</div>
+                            <div class="badge-tile-name">${escapeHtml(badge.name)}</div>
                         </div>
                     `
 

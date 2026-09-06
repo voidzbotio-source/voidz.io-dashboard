@@ -122,6 +122,7 @@ const JQ_SAFETY_HOUR = 13
 const JQ_SAFETY_MINUTE = 8
 
 const TEAM_INFO_TIMEOUT_MS = 4000
+const TEAM_HISTORY_MAX_ENTRIES = 120
 
 const ONLINE_NAME_COLORS = ['#77ffad', 'green', 'dark_green']
 const OFFLINE_NAME_COLORS = ['#dc3545', 'red', 'dark_red']
@@ -2013,12 +2014,25 @@ class BotSession {
 
         if (Number.isFinite(points)) {
 
+            const last = this.teamHistory[this.teamHistory.length - 1]
+            const secondLast = this.teamHistory[this.teamHistory.length - 2]
+
+            // Spamming refresh with nothing actually changing shouldn't
+            // pile up a flat line of identical readings - once the two
+            // most recent readings already match this one, drop the
+            // last before adding this one so at most 2 in a row of the
+            // same value ever sit in the history. A real change still
+            // always gets its own entry.
+            if (last && secondLast && last.points === points && secondLast.points === points) {
+                this.teamHistory.pop()
+            }
+
             this.teamHistory.push({
                 timestamp: Date.now(),
                 points
             })
 
-            this.teamHistory = this.teamHistory.slice(-40)
+            this.teamHistory = this.teamHistory.slice(-TEAM_HISTORY_MAX_ENTRIES)
 
             saveTeamHistory(this.username, this.teamHistory)
 

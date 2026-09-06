@@ -1834,6 +1834,28 @@ class BotSession {
 
     }
 
+    // Wipes Points history, KOTH captures, and deaths entirely -
+    // triggered from the Reset button on the Team card. The live
+    // roster itself (teamRoster) is untouched since that's just the
+    // current /t info snapshot, not accumulated history.
+    resetTeamHistory() {
+
+        this.teamHistory = []
+        this.kothHistory = []
+        this.deathHistory = []
+
+        saveTeamHistory(this.username, this.teamHistory)
+        saveKothHistory(this.username, this.kothHistory)
+        saveDeathHistory(this.username, this.deathHistory)
+
+        this.log('Team history reset (points, KOTH captures, deaths).')
+
+        io.to(this.username).emit('notice', { type: 'success', text: 'Team history reset.' })
+
+        this.updateDashboard()
+
+    }
+
     // Logs who captured a KOTH and how many team points it was worth,
     // parsed from "<player> has received Nx PvP Keys and N Team
     // Points!" - shown as a history list alongside the Points detail
@@ -2708,6 +2730,7 @@ function handleWebCommand(username, command) {
         case 'afk': botSession.goAfk(); break
         case 'recover': botSession.manualRecovery(); break
         case 'rejoin': botSession.manualRejoin(); break
+        case 'reset-team-history': botSession.resetTeamHistory(); break
         case 'stop-bot': botSession.stopBotRemote(); break
 
         default:

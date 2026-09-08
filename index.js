@@ -824,6 +824,13 @@ class BotSession {
         this.lastChatTime = null
         this.lastServerMessageKey = null
 
+        // Latest action bar (HUD text above the hotbar) - shown in its
+        // own read-only card. Treated as stale/cleared after a few
+        // seconds with no update, matching how it actually fades out
+        // in-game rather than showing old text forever.
+        this.lastActionBar = null
+        this.lastActionBarAt = 0
+
         // Parsed roster from the last completed /t info, plus the
         // in-progress capture while still reading its response.
         this.teamRoster = null
@@ -1092,6 +1099,8 @@ class BotSession {
             lastChatTime: this.lastChatTime,
             lastDisconnect: this.lastDisconnectReason,
             connectedAt: this.connectedAt,
+
+            actionBar: (Date.now() - this.lastActionBarAt < 5000) ? this.lastActionBar : null,
 
             inventory: online ? this.getInventorySnapshot() : [],
 
@@ -2542,13 +2551,20 @@ class BotSession {
             this.checkTeamDeath(text)
             this.checkBlackMarket(text)
 
+            // Action bar text ('game_info') refreshes far too often to
+            // show in the chat feed, but is worth its own read-only
+            // card - just keep the latest one and let the once-a-
+            // second dashboard tick pick it up naturally, rather than
+            // broadcasting an event for every single update.
+            if (position === 'game_info') {
+                this.lastActionBar = text
+                this.lastActionBarAt = Date.now()
+            }
+
             // Player chat (position 'chat') is already broadcast by
             // the 'chat' event above, which knows the real username -
             // broadcasting it again here would duplicate it. This
             // covers system messages and join/leave/announcements.
-            // Action bar text ('game_info') is intentionally skipped -
-            // it's HUD text, not chat, and refreshes far too often to
-            // show in a chat feed.
             if (position !== 'chat' && position !== 'game_info') {
 
                 const dedupeKey = `${position}:${text}`

@@ -1060,6 +1060,7 @@
         .card[data-card-id="allies"] { --card-accent: var(--green); }
         .card[data-card-id="autoinvite"] { --card-accent: var(--green); }
         .card[data-card-id="chat"] { --card-accent: var(--teal); }
+        .card[data-card-id="actionbar"] { --card-accent: var(--yellow); }
         .card[data-card-id="activity"] { --card-accent: var(--orange); }
         .card[data-card-id="lastActivity"] { --card-accent: var(--yellow); }
 
@@ -1604,6 +1605,29 @@
 
         .chat-text {
             color: var(--text);
+        }
+
+        /* ================================================= */
+        /* ACTION BAR */
+        /* ================================================= */
+
+        .action-bar-body {
+            min-height: 64px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            padding: 14px;
+
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+
+            text-align: center;
+            color: var(--text);
+            font-size: 13.5px;
+            font-weight: 700;
         }
 
         /* ================================================= */
@@ -4358,6 +4382,23 @@
             </section>
 
             <!-- ========================================== -->
+            <!-- ACTION BAR -->
+            <!-- ========================================== -->
+
+            <section class="card col-1" data-card-id="actionbar" draggable="true" style="animation-delay: 0.21s;">
+
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="2" rx="1"/><path d="M7 15v2"/><path d="M12 15v2"/><path d="M17 15v2"/></svg>
+                    Action Bar
+                </div>
+
+                <div id="actionBarBody" class="action-bar-body">
+                    <div class="empty-state">No action bar message.</div>
+                </div>
+
+            </section>
+
+            <!-- ========================================== -->
             <!-- ACTIVITY LOG -->
             <!-- ========================================== -->
 
@@ -6567,6 +6608,7 @@
 
             renderServerActivity(data.serverActivity || [])
             renderBadges(data.badgeProgress || null)
+            renderActionBar(data.actionBar || null)
 
             // ----------------------------------------------
             // FLAGS
@@ -7523,6 +7565,22 @@
 
                 })
                 .join('')
+
+        }
+
+        // Read-only - the action bar (HUD text above the hotbar) isn't
+        // something you can type into, it's just whatever the server
+        // last put there. The backend already throttles this to once
+        // per dashboard tick and clears it if it's gone stale.
+        function renderActionBar(text) {
+
+            const container = $('actionBarBody')
+
+            if (!container) return
+
+            container.innerHTML = text
+                ? `<span>${escapeHtml(text)}</span>`
+                : '<div class="empty-state">No action bar message.</div>'
 
         }
 

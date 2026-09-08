@@ -9,6 +9,7 @@
 // ============================================================
 
 const mineflayer = require('mineflayer')
+const { SocksClient } = require('socks')
 const express = require('express')
 const http = require('http')
 const { Server } = require('socket.io')
@@ -498,7 +499,25 @@ function normalizeBotConfig(input) {
     const discordWebhookUrl = String(input?.discordWebhookUrl || '').trim()
     const discordRoleId = String(input?.discordRoleId || '').trim().replace(/\D/g, '')
 
-    return { microsoftEmail, host, port, version, lifestealAutopilot, discordWebhookUrl, discordRoleId }
+    // Optional SOCKS5 proxy for the outbound Minecraft connection only
+    // (unrelated to proxySessionProblem elsewhere, which is about
+    // FlareMC's own server-side proxy/anti-bot layer) - lets multiple
+    // accounts hosted on the same machine each appear to connect from
+    // a different IP, instead of sharing this server's raw IP and
+    // potentially tripping the game server's own multi-account/reward
+    // abuse detection.
+    const proxyHost = String(input?.proxyHost || '').trim()
+
+    const proxyPortRaw = Number(input?.proxyPort)
+    const proxyPort = (Number.isFinite(proxyPortRaw) && proxyPortRaw > 0 && proxyPortRaw <= 65535) ? proxyPortRaw : null
+
+    const proxyUsername = String(input?.proxyUsername || '').trim()
+    const proxyPassword = String(input?.proxyPassword || '')
+
+    return {
+        microsoftEmail, host, port, version, lifestealAutopilot, discordWebhookUrl, discordRoleId,
+        proxyHost, proxyPort, proxyUsername, proxyPassword
+    }
 
 }
 
@@ -510,6 +529,10 @@ function validateBotConfig(config) {
 
     if (!config.host) {
         return 'Enter a server address.'
+    }
+
+    if (config.proxyHost && !config.proxyPort) {
+        return 'Enter a proxy port along with the proxy host.'
     }
 
     return null
@@ -2341,7 +2364,7 @@ class BotSession {
     // CONNECT
     // --------------------------------------------------------
 
-    connect() {
+    async connect() {
 
         if (this.shuttingDown) return
         if (!this.botEnabled) return
@@ -2360,6 +2383,63 @@ class BotSession {
 
         originalLog(`[${new Date().toLocaleString()}] [${this.username}] Connecting to ${this.config.host}:${this.config.port}...`)
 
+        // If a SOCKS5 proxy is configured, tunnel the outbound
+        // Minecraft connection through it and hand mineflayer the
+        // already-connected socket via the `stream` option (its
+        // documented hook for exactly this - see tcp_dns.js in
+        // minecraft-protocol) instead of letting it open its own TCP
+        // connection. Multiple accounts on this same machine would
+        // otherwise all share this server's one IP.
+        let proxyStream = null
+
+        if (this.config.proxyHost && this.config.proxyPort) {
+
+            try {
+
+                const { socket } = await SocksClient.createConnection({
+                    command: 'connect',
+                    proxy: {
+                        host: this.config.proxyHost,
+                        port: this.config.proxyPort,
+                        type: 5,
+                        userId: this.config.proxyUsername || undefined,
+                        password: this.config.proxyPassword || undefined
+                    },
+                    destination: {
+                        host: this.config.host,
+                        port: this.config.port
+                    }
+                })
+
+                proxyStream = socket
+
+                this.log(`Connected via SOCKS5 proxy ${this.config.proxyHost}:${this.config.proxyPort}.`)
+
+            } catch (error) {
+
+                this.log(`SOCKS5 proxy connection failed: ${error.message}`)
+                originalError(`[${this.username}] SOCKS5 proxy connection failed:`, error.message)
+
+                io.to(this.username).emit('notice', {
+                    type: 'error',
+                    text: `Proxy connection failed: ${error.message}`
+                })
+
+                this.setState('OFFLINE')
+
+                if (this.botEnabled && !this.shuttingDown) {
+                    this.reconnectTimer = setTimeout(() => {
+                        this.reconnectTimer = null
+                        this.connect()
+                    }, RECONNECT_DELAY)
+                }
+
+                return
+
+            }
+
+        }
+
         const profilesFolder = path.join(AUTH_CACHE_DIR, this.username)
         fs.mkdirSync(profilesFolder, { recursive: true })
 
@@ -2371,6 +2451,7 @@ class BotSession {
             auth: 'microsoft',
             version: this.config.version || false,
             profilesFolder,
+            ...(proxyStream ? { stream: proxyStream } : {}),
 
             // Fires the first time this Microsoft account needs to
             // sign in. Relay the code to that account's own browser
@@ -2973,7 +3054,10 @@ app.get('/api/session', (req, res) => {
 
 app.get('/api/bot-config', (req, res) => {
     const config = getBotConfig(req.session.username)
-    res.json(config || { microsoftEmail: '', host: '', port: 25565, version: '', lifestealAutopilot: false })
+    res.json(config || {
+        microsoftEmail: '', host: '', port: 25565, version: '', lifestealAutopilot: false,
+        proxyHost: '', proxyPort: null, proxyUsername: '', proxyPassword: ''
+    })
 })
 
 app.post('/api/bot-config', (req, res) => {

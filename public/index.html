@@ -4699,6 +4699,36 @@
                         <span>Enable LifeSteal Autopilot &mdash; FlareMC-style auto /jq, hub recovery, and daily keyall. Only turn this on if your server matches that setup.</span>
                     </label>
 
+                    <p class="settings-section-desc" style="margin-top: 4px;">Connection Proxy (optional) &mdash; if this bot shares a machine with another account, route it through a SOCKS5 proxy so the two don't connect from the same IP.</p>
+
+                    <div class="settings-field-row">
+
+                        <div class="field">
+                            <label for="settingsProxyHost">Proxy Host</label>
+                            <input id="settingsProxyHost" type="text" placeholder="Leave blank for no proxy" autocomplete="off">
+                        </div>
+
+                        <div class="field">
+                            <label for="settingsProxyPort">Proxy Port</label>
+                            <input id="settingsProxyPort" type="number" placeholder="1080" autocomplete="off">
+                        </div>
+
+                    </div>
+
+                    <div class="settings-field-row">
+
+                        <div class="field">
+                            <label for="settingsProxyUsername">Proxy Username (optional)</label>
+                            <input id="settingsProxyUsername" type="text" autocomplete="off">
+                        </div>
+
+                        <div class="field">
+                            <label for="settingsProxyPassword">Proxy Password (optional)</label>
+                            <input id="settingsProxyPassword" type="password" autocomplete="off">
+                        </div>
+
+                    </div>
+
                     <div class="field">
                         <label for="settingsDiscordWebhook">Discord Webhook URL (optional)</label>
                         <input id="settingsDiscordWebhook" type="text" placeholder="https://discord.com/api/webhooks/..." autocomplete="off">
@@ -5556,6 +5586,10 @@
                     $('settingsPort').value = config.port || 25565
                     $('settingsVersion').value = config.version || ''
                     $('settingsAutopilot').checked = !!config.lifestealAutopilot
+                    $('settingsProxyHost').value = config.proxyHost || ''
+                    $('settingsProxyPort').value = config.proxyPort || ''
+                    $('settingsProxyUsername').value = config.proxyUsername || ''
+                    $('settingsProxyPassword').value = config.proxyPassword || ''
                     $('settingsDiscordWebhook').value = config.discordWebhookUrl || ''
                     $('settingsDiscordRole').value = config.discordRoleId || ''
 
@@ -5607,6 +5641,10 @@
                 port: Number($('settingsPort').value) || 25565,
                 version: $('settingsVersion').value.trim(),
                 lifestealAutopilot: $('settingsAutopilot').checked,
+                proxyHost: $('settingsProxyHost').value.trim(),
+                proxyPort: Number($('settingsProxyPort').value) || null,
+                proxyUsername: $('settingsProxyUsername').value.trim(),
+                proxyPassword: $('settingsProxyPassword').value,
                 discordWebhookUrl: $('settingsDiscordWebhook').value.trim(),
                 discordRoleId: $('settingsDiscordRole').value.trim()
             }

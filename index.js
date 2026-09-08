@@ -497,6 +497,13 @@ function normalizeBotConfig(input) {
     const version = String(input?.version || '').trim()
 
     const lifestealAutopilot = !!input?.lifestealAutopilot
+
+    // What to send to go AFK, both from the LifeSteal Autopilot flow
+    // and the manual AFK button. Different servers use different
+    // commands for this (/home AFK, /warp afk, etc.), so it's
+    // per-account rather than hardcoded.
+    const afkCommand = String(input?.afkCommand || '').trim() || '/home AFK'
+
     const discordWebhookUrl = String(input?.discordWebhookUrl || '').trim()
     const discordRoleId = String(input?.discordRoleId || '').trim().replace(/\D/g, '')
 
@@ -523,7 +530,7 @@ function normalizeBotConfig(input) {
     const localAddress = String(input?.localAddress || '').trim()
 
     return {
-        microsoftEmail, host, port, version, lifestealAutopilot, discordWebhookUrl, discordRoleId,
+        microsoftEmail, host, port, version, lifestealAutopilot, afkCommand, discordWebhookUrl, discordRoleId,
         proxyHost, proxyPort, proxyUsername, proxyPassword, localAddress
     }
 
@@ -1275,11 +1282,13 @@ class BotSession {
 
             if (!this.bot || !this.bot.entity || this.shuttingDown) return
 
-            this.bot.chat('/home AFK')
+            const afkCommand = this.config.afkCommand || '/home AFK'
+
+            this.bot.chat(afkCommand)
 
             this.setState('AFK')
 
-            this.log('Sent /home AFK.')
+            this.log(`Sent ${afkCommand}.`)
 
         }, HOME_DELAY)
 
@@ -1375,11 +1384,13 @@ class BotSession {
 
         this.stopHomeTimer()
 
-        this.bot.chat('/home AFK')
+        const afkCommand = this.config.afkCommand || '/home AFK'
+
+        this.bot.chat(afkCommand)
 
         this.setState('AFK')
 
-        this.log('Sent /home AFK.')
+        this.log(`Sent ${afkCommand}.`)
 
     }
 
@@ -3093,7 +3104,7 @@ app.get('/api/session', (req, res) => {
 app.get('/api/bot-config', (req, res) => {
     const config = getBotConfig(req.session.username)
     res.json(config || {
-        microsoftEmail: '', host: '', port: 25565, version: '', lifestealAutopilot: false,
+        microsoftEmail: '', host: '', port: 25565, version: '', lifestealAutopilot: false, afkCommand: '/home AFK',
         proxyHost: '', proxyPort: null, proxyUsername: '', proxyPassword: '', localAddress: ''
     })
 })

@@ -4699,7 +4699,12 @@
                         <span>Enable LifeSteal Autopilot &mdash; FlareMC-style auto /jq, hub recovery, and daily keyall. Only turn this on if your server matches that setup.</span>
                     </label>
 
-                    <p class="settings-section-desc" style="margin-top: 4px;">Connection Proxy (optional) &mdash; if this bot shares a machine with another account, route it through a SOCKS5 proxy so the two don't connect from the same IP.</p>
+                    <p class="settings-section-desc" style="margin-top: 4px;">If this bot shares a machine with another account, give it its own outbound IP so the two don't connect from the same address &mdash; either bind to a second IP on this machine, or route through a SOCKS5 proxy. Bind takes priority if both are filled in.</p>
+
+                    <div class="field">
+                        <label for="settingsLocalAddress">Bind to Local IP (optional)</label>
+                        <input id="settingsLocalAddress" type="text" placeholder="Leave blank to use this machine's default IP" autocomplete="off">
+                    </div>
 
                     <div class="settings-field-row">
 
@@ -5586,6 +5591,7 @@
                     $('settingsPort').value = config.port || 25565
                     $('settingsVersion').value = config.version || ''
                     $('settingsAutopilot').checked = !!config.lifestealAutopilot
+                    $('settingsLocalAddress').value = config.localAddress || ''
                     $('settingsProxyHost').value = config.proxyHost || ''
                     $('settingsProxyPort').value = config.proxyPort || ''
                     $('settingsProxyUsername').value = config.proxyUsername || ''
@@ -5641,6 +5647,7 @@
                 port: Number($('settingsPort').value) || 25565,
                 version: $('settingsVersion').value.trim(),
                 lifestealAutopilot: $('settingsAutopilot').checked,
+                localAddress: $('settingsLocalAddress').value.trim(),
                 proxyHost: $('settingsProxyHost').value.trim(),
                 proxyPort: Number($('settingsProxyPort').value) || null,
                 proxyUsername: $('settingsProxyUsername').value.trim(),

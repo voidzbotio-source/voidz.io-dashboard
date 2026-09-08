@@ -16,6 +16,7 @@ const { Server } = require('socket.io')
 const fs = require('fs')
 const readline = require('readline')
 const path = require('path')
+const net = require('net')
 const session = require('express-session')
 const crypto = require('crypto')
 
@@ -514,9 +515,16 @@ function normalizeBotConfig(input) {
     const proxyUsername = String(input?.proxyUsername || '').trim()
     const proxyPassword = String(input?.proxyPassword || '')
 
+    // Alternative to the SOCKS5 proxy above: if this machine has a
+    // second public IP attached to it (a second VNIC on Oracle Cloud,
+    // for instance), the outbound connection can bind directly to it
+    // instead of going through any proxy. Takes priority over the
+    // SOCKS5 fields if both are somehow set.
+    const localAddress = String(input?.localAddress || '').trim()
+
     return {
         microsoftEmail, host, port, version, lifestealAutopilot, discordWebhookUrl, discordRoleId,
-        proxyHost, proxyPort, proxyUsername, proxyPassword
+        proxyHost, proxyPort, proxyUsername, proxyPassword, localAddress
     }
 
 }
@@ -2364,6 +2372,29 @@ class BotSession {
     // CONNECT
     // --------------------------------------------------------
 
+    // Shared failure path for the local-address-bind and SOCKS5 setup
+    // steps in connect() - neither ever got as far as actually
+    // reaching mineflayer, so there's no bot/socket to clean up here,
+    // just log it, tell the dashboard, and try again on the normal
+    // reconnect delay rather than leaving the bot stuck offline.
+    abortConnectAttempt(message) {
+
+        this.log(message)
+        originalError(`[${this.username}]`, message)
+
+        io.to(this.username).emit('notice', { type: 'error', text: message })
+
+        this.setState('OFFLINE')
+
+        if (this.botEnabled && !this.shuttingDown) {
+            this.reconnectTimer = setTimeout(() => {
+                this.reconnectTimer = null
+                this.connect()
+            }, RECONNECT_DELAY)
+        }
+
+    }
+
     async connect() {
 
         if (this.shuttingDown) return
@@ -2383,16 +2414,41 @@ class BotSession {
 
         originalLog(`[${new Date().toLocaleString()}] [${this.username}] Connecting to ${this.config.host}:${this.config.port}...`)
 
-        // If a SOCKS5 proxy is configured, tunnel the outbound
-        // Minecraft connection through it and hand mineflayer the
-        // already-connected socket via the `stream` option (its
-        // documented hook for exactly this - see tcp_dns.js in
-        // minecraft-protocol) instead of letting it open its own TCP
-        // connection. Multiple accounts on this same machine would
-        // otherwise all share this server's one IP.
+        // Two alternative ways to give this account its own outbound
+        // IP instead of sharing this machine's one address with every
+        // other account hosted here - a specific local IP to bind to
+        // (a second VNIC on this machine, e.g.), or a SOCKS5 proxy.
+        // localAddress takes priority if both are somehow set. Either
+        // way, mineflayer gets the already-connected socket via its
+        // documented `stream` option (see tcp_dns.js in
+        // minecraft-protocol) instead of opening its own connection.
         let proxyStream = null
 
-        if (this.config.proxyHost && this.config.proxyPort) {
+        if (this.config.localAddress) {
+
+            try {
+
+                proxyStream = await new Promise((resolve, reject) => {
+
+                    const socket = net.connect({
+                        host: this.config.host,
+                        port: this.config.port,
+                        localAddress: this.config.localAddress
+                    })
+
+                    socket.once('connect', () => resolve(socket))
+                    socket.once('error', reject)
+
+                })
+
+                this.log(`Connected via local address ${this.config.localAddress}.`)
+
+            } catch (error) {
+                this.abortConnectAttempt(`Local address bind failed: ${error.message}`)
+                return
+            }
+
+        } else if (this.config.proxyHost && this.config.proxyPort) {
 
             try {
 
@@ -2416,26 +2472,8 @@ class BotSession {
                 this.log(`Connected via SOCKS5 proxy ${this.config.proxyHost}:${this.config.proxyPort}.`)
 
             } catch (error) {
-
-                this.log(`SOCKS5 proxy connection failed: ${error.message}`)
-                originalError(`[${this.username}] SOCKS5 proxy connection failed:`, error.message)
-
-                io.to(this.username).emit('notice', {
-                    type: 'error',
-                    text: `Proxy connection failed: ${error.message}`
-                })
-
-                this.setState('OFFLINE')
-
-                if (this.botEnabled && !this.shuttingDown) {
-                    this.reconnectTimer = setTimeout(() => {
-                        this.reconnectTimer = null
-                        this.connect()
-                    }, RECONNECT_DELAY)
-                }
-
+                this.abortConnectAttempt(`SOCKS5 proxy connection failed: ${error.message}`)
                 return
-
             }
 
         }
@@ -3056,7 +3094,7 @@ app.get('/api/bot-config', (req, res) => {
     const config = getBotConfig(req.session.username)
     res.json(config || {
         microsoftEmail: '', host: '', port: 25565, version: '', lifestealAutopilot: false,
-        proxyHost: '', proxyPort: null, proxyUsername: '', proxyPassword: ''
+        proxyHost: '', proxyPort: null, proxyUsername: '', proxyPassword: '', localAddress: ''
     })
 })
 

@@ -2884,8 +2884,10 @@ app.get('/login', (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'login.html'))
 })
 
+// Self-signup is closed - accounts are created by the admin only
+// (see POST /api/admin/create-account, requireAuth-protected below).
 app.get('/signup', (req, res) => {
-    res.sendFile(path.join(PUBLIC_DIR, 'signup.html'))
+    res.redirect('/login')
 })
 
 // Served before the auth gate below so it loads on /login and
@@ -2930,45 +2932,7 @@ app.post('/login', (req, res) => {
 })
 
 app.post('/signup', (req, res) => {
-
-    const { username, password } = req.body || {}
-
-    if (!username || !USERNAME_PATTERN.test(username)) {
-        return res.status(400).json({ error: 'Username must be 3-20 characters: letters, numbers, underscores only.' })
-    }
-
-    if (!password || password.length < MIN_PASSWORD_LENGTH) {
-        return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` })
-    }
-
-    if (username.toLowerCase() === DASHBOARD_USERNAME.toLowerCase()) {
-        return res.status(409).json({ error: 'That username is reserved.' })
-    }
-
-    const users = loadUsers()
-
-    if (findUser(users, username)) {
-        return res.status(409).json({ error: 'That username is already taken.' })
-    }
-
-    const { salt, hash } = hashPassword(password)
-
-    users.push({
-        username,
-        salt,
-        hash,
-        createdAt: new Date().toISOString()
-    })
-
-    saveUsers(users)
-
-    req.session.loggedIn = true
-    req.session.username = username
-
-    appLog(`New account created: ${username}`)
-
-    return res.json({ ok: true })
-
+    res.status(403).json({ error: 'Signups are closed. Ask the site owner to create your account.' })
 })
 
 app.post('/logout', (req, res) => {
@@ -3133,6 +3097,54 @@ app.post('/api/preferences', (req, res) => {
 
 app.get('/api/account', (req, res) => {
     res.json({ isAdmin: req.session.username === DASHBOARD_USERNAME })
+})
+
+// Self-signup is closed - only the admin account can create new
+// accounts, from Settings -> Account. Doesn't touch req.session, so
+// the admin stays logged in as themselves after creating one for
+// someone else.
+app.post('/api/admin/create-account', (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can create new accounts.' })
+    }
+
+    const { username, password } = req.body || {}
+
+    if (!username || !USERNAME_PATTERN.test(username)) {
+        return res.status(400).json({ error: 'Username must be 3-20 characters: letters, numbers, underscores only.' })
+    }
+
+    if (!password || password.length < MIN_PASSWORD_LENGTH) {
+        return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` })
+    }
+
+    if (username.toLowerCase() === DASHBOARD_USERNAME.toLowerCase()) {
+        return res.status(409).json({ error: 'That username is reserved.' })
+    }
+
+    const users = loadUsers()
+
+    if (findUser(users, username)) {
+        return res.status(409).json({ error: 'That username is already taken.' })
+    }
+
+    const { salt, hash } = hashPassword(password)
+
+    users.push({
+        username,
+        salt,
+        hash,
+        createdAt: new Date().toISOString(),
+        createdByAdmin: true
+    })
+
+    saveUsers(users)
+
+    appLog(`Account created by admin: ${username}`)
+
+    return res.json({ ok: true })
+
 })
 
 app.post('/api/account/password', (req, res) => {

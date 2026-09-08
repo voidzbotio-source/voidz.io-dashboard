@@ -4794,6 +4794,44 @@
                     Signed in as the admin account &mdash; password changes aren't available here. Edit DASHBOARD_PASSWORD in your .env file instead.
                 </div>
 
+                <div id="createAccountSection" class="settings-section" style="display: none;">
+
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
+                        <span>Create Account</span>
+                    </div>
+
+                    <p class="settings-section-desc">
+                        Signups are closed - this is the only way to add someone new. They'll sign in with the username/password you set here, then configure their own Microsoft account and bot in their own Settings.
+                    </p>
+
+                    <div id="createAccountError" class="settings-error"></div>
+
+                    <div class="field">
+                        <label for="newAccountUsername">Username</label>
+                        <input id="newAccountUsername" type="text" autocomplete="off" placeholder="3-20 characters">
+                    </div>
+
+                    <div class="settings-field-row">
+
+                        <div class="field">
+                            <label for="newAccountPassword">Password</label>
+                            <input id="newAccountPassword" type="password" autocomplete="new-password">
+                        </div>
+
+                        <div class="field">
+                            <label for="newAccountConfirmPassword">Confirm</label>
+                            <input id="newAccountConfirmPassword" type="password" autocomplete="new-password">
+                        </div>
+
+                    </div>
+
+                    <button class="modal-ok" id="createAccountBtn" onclick="createAccount()" style="width: 100%;">
+                        Create Account
+                    </button>
+
+                </div>
+
                 <div id="accountSections">
 
                     <div class="settings-section">
@@ -5496,7 +5534,7 @@
 
             switchSettingsTab('bot')
 
-            for (const id of ['settingsError', 'passwordError', 'importBackupError']) {
+            for (const id of ['settingsError', 'passwordError', 'importBackupError', 'createAccountError']) {
 
                 const box = $(id)
 
@@ -5532,6 +5570,7 @@
 
                     $('accountAdminNote').style.display = isAdmin ? 'block' : 'none'
                     $('accountSections').style.display = isAdmin ? 'none' : 'block'
+                    $('createAccountSection').style.display = isAdmin ? 'block' : 'none'
 
                 })
                 .catch(() => {})
@@ -5671,6 +5710,69 @@
 
                     btn.disabled = false
                     btn.textContent = 'Update Password'
+
+                    errorBox.textContent = 'Could not reach the server. Try again.'
+                    errorBox.classList.add('show')
+
+                })
+
+        }
+
+        function createAccount() {
+
+            const errorBox = $('createAccountError')
+            const btn = $('createAccountBtn')
+
+            errorBox.classList.remove('show')
+            errorBox.textContent = ''
+
+            const username = $('newAccountUsername').value.trim()
+            const password = $('newAccountPassword').value
+            const confirmPassword = $('newAccountConfirmPassword').value
+
+            if (!username || !password) {
+                errorBox.textContent = 'Fill in a username and password.'
+                errorBox.classList.add('show')
+                return
+            }
+
+            if (password !== confirmPassword) {
+                errorBox.textContent = 'Passwords do not match.'
+                errorBox.classList.add('show')
+                return
+            }
+
+            btn.disabled = true
+            btn.textContent = 'Creating...'
+
+            fetch('/api/admin/create-account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+
+                    btn.disabled = false
+                    btn.textContent = 'Create Account'
+
+                    if (!ok) {
+                        errorBox.textContent = data.error || 'Could not create account.'
+                        errorBox.classList.add('show')
+                        return
+                    }
+
+                    $('newAccountUsername').value = ''
+                    $('newAccountPassword').value = ''
+                    $('newAccountConfirmPassword').value = ''
+
+                    showToast(`Account "${username}" created.`, 'success')
+
+                })
+                .catch(() => {
+
+                    btn.disabled = false
+                    btn.textContent = 'Create Account'
 
                     errorBox.textContent = 'Could not reach the server. Try again.'
                     errorBox.classList.add('show')

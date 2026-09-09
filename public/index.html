@@ -2610,6 +2610,11 @@
             background: var(--faint);
         }
 
+        .member-dot.afk {
+            background: var(--yellow);
+            box-shadow: 0 0 6px rgba(234, 179, 8, 0.6);
+        }
+
         .team-body {
             max-height: 340px;
             overflow-y: auto;
@@ -2677,6 +2682,10 @@
 
         .ally-status.online, .autoinvite-status.online {
             color: var(--green);
+        }
+
+        .threat-status.afk, .ally-status.afk {
+            color: var(--yellow);
         }
 
         .threat-remove, .ally-remove, .autoinvite-remove {
@@ -8252,8 +8261,109 @@
                     data
                 )
 
+                trackPlayerActivityFromChat(
+                    data
+                )
+
             }
         )
+
+        // ==================================================
+        // TRACKED-PLAYER ACTIVITY / AFK DETECTION
+        // ==================================================
+
+        // Two independent signals per Threat/Ally: has the SERVER
+        // mentioned their name (death, join/leave, KOTH capture, team
+        // points, etc.) and have THEY personally sent a chat message.
+        // Only flagged AFK once BOTH have been quiet for an hour -
+        // a player who's silent in chat but still fighting (so the
+        // server keeps mentioning them) is not AFK, and vice versa.
+        //
+        // Crucially, another player typing a tracked name in chat
+        // must never count as either signal - it's neither a SERVER
+        // message nor authored by the tracked player themselves.
+
+        const AFK_THRESHOLD_MS = 60 * 60 * 1000
+
+        let playerActivity = {}
+
+        function escapeRegExp(text) {
+            return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        }
+
+        function touchPlayerActivity(name, field) {
+
+            const key = name.toLowerCase()
+
+            if (!playerActivity[key]) {
+                playerActivity[key] = {}
+            }
+
+            playerActivity[key][field] = Date.now()
+
+        }
+
+        function isPlayerAfk(name) {
+
+            const activity = playerActivity[name.toLowerCase()]
+
+            if (!activity) {
+                return false
+            }
+
+            const now = Date.now()
+
+            const serverStale =
+                !activity.lastServerMentionAt ||
+                (now - activity.lastServerMentionAt) >= AFK_THRESHOLD_MS
+
+            const chatStale =
+                !activity.lastChatMessageAt ||
+                (now - activity.lastChatMessageAt) >= AFK_THRESHOLD_MS
+
+            return serverStale && chatStale
+
+        }
+
+        function trackPlayerActivityFromChat(data) {
+
+            const trackedNames = [
+                ...threats.map(threat => threat.name),
+                ...allies.map(ally => ally.name)
+            ]
+
+            if (trackedNames.length === 0) {
+                return
+            }
+
+            if (data.username === 'SERVER') {
+
+                const text = data.message || ''
+
+                for (const name of trackedNames) {
+
+                    const pattern = new RegExp(`\\b${escapeRegExp(name)}\\b`, 'i')
+
+                    if (pattern.test(text)) {
+                        touchPlayerActivity(name, 'lastServerMentionAt')
+                    }
+
+                }
+
+            } else {
+
+                // Real player chat, authored by data.username - only
+                // counts as activity for THAT player, and only if
+                // they're a tracked name.
+                const author = data.username || ''
+
+                if (trackedNames.some(name => name.toLowerCase() === author.toLowerCase())) {
+                    touchPlayerActivity(author, 'lastChatMessageAt')
+                }
+
+            }
+
+        }
 
         // ==================================================
         // ADD CHAT MESSAGE
@@ -8520,6 +8630,11 @@
 
                     newlyOnline = true
 
+                    // Start their AFK clock fresh at the moment we
+                    // notice them online, rather than at epoch 0 -
+                    // otherwise they'd look instantly AFK.
+                    playerActivity[key] = { lastServerMentionAt: Date.now(), lastChatMessageAt: Date.now() }
+
                     showToast(`Threat online: ${threat.name}`, 'error')
 
                 } else if (!isOnline && wasOnline) {
@@ -8598,11 +8713,18 @@
                             const online =
                                 onlineSet.has(threat.name.toLowerCase())
 
+                            const afk =
+                                online && isPlayerAfk(threat.name)
+
+                            const dotState = online ? (afk ? 'afk' : 'online') : 'offline'
+                            const statusClass = online ? (afk ? 'afk' : 'online') : ''
+                            const statusText = online ? (afk ? 'AFK' : 'Online') : escapeHtml(timeAgo(threat.lastSeen))
+
                             return `
-                                <div class="threat-row ${online ? 'online' : ''}">
-                                    <span class="member-dot ${online ? 'online' : 'offline'}"></span>
+                                <div class="threat-row ${online && !afk ? 'online' : ''}">
+                                    <span class="member-dot ${dotState}"></span>
                                     <span class="threat-name">${escapeHtml(threat.name)}</span>
-                                    <span class="threat-status ${online ? 'online' : ''}">${online ? 'Online' : escapeHtml(timeAgo(threat.lastSeen))}</span>
+                                    <span class="threat-status ${statusClass}">${statusText}</span>
                                     <button class="threat-remove" onclick="removeThreat(${index})" title="Stop tracking">&times;</button>
                                 </div>
                             `
@@ -8819,6 +8941,11 @@
 
                     newlyOnline = true
 
+                    // Start their AFK clock fresh at the moment we
+                    // notice them online, rather than at epoch 0 -
+                    // otherwise they'd look instantly AFK.
+                    playerActivity[key] = { lastServerMentionAt: Date.now(), lastChatMessageAt: Date.now() }
+
                     showToast(`Ally online: ${ally.name}`, 'success')
 
                 } else if (!isOnline && wasOnline) {
@@ -8890,11 +9017,18 @@
                             const online =
                                 onlineSet.has(ally.name.toLowerCase())
 
+                            const afk =
+                                online && isPlayerAfk(ally.name)
+
+                            const dotState = online ? (afk ? 'afk' : 'online') : 'offline'
+                            const statusClass = online ? (afk ? 'afk' : 'online') : ''
+                            const statusText = online ? (afk ? 'AFK' : 'Online') : escapeHtml(timeAgo(ally.lastSeen))
+
                             return `
-                                <div class="ally-row ${online ? 'online' : ''}">
-                                    <span class="member-dot ${online ? 'online' : 'offline'}"></span>
+                                <div class="ally-row ${online && !afk ? 'online' : ''}">
+                                    <span class="member-dot ${dotState}"></span>
                                     <span class="ally-name">${escapeHtml(ally.name)}</span>
-                                    <span class="ally-status ${online ? 'online' : ''}">${online ? 'Online' : escapeHtml(timeAgo(ally.lastSeen))}</span>
+                                    <span class="ally-status ${statusClass}">${statusText}</span>
                                     <button class="ally-remove" onclick="removeAlly(${index})" title="Stop tracking">&times;</button>
                                 </div>
                             `

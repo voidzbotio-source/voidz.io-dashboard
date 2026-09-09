@@ -1629,22 +1629,31 @@ class BotSession {
 
         if (!sidebar) {
             io.to(this.username).emit('notice', { type: 'error', text: 'No sidebar scoreboard is active right now.' })
+            originalLog(`[SIDEBAR-DEBUG:${this.username}] No sidebar scoreboard is active right now.`)
             return
         }
 
-        io.to(this.username).emit('chat', {
-            username: 'DEBUG',
-            message: `sidebar title: ${JSON.stringify(sidebar.title)}`,
-            time: new Date().toLocaleTimeString()
-        })
+        const lines = [`sidebar title: ${JSON.stringify(sidebar.title)}`]
 
         for (const item of sidebar.items) {
 
             const raw = item.displayName?.toString?.() ?? String(item.displayName ?? '(no display name)')
 
+            lines.push(`[${item.value}] ${JSON.stringify(raw)}`)
+
+        }
+
+        // Printed via originalLog too (not just the socket) so this is
+        // readable straight from the server console/SSH, without needing
+        // a logged-in browser session.
+        originalLog(`[SIDEBAR-DEBUG:${this.username}]`)
+        for (const line of lines) originalLog(`  ${line}`)
+
+        for (const line of lines) {
+
             io.to(this.username).emit('chat', {
                 username: 'DEBUG',
-                message: `[${item.value}] ${JSON.stringify(raw)}`,
+                message: line,
                 time: new Date().toLocaleTimeString()
             })
 
@@ -3599,6 +3608,7 @@ function showHelp() {
     originalLog('/afk')
     originalLog('/recover')
     originalLog('/rejoin')
+    originalLog('/sidebar-debug')
     originalLog('/say <text>')
     originalLog('/help')
     originalLog('/stopbot')
@@ -3635,6 +3645,7 @@ rl.on('line', input => {
         case '/afk': adminSession.goAfk(); break
         case '/recover': adminSession.manualRecovery(); break
         case '/rejoin': adminSession.manualRejoin(); break
+        case '/sidebar-debug': adminSession.debugSidebar(); break
         case '/help': showHelp(); break
 
         case '/stopbot':

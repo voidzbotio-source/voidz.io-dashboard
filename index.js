@@ -931,15 +931,15 @@ class BotSession {
     // teams (prefix + colored name + suffix), so the readable text
     // comes from team.displayName() rather than the raw entry name -
     // same trick as everything else that reads real scoreboard data.
-    getKothCaptureStatus() {
+    getSidebarLines() {
 
         const sidebar = this.bot?.scoreboard?.sidebar
 
         if (!sidebar) {
-            return null
+            return []
         }
 
-        const lines = sidebar.items
+        return sidebar.items
             .map(item => {
                 try {
                     return item.displayName.toString()
@@ -949,20 +949,30 @@ class BotSession {
             })
             .filter(line => line.trim())
 
-        const findValue = (label) => {
+    }
 
-            const line = lines.find(line => line.includes(`${label}:`))
+    findSidebarValue(lines, label) {
 
-            if (!line) return null
+        const line = lines.find(line => line.includes(`${label}:`))
 
-            const value = line.slice(line.indexOf(`${label}:`) + label.length + 1).trim()
+        if (!line) return null
 
-            return value || null
+        const value = line.slice(line.indexOf(`${label}:`) + label.length + 1).trim()
 
+        return value || null
+
+    }
+
+    getKothCaptureStatus() {
+
+        const lines = this.getSidebarLines()
+
+        if (lines.length === 0) {
+            return null
         }
 
-        const koth = findValue('KOTH')
-        const capping = findValue('Capping')
+        const koth = this.findSidebarValue(lines, 'KOTH')
+        const capping = this.findSidebarValue(lines, 'Capping')
 
         if (!koth || !capping) {
             return null
@@ -971,9 +981,24 @@ class BotSession {
         return {
             koth,
             capping,
-            location: findValue('Location'),
-            timeLeft: findValue('Time Left')
+            location: this.findSidebarValue(lines, 'Location'),
+            timeLeft: this.findSidebarValue(lines, 'Time Left')
         }
+
+    }
+
+    getTokens() {
+
+        const lines = this.getSidebarLines()
+        const raw = this.findSidebarValue(lines, 'Tokens')
+
+        if (!raw) {
+            return null
+        }
+
+        const numeric = Number(raw.replace(/,/g, ''))
+
+        return Number.isFinite(numeric) ? numeric : raw
 
     }
 
@@ -1155,6 +1180,7 @@ class BotSession {
             actionBar: (Date.now() - this.lastActionBarAt < 5000) ? this.lastActionBar : null,
 
             kothCapture: online ? this.getKothCaptureStatus() : null,
+            tokens: online ? this.getTokens() : null,
 
             inventory: online ? this.getInventorySnapshot() : [],
 

@@ -3996,6 +3996,11 @@
                             </div>
                         </div>
 
+                        <div class="hero-stat">
+                            <div class="hero-stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v8"/><path d="M9.5 10.5a2.5 2.5 0 0 1 2.5-1.5h.5a2 2 0 0 1 0 4h-1a2 2 0 0 0 0 4h.5a2.5 2.5 0 0 0 2.5-1.5"/></svg>Tokens</div>
+                            <div id="tokens" class="hero-stat-value">-</div>
+                        </div>
+
                     </div>
 
                 </div>
@@ -6874,6 +6879,14 @@
                 data.health !== null &&
                 data.health !== undefined
                     ? `${Math.floor(data.health)}/${Math.floor(data.maxHealth || 20)}  •  ${data.food ?? '-'}/20`
+                    : '-'
+            )
+
+            setText(
+                'tokens',
+                data.tokens !== null &&
+                data.tokens !== undefined
+                    ? (typeof data.tokens === 'number' ? data.tokens.toLocaleString() : data.tokens)
                     : '-'
             )
 

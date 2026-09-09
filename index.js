@@ -1615,6 +1615,43 @@ class BotSession {
 
     }
 
+    // One-off diagnostic for the KOTH Capture card: dumps every raw
+    // line currently on the sidebar scoreboard (JSON-escaped, so any
+    // custom font / private-use-area icon characters show up as
+    // \uXXXX instead of invisible squares), since getKothCaptureStatus()
+    // depends on exact label text ("KOTH:", "Capping:", etc.) that was
+    // guessed from a screenshot and never confirmed against the real
+    // packets. Trigger from the browser console with:
+    //   sendCommand('sidebar-debug')
+    debugSidebar() {
+
+        const sidebar = this.bot?.scoreboard?.sidebar
+
+        if (!sidebar) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'No sidebar scoreboard is active right now.' })
+            return
+        }
+
+        io.to(this.username).emit('chat', {
+            username: 'DEBUG',
+            message: `sidebar title: ${JSON.stringify(sidebar.title)}`,
+            time: new Date().toLocaleTimeString()
+        })
+
+        for (const item of sidebar.items) {
+
+            const raw = item.displayName?.toString?.() ?? String(item.displayName ?? '(no display name)')
+
+            io.to(this.username).emit('chat', {
+                username: 'DEBUG',
+                message: `[${item.value}] ${JSON.stringify(raw)}`,
+                time: new Date().toLocaleTimeString()
+            })
+
+        }
+
+    }
+
     // One-off diagnostic for the Black Market auto-buy feature. Sends
     // /bm itself (must run through the BOT's own connection - a
     // human manually opening /bm on a separate client/session never
@@ -3017,6 +3054,7 @@ function handleWebCommand(username, command) {
         case 'playerslist': botSession.showPlayersList(); break
         case 'tablist-debug': botSession.debugTabList(); break
         case 'bm-debug': botSession.debugNextWindow(); break
+        case 'sidebar-debug': botSession.debugSidebar(); break
         case 'where': botSession.showWhere(); break
         case 'lastchat': botSession.showLastChat(); break
         case 'keysamount': botSession.showKeysAmount(); break

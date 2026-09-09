@@ -2321,6 +2321,104 @@
         .leaderboard-net.neutral { color: var(--muted); }
 
         /* ================================================= */
+        /* MANAGE ACCOUNTS */
+        /* ================================================= */
+
+        .manage-accounts-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .manage-account-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+
+            padding: 9px 10px;
+
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+        }
+
+        .manage-account-name {
+            flex: 1;
+            min-width: 0;
+
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        .manage-account-row button {
+            flex-shrink: 0;
+
+            padding: 6px 10px;
+            font-size: 10.5px;
+        }
+
+        .manage-account-password-input {
+            flex-shrink: 1;
+            min-width: 0;
+            width: 110px;
+
+            padding: 6px 8px;
+            font-size: 11px;
+
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+        }
+
+        .manage-account-btn {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            color: var(--muted);
+        }
+
+        .manage-account-btn:hover {
+            color: var(--text);
+            border-color: var(--muted);
+        }
+
+        .manage-account-btn-primary {
+            background: rgba(99, 102, 241, 0.14);
+            border: 1px solid rgba(99, 102, 241, 0.4);
+            color: var(--blue);
+        }
+
+        .manage-account-btn-primary:hover {
+            background: rgba(99, 102, 241, 0.24);
+        }
+
+        .impersonation-banner {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+
+            padding: 10px 14px;
+            margin-bottom: 14px;
+
+            background: color-mix(in srgb, var(--yellow) 16%, var(--panel));
+            border: 1px solid var(--yellow);
+            border-radius: var(--radius-sm);
+
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .impersonation-banner.show {
+            display: flex;
+        }
+
+        /* ================================================= */
         /* BADGES */
         /* ================================================= */
 
@@ -3762,6 +3860,11 @@
 
         <div class="main-content">
 
+        <div id="impersonationBanner" class="impersonation-banner">
+            <span>👁️ Viewing as <strong id="impersonationBannerName">-</strong></span>
+            <button class="modal-ok" onclick="stopImpersonating()">Return to Admin</button>
+        </div>
+
         <!-- ============================================== -->
         <!-- ROW: HERO STATUS + COMMANDS -->
         <!-- ============================================== -->
@@ -4784,6 +4887,25 @@
 
                 </div>
 
+                <div id="manageAccountsSection" class="settings-section" style="display: none;">
+
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        <span>Manage Accounts</span>
+                    </div>
+
+                    <p class="settings-section-desc">
+                        Reset a forgotten password, or view the dashboard as that account without needing their password &mdash; useful for checking on or fixing something from their side.
+                    </p>
+
+                    <div id="manageAccountsError" class="settings-error"></div>
+
+                    <div id="manageAccountsList" class="manage-accounts-list">
+                        <div class="empty-state">No other accounts yet.</div>
+                    </div>
+
+                </div>
+
                 <div id="accountSections">
 
                     <div class="settings-section">
@@ -5529,6 +5651,13 @@
                     $('accountAdminNote').style.display = isAdmin ? 'block' : 'none'
                     $('accountSections').style.display = isAdmin ? 'none' : 'block'
                     $('createAccountSection').style.display = isAdmin ? 'block' : 'none'
+                    $('manageAccountsSection').style.display = isAdmin ? 'block' : 'none'
+
+                    if (isAdmin) {
+                        renderManageAccounts()
+                    }
+
+                    applyImpersonationBanner(account)
 
                 })
                 .catch(() => {})
@@ -5742,6 +5871,144 @@
                     errorBox.classList.add('show')
 
                 })
+
+        }
+
+        // ==================================================
+        // MANAGE ACCOUNTS (ADMIN)
+        // ==================================================
+
+        function renderManageAccounts() {
+
+            const list = $('manageAccountsList')
+            const errorBox = $('manageAccountsError')
+
+            errorBox.classList.remove('show')
+            errorBox.textContent = ''
+
+            fetch('/api/admin/accounts')
+                .then(response => response.json())
+                .then(data => {
+
+                    const users = data.users || []
+
+                    if (users.length === 0) {
+                        list.innerHTML = '<div class="empty-state">No other accounts yet.</div>'
+                        return
+                    }
+
+                    list.innerHTML = users.map(user => `
+                        <div class="manage-account-row">
+                            <div class="manage-account-name">${escapeHtml(user.username)}</div>
+                            <input type="password" class="manage-account-password-input" id="resetPw-${escapeHtml(user.username)}" placeholder="New password" autocomplete="new-password">
+                            <button class="manage-account-btn" onclick="resetUserPassword('${escapeHtml(user.username)}')">Reset</button>
+                            <button class="manage-account-btn manage-account-btn-primary" onclick="impersonateUser('${escapeHtml(user.username)}')">Log In As</button>
+                        </div>
+                    `).join('')
+
+                })
+                .catch(() => {
+
+                    errorBox.textContent = 'Could not load accounts.'
+                    errorBox.classList.add('show')
+
+                })
+
+        }
+
+        function resetUserPassword(username) {
+
+            const errorBox = $('manageAccountsError')
+            const input = $(`resetPw-${username}`)
+            const newPassword = input ? input.value : ''
+
+            errorBox.classList.remove('show')
+            errorBox.textContent = ''
+
+            if (!newPassword || newPassword.length < 4) {
+                errorBox.textContent = 'Enter a new password (4+ characters) for that account first.'
+                errorBox.classList.add('show')
+                return
+            }
+
+            fetch('/api/admin/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, newPassword })
+            })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+
+                    if (!ok) {
+                        errorBox.textContent = data.error || 'Could not reset that password.'
+                        errorBox.classList.add('show')
+                        return
+                    }
+
+                    if (input) input.value = ''
+
+                    showToast(`Password reset for "${username}".`, 'success')
+
+                })
+                .catch(() => {
+
+                    errorBox.textContent = 'Could not reach the server. Try again.'
+                    errorBox.classList.add('show')
+
+                })
+
+        }
+
+        async function impersonateUser(username) {
+
+            const ok = await openConfirmModal(
+                `Log in as "${username}"? You'll see their dashboard until you return to your admin account.`,
+                'Log in as this account?'
+            )
+
+            if (!ok) return
+
+            fetch('/api/admin/impersonate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+
+                    if (!ok) {
+                        $('manageAccountsError').textContent = data.error || 'Could not log in as that account.'
+                        $('manageAccountsError').classList.add('show')
+                        return
+                    }
+
+                    window.location.reload()
+
+                })
+                .catch(() => {})
+
+        }
+
+        function stopImpersonating() {
+
+            fetch('/api/admin/stop-impersonating', { method: 'POST' })
+                .then(() => window.location.reload())
+                .catch(() => {})
+
+        }
+
+        function applyImpersonationBanner(account) {
+
+            const banner = $('impersonationBanner')
+
+            if (!banner) return
+
+            if (account && account.impersonating) {
+                $('impersonationBannerName').textContent = account.username
+                banner.classList.add('show')
+            } else {
+                banner.classList.remove('show')
+            }
 
         }
 
@@ -9827,6 +10094,15 @@
 
             }
         )
+
+        // ==================================================
+        // IMPERSONATION BANNER (INITIAL LOAD)
+        // ==================================================
+
+        fetch('/api/account')
+            .then(response => response.json())
+            .then(account => applyImpersonationBanner(account))
+            .catch(() => {})
 
         // ==================================================
         // LOGOUT

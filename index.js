@@ -3212,7 +3212,11 @@ app.post('/api/preferences', (req, res) => {
 // ============================================================
 
 app.get('/api/account', (req, res) => {
-    res.json({ isAdmin: req.session.username === DASHBOARD_USERNAME })
+    res.json({
+        isAdmin: req.session.username === DASHBOARD_USERNAME,
+        username: req.session.username,
+        impersonating: !!req.session.adminUsername
+    })
 })
 
 // Self-signup is closed - only the admin account can create new
@@ -3260,6 +3264,113 @@ app.post('/api/admin/create-account', (req, res) => {
     appLog(`Account created by admin: ${username}`)
 
     return res.json({ ok: true })
+
+})
+
+// Everyone the admin has created, for the "Manage Accounts" list in
+// Settings -> Account. Excludes the admin account itself.
+app.get('/api/admin/accounts', (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can view this.' })
+    }
+
+    const users = loadUsers()
+        .filter(user => user.username !== DASHBOARD_USERNAME)
+        .map(user => ({ username: user.username, createdAt: user.createdAt || null }))
+
+    res.json({ users })
+
+})
+
+// Resets any account's password without needing their current one -
+// for when someone forgets it. Doesn't touch req.session.
+app.post('/api/admin/reset-password', (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can do this.' })
+    }
+
+    const { username, newPassword } = req.body || {}
+
+    if (!username) {
+        return res.status(400).json({ error: 'Username required.' })
+    }
+
+    if (!newPassword || newPassword.length < MIN_PASSWORD_LENGTH) {
+        return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` })
+    }
+
+    const users = loadUsers()
+    const user = findUser(users, username)
+
+    if (!user) {
+        return res.status(404).json({ error: 'No such account.' })
+    }
+
+    const { salt, hash } = hashPassword(newPassword)
+
+    user.salt = salt
+    user.hash = hash
+
+    saveUsers(users)
+
+    appLog(`Admin reset the password for: ${username}`)
+
+    res.json({ ok: true })
+
+})
+
+// Switches the admin's own session to view as another account,
+// without needing that account's password - for checking on/fixing
+// something from their side. Only the real admin can start this (an
+// impersonated session's req.session.username is the target account,
+// not the admin, so this naturally can't be chained). The admin's own
+// username is stashed in req.session.adminUsername so
+// stop-impersonating can restore it.
+app.post('/api/admin/impersonate', (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can do this.' })
+    }
+
+    const { username } = req.body || {}
+
+    if (!username) {
+        return res.status(400).json({ error: 'Username required.' })
+    }
+
+    if (username === DASHBOARD_USERNAME) {
+        return res.status(400).json({ error: "You're already the admin account." })
+    }
+
+    const users = loadUsers()
+
+    if (!findUser(users, username)) {
+        return res.status(404).json({ error: 'No such account.' })
+    }
+
+    req.session.adminUsername = DASHBOARD_USERNAME
+    req.session.username = username
+
+    appLog(`Admin started viewing as: ${username}`)
+
+    res.json({ ok: true })
+
+})
+
+app.post('/api/admin/stop-impersonating', (req, res) => {
+
+    if (!req.session.adminUsername) {
+        return res.status(400).json({ error: "You're not currently viewing as another account." })
+    }
+
+    appLog(`Admin returned from viewing as: ${req.session.username}`)
+
+    req.session.username = req.session.adminUsername
+    delete req.session.adminUsername
+
+    res.json({ ok: true })
 
 })
 

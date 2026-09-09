@@ -925,6 +925,58 @@ class BotSession {
 
     }
 
+    // Reads the live sidebar scoreboard (the "LIFESTEAL / Season.. /
+    // KOTH: .. / Capping: .. / Time Left: .." panel in the top-right
+    // of the game). Sidebar lines are rendered through scoreboard
+    // teams (prefix + colored name + suffix), so the readable text
+    // comes from team.displayName() rather than the raw entry name -
+    // same trick as everything else that reads real scoreboard data.
+    getKothCaptureStatus() {
+
+        const sidebar = this.bot?.scoreboard?.sidebar
+
+        if (!sidebar) {
+            return null
+        }
+
+        const lines = sidebar.items
+            .map(item => {
+                try {
+                    return item.displayName.toString()
+                } catch {
+                    return ''
+                }
+            })
+            .filter(line => line.trim())
+
+        const findValue = (label) => {
+
+            const line = lines.find(line => line.includes(`${label}:`))
+
+            if (!line) return null
+
+            const value = line.slice(line.indexOf(`${label}:`) + label.length + 1).trim()
+
+            return value || null
+
+        }
+
+        const koth = findValue('KOTH')
+        const capping = findValue('Capping')
+
+        if (!koth || !capping) {
+            return null
+        }
+
+        return {
+            koth,
+            capping,
+            location: findValue('Location'),
+            timeLeft: findValue('Time Left')
+        }
+
+    }
+
     getInventorySnapshot() {
 
         if (!this.bot || !this.bot.inventory) {
@@ -1101,6 +1153,8 @@ class BotSession {
             connectedAt: this.connectedAt,
 
             actionBar: (Date.now() - this.lastActionBarAt < 5000) ? this.lastActionBar : null,
+
+            kothCapture: online ? this.getKothCaptureStatus() : null,
 
             inventory: online ? this.getInventorySnapshot() : [],
 

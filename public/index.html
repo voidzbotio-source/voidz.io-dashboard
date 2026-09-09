@@ -1061,6 +1061,7 @@
         .card[data-card-id="autoinvite"] { --card-accent: var(--green); }
         .card[data-card-id="chat"] { --card-accent: var(--teal); }
         .card[data-card-id="actionbar"] { --card-accent: var(--yellow); }
+        .card[data-card-id="kothcapture"] { --card-accent: var(--orange); }
         .card[data-card-id="activity"] { --card-accent: var(--orange); }
         .card[data-card-id="lastActivity"] { --card-accent: var(--yellow); }
 
@@ -1629,6 +1630,62 @@
             font-size: 13.5px;
             font-weight: 700;
         }
+
+        /* ================================================= */
+        /* KOTH CAPTURE */
+        /* ================================================= */
+
+        .koth-capture-body {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .koth-capture-name {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--orange);
+        }
+
+        .koth-capture-timeleft {
+            text-align: center;
+            font-size: 12.5px;
+            color: var(--muted);
+        }
+
+        .koth-capture-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+
+            padding: 7px 10px;
+
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+
+            font-size: 12.5px;
+        }
+
+        .koth-capture-row-label {
+            color: var(--faint);
+            font-weight: 700;
+            font-size: 10.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .koth-capture-row-value {
+            font-weight: 700;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .koth-capture-row-value.threat { color: var(--red); }
+        .koth-capture-row-value.ally { color: var(--green); }
 
         /* ================================================= */
         /* ACTIVITY LOG */
@@ -4515,6 +4572,23 @@
             </section>
 
             <!-- ========================================== -->
+            <!-- KOTH CAPTURE -->
+            <!-- ========================================== -->
+
+            <section class="card col-1" data-card-id="kothcapture" draggable="true" style="animation-delay: 0.215s;">
+
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9m0 12h16M4 21l4-4M20 21V9m0 12l-4-4M8 9V5a4 4 0 0 1 8 0v4M8 9h8"/></svg>
+                    KOTH Capture
+                </div>
+
+                <div id="kothCaptureBody" class="koth-capture-body">
+                    <div class="empty-state">No active KOTH capture.</div>
+                </div>
+
+            </section>
+
+            <!-- ========================================== -->
             <!-- ACTIVITY LOG -->
             <!-- ========================================== -->
 
@@ -6891,6 +6965,7 @@
             renderServerActivity(data.serverActivity || [])
             renderBadges(data.badgeProgress || null)
             renderActionBar(data.actionBar || null)
+            renderKothCapture(data.kothCapture || null)
 
             // ----------------------------------------------
             // FLAGS
@@ -7863,6 +7938,46 @@
             container.innerHTML = text
                 ? `<span>${escapeHtml(text)}</span>`
                 : '<div class="empty-state">No action bar message.</div>'
+
+        }
+
+        // ==================================================
+        // KOTH CAPTURE
+        // ==================================================
+        // Live "who's capping which KOTH right now" from the in-game
+        // sidebar, cross-referenced against tracked Threats/Allies so
+        // the capping name is colored if it's someone you're watching.
+
+        function renderKothCapture(capture) {
+
+            const container = $('kothCaptureBody')
+
+            if (!container) return
+
+            if (!capture || !capture.koth || !capture.capping) {
+                container.innerHTML = '<div class="empty-state">No active KOTH capture.</div>'
+                return
+            }
+
+            const cappingLower = capture.capping.toLowerCase()
+
+            const isThreat = threats.some(threat => threat.name.toLowerCase() === cappingLower)
+            const isAlly = allies.some(ally => ally.name.toLowerCase() === cappingLower)
+            const cappingClass = isThreat ? 'threat' : (isAlly ? 'ally' : '')
+
+            container.innerHTML = `
+                <div class="koth-capture-name">${escapeHtml(capture.koth)}</div>
+                ${capture.timeLeft ? `<div class="koth-capture-timeleft">${escapeHtml(capture.timeLeft)} left</div>` : ''}
+                <div class="koth-capture-row">
+                    <span class="koth-capture-row-label">Capping</span>
+                    <span class="koth-capture-row-value ${cappingClass}">${escapeHtml(capture.capping)}</span>
+                </div>
+                ${capture.location ? `
+                <div class="koth-capture-row">
+                    <span class="koth-capture-row-label">Location</span>
+                    <span class="koth-capture-row-value">${escapeHtml(capture.location)}</span>
+                </div>` : ''}
+            `
 
         }
 

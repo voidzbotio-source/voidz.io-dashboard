@@ -2332,7 +2332,8 @@
 
         .manage-account-row {
             display: flex;
-            align-items: center;
+            flex-direction: column;
+            align-items: stretch;
             gap: 8px;
 
             padding: 9px 10px;
@@ -2343,15 +2344,19 @@
         }
 
         .manage-account-name {
-            flex: 1;
-            min-width: 0;
-
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
 
             font-weight: 700;
             font-size: 13px;
+        }
+
+        .manage-account-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
         }
 
         .manage-account-row button {
@@ -2362,9 +2367,8 @@
         }
 
         .manage-account-password-input {
-            flex-shrink: 1;
+            flex: 1 1 90px;
             min-width: 0;
-            width: 110px;
 
             padding: 6px 8px;
             font-size: 11px;
@@ -5900,9 +5904,11 @@
                     list.innerHTML = users.map(user => `
                         <div class="manage-account-row">
                             <div class="manage-account-name">${escapeHtml(user.username)}</div>
-                            <input type="password" class="manage-account-password-input" id="resetPw-${escapeHtml(user.username)}" placeholder="New password" autocomplete="new-password">
-                            <button class="manage-account-btn" onclick="resetUserPassword('${escapeHtml(user.username)}')">Reset</button>
-                            <button class="manage-account-btn manage-account-btn-primary" onclick="impersonateUser('${escapeHtml(user.username)}')">Log In As</button>
+                            <div class="manage-account-actions">
+                                <input type="password" class="manage-account-password-input" id="resetPw-${escapeHtml(user.username)}" placeholder="New password" autocomplete="new-password">
+                                <button class="manage-account-btn" onclick="resetUserPassword('${escapeHtml(user.username)}')">Reset</button>
+                                <button class="manage-account-btn manage-account-btn-primary" onclick="impersonateUser('${escapeHtml(user.username)}')">Log In As</button>
+                            </div>
                         </div>
                     `).join('')
 

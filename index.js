@@ -1687,6 +1687,61 @@ class BotSession {
 
     }
 
+    // Deeper follow-up to sidebar-debug: that one came back with an
+    // empty item list even though the sidebar clearly has content in
+    // game, and its title arrived as raw NBT instead of the older
+    // JSON-string format mineflayer's bundled ScoreBoard class expects -
+    // a sign this server's protocol version may have moved past what
+    // that wrapper understands. This bypasses the wrapper and listens
+    // to the raw scoreboard_objective/_display_objective/_score packets
+    // directly for a few seconds, dumping exactly what's on the wire
+    // (including the newer per-score "display_name" NBT field the
+    // wrapper doesn't read at all) so the real fix can be worked out
+    // from actual data instead of guessing further. Trigger from the
+    // browser console with:
+    //   sendCommand('sidebar-debug-raw')
+    debugSidebarRaw() {
+
+        if (!this.bot || !this.bot._client) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Bot is not connected.' })
+            return
+        }
+
+        const emitLine = (line) => {
+            originalLog(`[SIDEBAR-RAW:${this.username}] ${line}`)
+            io.to(this.username).emit('chat', { username: 'DEBUG', message: line, time: new Date().toLocaleTimeString() })
+        }
+
+        emitLine('Capturing raw scoreboard packets for 8 seconds - keep the KOTH capture going...')
+
+        const onObjective = (packet) => {
+            emitLine(`objective action=${packet.action} name=${JSON.stringify(packet.name)} displayText=${JSON.stringify(packet.displayText)}`)
+        }
+
+        const onDisplay = (packet) => {
+            emitLine(`display position=${packet.position} name=${JSON.stringify(packet.name)}`)
+        }
+
+        const onScore = (packet) => {
+            emitLine(`score itemName=${JSON.stringify(packet.itemName)} scoreName=${JSON.stringify(packet.scoreName)} value=${packet.value} display_name=${JSON.stringify(packet.display_name)}`)
+        }
+
+        this.bot._client.on('scoreboard_objective', onObjective)
+        this.bot._client.on('scoreboard_display_objective', onDisplay)
+        this.bot._client.on('scoreboard_score', onScore)
+
+        setTimeout(() => {
+
+            this.bot._client.removeListener('scoreboard_objective', onObjective)
+            this.bot._client.removeListener('scoreboard_display_objective', onDisplay)
+            this.bot._client.removeListener('scoreboard_score', onScore)
+
+            emitLine('Done capturing.')
+
+        }, 8000)
+
+    }
+
     // One-off diagnostic for the Black Market auto-buy feature. Sends
     // /bm itself (must run through the BOT's own connection - a
     // human manually opening /bm on a separate client/session never
@@ -3090,6 +3145,7 @@ function handleWebCommand(username, command) {
         case 'tablist-debug': botSession.debugTabList(); break
         case 'bm-debug': botSession.debugNextWindow(); break
         case 'sidebar-debug': botSession.debugSidebar(); break
+        case 'sidebar-debug-raw': botSession.debugSidebarRaw(); break
         case 'where': botSession.showWhere(); break
         case 'lastchat': botSession.showLastChat(); break
         case 'keysamount': botSession.showKeysAmount(); break

@@ -326,20 +326,105 @@ function updateUser(username, patch) {
 // server, and whether the FlareMC-LifeSteal automation applies)
 // ============================================================
 
+// In-memory cache of the whole shared bot-configs.json, backed by a
+// debounced ASYNC write-behind instead of a read+write on every call.
+// getTeamHistory/saveTeamHistory, getKothHistory/saveKothHistory,
+// saveServerActivity (fired on every KOTH capture server-wide, not
+// just our own team's), saveBadgeProgress, savePreferences, etc. all
+// go through loadBotConfigs()/saveBotConfigs() - with the old
+// fs.readFileSync + fs.writeFileSync of the ENTIRE multi-account file
+// on every single one of those events, a busy server's worth of KOTH
+// captures was blocking the event loop synchronously often enough to
+// stall mineflayer's physics tick timer and trip FlareMC's anti-cheat
+// TickTimer check (same class of bug as the appLogStream fix above,
+// just in the config persistence path instead of logging).
+let botConfigsCache = null
+let botConfigsWriteTimer = null
+let botConfigsWriteInFlight = false
+let botConfigsWritePending = false
+
 function loadBotConfigs() {
 
-    try {
-        const raw = fs.readFileSync(BOT_CONFIGS_FILE, 'utf8')
-        const parsed = JSON.parse(raw)
-        return (parsed && typeof parsed === 'object') ? parsed : {}
-    } catch {
-        return {}
+    if (!botConfigsCache) {
+
+        try {
+            const raw = fs.readFileSync(BOT_CONFIGS_FILE, 'utf8')
+            const parsed = JSON.parse(raw)
+            botConfigsCache = (parsed && typeof parsed === 'object') ? parsed : {}
+        } catch {
+            botConfigsCache = {}
+        }
+
     }
+
+    return botConfigsCache
 
 }
 
+function flushBotConfigs() {
+
+    if (botConfigsWriteInFlight) {
+        botConfigsWritePending = true
+        return
+    }
+
+    botConfigsWriteInFlight = true
+
+    const snapshot = JSON.stringify(botConfigsCache, null, 2)
+
+    fs.writeFile(BOT_CONFIGS_FILE, snapshot, error => {
+
+        botConfigsWriteInFlight = false
+
+        if (error) {
+            originalError('[BOT-CONFIGS] Failed to save:', error.message)
+        }
+
+        if (botConfigsWritePending) {
+            botConfigsWritePending = false
+            flushBotConfigs()
+        }
+
+    })
+
+}
+
+// Only ever called with the same object loadBotConfigs() already
+// returned (mutated in place by callers), so this just needs to
+// schedule it to disk - never block on the write itself.
 function saveBotConfigs(configs) {
-    fs.writeFileSync(BOT_CONFIGS_FILE, JSON.stringify(configs, null, 2))
+
+    botConfigsCache = configs
+
+    if (botConfigsWriteTimer) {
+        clearTimeout(botConfigsWriteTimer)
+    }
+
+    botConfigsWriteTimer = setTimeout(() => {
+        botConfigsWriteTimer = null
+        flushBotConfigs()
+    }, 500)
+
+}
+
+// Last-resort synchronous flush for process shutdown only, where
+// blocking briefly is harmless (nothing left to stall) and losing
+// the last few seconds of history on every restart would not be.
+function flushBotConfigsSync() {
+
+    if (botConfigsWriteTimer) {
+        clearTimeout(botConfigsWriteTimer)
+        botConfigsWriteTimer = null
+    }
+
+    if (!botConfigsCache) return
+
+    try {
+        fs.writeFileSync(BOT_CONFIGS_FILE, JSON.stringify(botConfigsCache, null, 2))
+    } catch (error) {
+        originalError('[BOT-CONFIGS] Failed to save on shutdown:', error.message)
+    }
+
 }
 
 function getBotConfig(username) {
@@ -3762,6 +3847,8 @@ function shutdownServer() {
     for (const botSession of sessions.values()) {
         botSession.stop()
     }
+
+    flushBotConfigsSync()
 
     rl.close()
 

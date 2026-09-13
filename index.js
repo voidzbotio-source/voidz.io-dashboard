@@ -1010,6 +1010,21 @@ class BotSession {
 
     }
 
+    // uuid -> current username for everyone currently visible. A real
+    // Minecraft username change only takes effect for other clients
+    // once that player reconnects, but the UUID never changes - this
+    // lets Threats/Allies/Auto-Invite follow someone across a rename
+    // instead of silently losing track of them under the old name.
+    getUuidToUsername() {
+
+        if (!this.bot || !this.bot.uuidToUsername) {
+            return {}
+        }
+
+        return { ...this.bot.uuidToUsername }
+
+    }
+
     // Reads the live sidebar scoreboard (the "LIFESTEAL / Season.. /
     // KOTH: .. / Capping: .. / Time Left: .." panel in the top-right
     // of the game). Sidebar lines are rendered through scoreboard
@@ -1252,6 +1267,7 @@ class BotSession {
 
             players,
             playerCount: players.length,
+            uuidToUsername: online ? this.getUuidToUsername() : {},
 
             keys,
             totalKeys: keys.vote + keys.exclusive + keys.insane,
@@ -3408,7 +3424,13 @@ app.post('/api/auto-reinvite', (req, res) => {
 
         const lastSeen = (typeof entry === 'object' && Number.isFinite(entry?.lastSeen)) ? entry.lastSeen : null
 
-        list.push({ name, lastSeen })
+        // Tracked so a later username change (real Minecraft account
+        // renames only take effect for other clients once the player
+        // reconnects) can be followed automatically instead of silently
+        // falling out of tracking under the old name.
+        const uuid = (typeof entry === 'object' && typeof entry?.uuid === 'string' && entry.uuid) ? entry.uuid : null
+
+        list.push({ name, lastSeen, uuid })
 
     }
 

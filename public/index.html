@@ -6952,15 +6952,18 @@
             )
 
             updateThreats(
-                data.players || []
+                data.players || [],
+                data.uuidToUsername || {}
             )
 
             updateAllies(
-                data.players || []
+                data.players || [],
+                data.uuidToUsername || {}
             )
 
             updateAutoInvite(
-                data.players || []
+                data.players || [],
+                data.uuidToUsername || {}
             )
 
             // ----------------------------------------------
@@ -8397,6 +8400,62 @@
         )
 
         // ==================================================
+        // RENAME TRACKING (NAMEMC-STYLE)
+        // ==================================================
+        // A real Minecraft username change only takes effect for other
+        // clients once that player reconnects - but their UUID never
+        // changes. Threats/Allies/Auto-Invite each get a `uuid` field
+        // backfilled the first time they're seen online, so a later
+        // rename can be followed automatically instead of the entry
+        // silently going stale under a name nobody uses anymore.
+
+        function findUuidForName(uuidToUsername, name) {
+
+            const lower = name.toLowerCase()
+
+            for (const uuid in uuidToUsername) {
+                if (uuidToUsername[uuid].toLowerCase() === lower) {
+                    return uuid
+                }
+            }
+
+            return null
+
+        }
+
+        // Checks one tracked list for entries whose saved UUID is now
+        // seen under a different username, renames them in place, and
+        // returns whether anything changed (so callers know to persist
+        // and re-render). Must run BEFORE online/offline detection for
+        // that list, since a stale old name would otherwise look like
+        // "went offline" even though they're still online under the
+        // new one.
+        function applyKnownRenames(list, uuidToUsername, label) {
+
+            let renamed = false
+
+            for (const entry of list) {
+
+                const currentName = uuidToUsername[entry.uuid]
+
+                if (!entry.uuid || !currentName) continue
+
+                if (currentName.toLowerCase() === entry.name.toLowerCase()) continue
+
+                const oldName = entry.name
+
+                entry.name = currentName
+                renamed = true
+
+                showToast(`${label} renamed: ${oldName} → ${currentName}`, 'success')
+
+            }
+
+            return renamed
+
+        }
+
+        // ==================================================
         // TRACKED-PLAYER ACTIVITY / AFK DETECTION
         // ==================================================
 
@@ -8733,9 +8792,12 @@
         let lastKnownThreatPlayers = []
         let lastThreatsOnlineCount = 0
 
-        function updateThreats(players) {
+        function updateThreats(players, uuidToUsername) {
 
             lastKnownThreatPlayers = Array.isArray(players) ? players : []
+            uuidToUsername = uuidToUsername || {}
+
+            const renamed = applyKnownRenames(threats, uuidToUsername, 'Threat')
 
             const onlineSet =
                 new Set(lastKnownThreatPlayers.map(name => name.toLowerCase()))
@@ -8751,7 +8813,15 @@
                 const wasOnline = threatOnlineState[key]
 
                 if (isOnline) {
+
                     onlineCount++
+
+                    // Backfill the UUID the first time we see them
+                    // online, so a future rename can be followed.
+                    if (!threat.uuid) {
+                        threat.uuid = findUuidForName(uuidToUsername, threat.name)
+                    }
+
                 }
 
                 if (isOnline && !wasOnline) {
@@ -8788,7 +8858,7 @@
                 playThreatOfflineAlert()
             }
 
-            if (newlyOnline || newlyOffline) {
+            if (newlyOnline || newlyOffline || renamed) {
                 saveThreats()
             }
 
@@ -9044,9 +9114,12 @@
 
         let lastKnownAllyPlayers = []
 
-        function updateAllies(players) {
+        function updateAllies(players, uuidToUsername) {
 
             lastKnownAllyPlayers = Array.isArray(players) ? players : []
+            uuidToUsername = uuidToUsername || {}
+
+            const renamed = applyKnownRenames(allies, uuidToUsername, 'Ally')
 
             const onlineSet =
                 new Set(lastKnownAllyPlayers.map(name => name.toLowerCase()))
@@ -9062,7 +9135,13 @@
                 const wasOnline = allyOnlineState[key]
 
                 if (isOnline) {
+
                     onlineCount++
+
+                    if (!ally.uuid) {
+                        ally.uuid = findUuidForName(uuidToUsername, ally.name)
+                    }
+
                 }
 
                 if (isOnline && !wasOnline) {
@@ -9096,7 +9175,7 @@
                 playAllyOfflineAlert()
             }
 
-            if (newlyOnline || newlyOffline) {
+            if (newlyOnline || newlyOffline || renamed) {
                 saveAllies()
             }
 
@@ -9252,8 +9331,8 @@
                     // added since.
                     autoInviteList = (Array.isArray(data.list) ? data.list : [])
                         .map(entry => typeof entry === 'string'
-                            ? { name: entry, lastSeen: null }
-                            : { name: entry?.name || '', lastSeen: entry?.lastSeen || null }
+                            ? { name: entry, lastSeen: null, uuid: null }
+                            : { name: entry?.name || '', lastSeen: entry?.lastSeen || null, uuid: entry?.uuid || null }
                         )
                         .filter(entry => entry.name)
 
@@ -9304,7 +9383,7 @@
                 return
             }
 
-            autoInviteList.push({ name, lastSeen: null })
+            autoInviteList.push({ name, lastSeen: null, uuid: null })
 
             saveAutoInviteList()
             renderAutoInvite(lastKnownAutoInvitePlayers)
@@ -9334,9 +9413,12 @@
 
         let autoInviteOnlineState = {}
 
-        function updateAutoInvite(players) {
+        function updateAutoInvite(players, uuidToUsername) {
 
             lastKnownAutoInvitePlayers = Array.isArray(players) ? players : []
+            uuidToUsername = uuidToUsername || {}
+
+            const renamed = applyKnownRenames(autoInviteList, uuidToUsername, 'Auto-Invite')
 
             const onlineSet =
                 new Set(lastKnownAutoInvitePlayers.map(name => name.toLowerCase()))
@@ -9351,7 +9433,13 @@
                 const wasOnline = autoInviteOnlineState[key]
 
                 if (isOnline) {
+
                     onlineCount++
+
+                    if (!entry.uuid) {
+                        entry.uuid = findUuidForName(uuidToUsername, entry.name)
+                    }
+
                 } else if (wasOnline) {
                     entry.lastSeen = Date.now()
                     seenChanged = true
@@ -9359,6 +9447,10 @@
 
                 autoInviteOnlineState[key] = isOnline
 
+            }
+
+            if (renamed) {
+                seenChanged = true
             }
 
             if (seenChanged) {

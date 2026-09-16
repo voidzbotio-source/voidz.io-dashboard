@@ -868,6 +868,166 @@ function getMillisecondsUntilNextEasternTime(timezone, hour, minute) {
 }
 
 // ============================================================
+// RAW SCOREBOARD TRACKER
+// ============================================================
+// Replaces mineflayer's bundled ScoreBoard plugin, which is dead on
+// this server's protocol version: modern (1.20.3+) scoreboard_score
+// packets no longer carry an `action` field at all (removal moved to
+// its own reset_score packet), but mineflayer's plugin still gates
+// every add on `packet.action === 0` - which is never true anymore,
+// since `packet.action` is just undefined. The result is itemsMap
+// never gets populated for ANY objective, on this protocol version,
+// confirmed via a raw packet capture (sidebar-debug/sidebar-debug-raw)
+// that showed real scoreboard_score packets arriving with real
+// values while bot.scoreboard.sidebar.items stayed empty. This is
+// what silently broke both the KOTH Capture card and the low-HP
+// auto-kick feature.
+//
+// Listens to the raw protocol packets directly instead. Text (title,
+// and the newer optional per-score display_name NBT field) is
+// resolved through prismarine-chat's fromNotch(), same as mineflayer
+// itself does correctly elsewhere (team.js) but its scoreboard.js
+// does NOT (it wrongly does JSON.parse(title).text, which only ever
+// worked when displayText was a JSON string pre-1.20.3).
+class RawScoreboardTracker {
+
+    constructor(bot) {
+
+        this.bot = bot
+        this.objectives = new Map() // name -> { titleNbt, entries: Map<itemName, {value, displayNbt}> }
+        this.positions = {}         // position (0=list, 1=sidebar, 2=belowName) -> objective name
+
+        const client = bot._client
+
+        client.on('scoreboard_objective', packet => this.onObjective(packet))
+        client.on('scoreboard_display_objective', packet => this.onDisplay(packet))
+        client.on('scoreboard_score', packet => this.onScore(packet))
+        client.on('reset_score', packet => this.onResetScore(packet))
+
+    }
+
+    onObjective(packet) {
+
+        if (packet.action === 0) {
+            this.objectives.set(packet.name, { titleNbt: packet.displayText, entries: new Map() })
+        } else if (packet.action === 1) {
+
+            this.objectives.delete(packet.name)
+
+            for (const position in this.positions) {
+                if (this.positions[position] === packet.name) delete this.positions[position]
+            }
+
+        } else if (packet.action === 2) {
+
+            const objective = this.objectives.get(packet.name)
+
+            if (objective) objective.titleNbt = packet.displayText
+
+        }
+
+    }
+
+    onDisplay(packet) {
+        this.positions[packet.position] = packet.name
+    }
+
+    onScore(packet) {
+
+        const objective = this.objectives.get(packet.scoreName)
+
+        if (!objective) return
+
+        objective.entries.set(packet.itemName, { value: packet.value, displayNbt: packet.display_name || null })
+
+    }
+
+    onResetScore(packet) {
+
+        if (packet.objective_name) {
+
+            const objective = this.objectives.get(packet.objective_name)
+
+            if (objective) objective.entries.delete(packet.entity_name)
+
+        } else {
+
+            for (const objective of this.objectives.values()) {
+                objective.entries.delete(packet.entity_name)
+            }
+
+        }
+
+    }
+
+    resolveText(nbt) {
+
+        if (nbt === null || nbt === undefined) return ''
+
+        try {
+            const ChatMessage = require('prismarine-chat')(this.bot.registry)
+            return ChatMessage.fromNotch(nbt).toString()
+        } catch {
+            return typeof nbt === 'string' ? nbt : ''
+        }
+
+    }
+
+    resolveDisplayName(itemName, displayNbt) {
+
+        if (displayNbt) {
+
+            const text = this.resolveText(displayNbt)
+
+            if (text) return text
+
+        }
+
+        // Fall back to the classic "invisible fake name + colored team
+        // prefix/suffix" trick, same as mineflayer's own (working)
+        // team.displayName().
+        const team = this.bot.teamMap?.[itemName]
+
+        if (team) {
+
+            try {
+                return team.displayName(itemName).toString()
+            } catch {}
+
+        }
+
+        return itemName
+
+    }
+
+    // Same shape as mineflayer's bot.scoreboard.list/.sidebar used to
+    // provide: { title, items: [{name, value, displayName}] }, sorted
+    // by value descending like the original ScoreBoard.items getter.
+    getPosition(position) {
+
+        const name = this.positions[position]
+
+        if (!name) return null
+
+        const objective = this.objectives.get(name)
+
+        if (!objective) return null
+
+        const items = [...objective.entries.entries()]
+            .map(([itemName, entry]) => ({
+                name: itemName,
+                value: entry.value,
+                displayName: this.resolveDisplayName(itemName, entry.displayNbt)
+            }))
+            .sort((a, b) => b.value - a.value)
+
+        return { title: this.resolveText(objective.titleNbt), items }
+
+    }
+
+}
+
+// ============================================================
 // BOT SESSION
 // ============================================================
 // One instance per account. Owns its own mineflayer bot, its
@@ -1027,27 +1187,20 @@ class BotSession {
 
     // Reads the live sidebar scoreboard (the "LIFESTEAL / Season.. /
     // KOTH: .. / Capping: .. / Time Left: .." panel in the top-right
-    // of the game). Sidebar lines are rendered through scoreboard
-    // teams (prefix + colored name + suffix), so the readable text
-    // comes from team.displayName() rather than the raw entry name -
-    // same trick as everything else that reads real scoreboard data.
+    // of the game) via the raw scoreboard tracker (see
+    // RawScoreboardTracker - mineflayer's own bot.scoreboard never
+    // populates on this server's protocol version).
     getSidebarLines() {
 
-        const sidebar = this.bot?.scoreboard?.sidebar
+        const sidebar = this.rawScoreboard?.getPosition(1)
 
         if (!sidebar) {
             return []
         }
 
         return sidebar.items
-            .map(item => {
-                try {
-                    return item.displayName.toString()
-                } catch {
-                    return ''
-                }
-            })
-            .filter(line => line.trim())
+            .map(item => item.displayName)
+            .filter(line => line && line.trim())
 
     }
 
@@ -1752,7 +1905,7 @@ class BotSession {
     //   sendCommand('sidebar-debug')
     debugSidebar() {
 
-        const sidebar = this.bot?.scoreboard?.sidebar
+        const sidebar = this.rawScoreboard?.getPosition(1)
 
         if (!sidebar) {
             io.to(this.username).emit('notice', { type: 'error', text: 'No sidebar scoreboard is active right now.' })
@@ -1763,11 +1916,7 @@ class BotSession {
         const lines = [`sidebar title: ${JSON.stringify(sidebar.title)}`]
 
         for (const item of sidebar.items) {
-
-            const raw = item.displayName?.toString?.() ?? String(item.displayName ?? '(no display name)')
-
-            lines.push(`[${item.value}] ${JSON.stringify(raw)}`)
-
+            lines.push(`[${item.value}] ${JSON.stringify(item.displayName)}`)
         }
 
         // Printed via originalLog too (not just the socket) so this is
@@ -1840,6 +1989,63 @@ class BotSession {
             emitLine('Done capturing.')
 
         }, 8000)
+
+    }
+
+    // Definitive check for which scoreboard objective (and what
+    // units) actually carry HP, for the low-HP auto-kick feature.
+    // checkAutoInviteLowHealth() currently reads position 2
+    // (belowName) as its best guess - a raw packet capture showed
+    // that objective's values vary per player (30/10/10) while
+    // position 0 (the tab-list objective the OLD, since-removed
+    // version of this feature used) sat flat at 0 for every player
+    // sampled - but that's circumstantial, not proven. This
+    // correlates the bot's OWN live health (bot.health, from the
+    // always-reliable update_health packet, entirely independent of
+    // the scoreboard) against both objectives' values for the bot's
+    // own name, live, for 30 seconds. Take damage or heal during the
+    // window to see which one (if either) actually tracks, and in
+    // what units. Trigger from the browser console with:
+    //   sendCommand('sidebar-debug-hp')
+    debugHpSource() {
+
+        if (!this.bot) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Bot is not connected.' })
+            return
+        }
+
+        const emitLine = (line) => {
+            originalLog(`[HP-DEBUG:${this.username}] ${line}`)
+            io.to(this.username).emit('chat', { username: 'DEBUG', message: line, time: new Date().toLocaleTimeString() })
+        }
+
+        emitLine(`Watching for 30 seconds - take damage or heal the bot's account now if you can. bot.health right now: ${this.bot.health}`)
+
+        const report = () => {
+
+            const list = this.rawScoreboard?.getPosition(0)
+            const belowName = this.rawScoreboard?.getPosition(2)
+
+            const listEntry = list?.items.find(item => item.name === this.bot.username)
+            const belowNameEntry = belowName?.items.find(item => item.name === this.bot.username)
+
+            emitLine(`bot.health=${this.bot.health}  list(0)=${listEntry?.value ?? '-'}  belowName(2)=${belowNameEntry?.value ?? '-'}`)
+
+        }
+
+        report()
+
+        const onHealth = () => report()
+
+        this.bot.on('health', onHealth)
+
+        setTimeout(() => {
+
+            this.bot.removeListener('health', onHealth)
+
+            emitLine('Done watching.')
+
+        }, 30000)
 
     }
 
@@ -2347,13 +2553,19 @@ class BotSession {
     // brings them straight back in once they're safe. `lowHpHandled`
     // stops this firing every tick while someone stays critical.
     //
-    // HP comes from the tab-list scoreboard (display slot 0, exposed
-    // by mineflayer as bot.scoreboard.list) - a real integer score
-    // per player, not text. A displayName-parsing version of this
-    // shipped first and never matched anything: a tablist-debug dump
-    // showed the tab list's HP number isn't in the display name text
-    // at all (just a colored bar + the name), confirming it's driven
-    // by this separate scoreboard objective instead.
+    // HP comes from the "below name" scoreboard objective (display
+    // slot 2, the number shown under each player's nametag in-world -
+    // exposed here via RawScoreboardTracker since mineflayer's own
+    // bot.scoreboard never populates on this server's protocol
+    // version - see the class comment above BotSession). A raw
+    // packet capture confirmed this objective's values vary per
+    // player and move (e.g. 30/10/10) while the tab-list objective
+    // (slot 0) sat flat at 0 for everyone sampled - the earlier
+    // displayName-parsing version of this never matched anything at
+    // all, and the tab-list-objective version after that turned out
+    // to be reading the wrong objective's dead wrapper. Still worth
+    // a final confirmation against a live bot.health correlation
+    // (sidebar-debug-hp) before fully trusting this in production.
     checkAutoInviteLowHealth() {
 
         if (!this.bot || !this.bot.players) return
@@ -2368,9 +2580,9 @@ class BotSession {
 
         if (trackedNames.length === 0) return
 
-        const listBoard = this.bot.scoreboard?.list
+        const belowName = this.rawScoreboard?.getPosition(2)
 
-        if (!listBoard) return
+        if (!belowName) return
 
         const onlineNames = Object.keys(this.bot.players)
 
@@ -2385,7 +2597,7 @@ class BotSession {
                 continue
             }
 
-            const scoreEntry = listBoard.itemsMap?.[actualName]
+            const scoreEntry = belowName.items.find(item => item.name === actualName)
             const hp = Number.isFinite(scoreEntry?.value) ? scoreEntry.value : null
 
             if (hp === null) continue
@@ -2778,6 +2990,8 @@ class BotSession {
             }
 
         })
+
+        this.rawScoreboard = new RawScoreboardTracker(this.bot)
 
         this.lastInventoryTouchedAt = 0
 
@@ -3247,6 +3461,7 @@ function handleWebCommand(username, command) {
         case 'bm-debug': botSession.debugNextWindow(); break
         case 'sidebar-debug': botSession.debugSidebar(); break
         case 'sidebar-debug-raw': botSession.debugSidebarRaw(); break
+        case 'sidebar-debug-hp': botSession.debugHpSource(); break
         case 'where': botSession.showWhere(); break
         case 'lastchat': botSession.showLastChat(); break
         case 'keysamount': botSession.showKeysAmount(); break

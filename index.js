@@ -2337,13 +2337,17 @@ class BotSession {
     // has been captured!" / "<player> has received 3x PvP Keys and
     // 25 Team Points!") - not anchored to a specific KOTH name since
     // there are several (Greek, Colosseum, Temple, CPvP, Agora, ...) -
-    // and team deaths ("Your team has lost 5 points due to <player>'s
-    // death.").
+    // team deaths ("Your team has lost 5 points due to <player>'s
+    // death.") - and a teammate's own online/offline status flipping
+    // ("TEAMS ➟ <player> is now offline!"), which is separate from
+    // joining/leaving/kicked and wasn't updating the member dots
+    // promptly before.
     checkTeamRosterChange(text) {
 
         const isRosterChange =
             /^TEAMS ➟ .+ has (joined|left) the team\.?$/i.test(text) ||
             /^TEAMS ➟ .+ has been kicked\b/i.test(text) ||
+            /^TEAMS ➟ .+ is now (online|offline)!?$/i.test(text) ||
             /\bKOTH has been captured!?$/i.test(text) ||
             /\bhas received\b.*\bteam points\b/i.test(text) ||
             /\byour team has lost \d+ points? due to\b/i.test(text)

@@ -9,6 +9,7 @@
 // ============================================================
 
 const mineflayer = require('mineflayer')
+const bedrock = require('bedrock-protocol')
 const { SocksClient } = require('socks')
 const express = require('express')
 const http = require('http')
@@ -574,14 +575,23 @@ function normalizeBotConfig(input) {
     const microsoftEmail = String(input?.microsoftEmail || '').trim()
     const host = String(input?.host || '').trim()
 
+    const platform = input?.platform === 'bedrock' ? 'bedrock' : 'java'
+
     const portRaw = Number(input?.port)
-    const port = (Number.isFinite(portRaw) && portRaw > 0 && portRaw <= 65535) ? portRaw : 25565
+    const defaultPort = platform === 'bedrock' ? 19132 : 25565
+    const port = (Number.isFinite(portRaw) && portRaw > 0 && portRaw <= 65535) ? portRaw : defaultPort
 
     // Blank version means "let mineflayer auto-detect it" - lets
     // users connect without knowing their server's exact version.
+    // Not used at all for Bedrock - bedrock-protocol pings the
+    // server itself to discover the right protocol version.
     const version = String(input?.version || '').trim()
 
-    const lifestealAutopilot = !!input?.lifestealAutopilot
+    // No automation on Bedrock accounts by design (no trivia, no
+    // Black Market auto-buy/ping, no LifeSteal auto-transfer/keyall/
+    // JQ retry) - forced off here regardless of what's submitted,
+    // rather than trusting every call site to check platform too.
+    const lifestealAutopilot = platform === 'bedrock' ? false : !!input?.lifestealAutopilot
 
     // What to send to go AFK, both from the LifeSteal Autopilot flow
     // and the manual AFK button. Different servers use different
@@ -615,7 +625,7 @@ function normalizeBotConfig(input) {
     const localAddress = String(input?.localAddress || '').trim()
 
     return {
-        microsoftEmail, host, port, version, lifestealAutopilot, afkCommand, discordWebhookUrl, discordRoleId,
+        microsoftEmail, host, port, platform, version, lifestealAutopilot, afkCommand, discordWebhookUrl, discordRoleId,
         proxyHost, proxyPort, proxyUsername, proxyPassword, localAddress
     }
 
@@ -787,6 +797,37 @@ function flattenChatComponents(node, out = []) {
     }
 
     return out
+
+}
+
+// Bedrock has no JSON chat component tree like Java's - just plain
+// text with legacy "§<code>" formatting codes embedded directly.
+// Splits text on those codes into the same { text, color } leaf shape
+// flattenChatComponents produces, so tryParseTeamInfoLine's member-
+// list parsing can work from either source via classifyMemberColor.
+// Only the codes that actually matter for online/offline classification
+// are mapped - everything else just carries no color (null).
+const LEGACY_COLOR_CODES = { a: 'green', 2: 'dark_green', c: 'red', 4: 'dark_red' }
+
+function parseLegacyColorLeaves(text) {
+
+    const leaves = []
+    const pattern = /§([0-9a-fk-or])|([^§]+)/gi
+
+    let currentColor = null
+    let match
+
+    while ((match = pattern.exec(text)) !== null) {
+
+        if (match[1]) {
+            currentColor = LEGACY_COLOR_CODES[match[1].toLowerCase()] || null
+        } else if (match[2]) {
+            leaves.push({ text: match[2], color: currentColor })
+        }
+
+    }
+
+    return leaves
 
 }
 
@@ -1134,6 +1175,16 @@ class BotSession {
         // every single tick while they stay critical.
         this.lowHpHandled = new Set()
 
+        // Bedrock-platform accounts (config.platform === 'bedrock')
+        // connect via bedrock-protocol instead of mineflayer - a
+        // different client object with none of mineflayer's bot.players/
+        // bot.entity/bot.health/bot.inventory abstractions. bedrockPlayers
+        // (uuid -> username, from the player_list packet) stands in for
+        // bot.players, and bedrockSpawned stands in for bot.entity when
+        // computing online status.
+        this.bedrockPlayers = new Map()
+        this.bedrockSpawned = false
+
     }
 
     // --------------------------------------------------------
@@ -1160,6 +1211,14 @@ class BotSession {
 
     getVisiblePlayers() {
 
+        if (this.config.platform === 'bedrock') {
+
+            return [...this.bedrockPlayers.values()]
+                .filter(name => name)
+                .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+
+        }
+
         if (!this.bot || !this.bot.players) {
             return []
         }
@@ -1176,6 +1235,10 @@ class BotSession {
     // lets Threats/Allies/Auto-Invite follow someone across a rename
     // instead of silently losing track of them under the old name.
     getUuidToUsername() {
+
+        if (this.config.platform === 'bedrock') {
+            return Object.fromEntries(this.bedrockPlayers)
+        }
 
         if (!this.bot || !this.bot.uuidToUsername) {
             return {}
@@ -1388,7 +1451,9 @@ class BotSession {
 
     getDashboardData() {
 
-        const online = !!(this.bot && this.bot.entity)
+        const online = this.config.platform === 'bedrock'
+            ? !!(this.bot && this.bedrockSpawned)
+            : !!(this.bot && this.bot.entity)
         const keys = online ? this.getKeyAmounts() : { vote: 0, exclusive: 0, insane: 0 }
         const players = this.getVisiblePlayers()
 
@@ -1486,12 +1551,35 @@ class BotSession {
 
     sendMinecraftChat(message) {
 
-        if (!this.bot || !this.bot.entity) {
-            originalLog(`[CHAT:${this.username}] Bot is not connected.`)
+        if (!message) {
             return
         }
 
-        if (!message) {
+        if (this.config.platform === 'bedrock') {
+
+            if (!this.bot || !this.bedrockSpawned) {
+                originalLog(`[CHAT:${this.username}] Bot is not connected.`)
+                return
+            }
+
+            this.bot.queue('text', {
+                type: 'chat',
+                needs_translation: false,
+                source_name: this.bot.username,
+                xuid: this.bot.profile?.xuid || '',
+                platform_chat_id: '',
+                filtered_message: '',
+                message
+            })
+
+            this.log(`Dashboard/terminal sent: ${message}`)
+
+            return
+
+        }
+
+        if (!this.bot || !this.bot.entity) {
+            originalLog(`[CHAT:${this.username}] Bot is not connected.`)
             return
         }
 
@@ -1757,7 +1845,11 @@ class BotSession {
 
         if (this.shuttingDown) return
 
-        if (this.bot && this.bot.entity) {
+        const connected = this.config.platform === 'bedrock'
+            ? !!(this.bot && this.bedrockSpawned)
+            : !!(this.bot && this.bot.entity)
+
+        if (connected) {
             originalLog(`[REMOTE:${this.username}] Start requested, but the bot is already running.`)
             return
         }
@@ -1780,7 +1872,11 @@ class BotSession {
 
     stopBotRemote() {
 
-        if (!this.botEnabled && (!this.bot || !this.bot.entity)) {
+        const connected = this.config.platform === 'bedrock'
+            ? !!(this.bot && this.bedrockSpawned)
+            : !!(this.bot && this.bot.entity)
+
+        if (!this.botEnabled && !connected) {
             originalLog(`[REMOTE:${this.username}] Stop requested, but the bot is already stopped.`)
             return
         }
@@ -1804,7 +1900,17 @@ class BotSession {
         this.setState('STOPPED')
 
         if (this.bot) {
-            try { this.bot.quit('Stopped via dashboard') } catch {}
+
+            try {
+
+                if (this.config.platform === 'bedrock') {
+                    this.bot.disconnect('Stopped via dashboard')
+                } else {
+                    this.bot.quit('Stopped via dashboard')
+                }
+
+            } catch {}
+
         }
 
     }
@@ -2275,22 +2381,35 @@ class BotSession {
 
         const labelMatch = text.match(/^([A-Za-z ]+):\s*(.*)$/)
 
-        if (labelMatch && json) {
+        if (labelMatch && (json || this.config.platform === 'bedrock')) {
 
             const label = labelMatch[1].trim()
-            const flat = flattenChatComponents(json)
+
+            // Java sends a rich JSON chat component tree, one child per
+            // member, so each leaf is already exactly one name. Bedrock
+            // has no such tree - only the raw text with legacy "§<code>"
+            // formatting codes - and a single colored run can contain
+            // several comma-separated names together, so those need
+            // splitting on top of the usual leaf extraction.
+            const flat = json ? flattenChatComponents(json) : parseLegacyColorLeaves(text)
             const members = []
 
             for (const leaf of flat) {
 
-                const value = (leaf.text || '').trim()
+                const pieces = json ? [leaf.text] : String(leaf.text || '').split(',')
 
-                if (!value) continue
-                if (value === `${label}:`) continue
-                if (/^[[\],]+$/.test(value)) continue
-                if (/^\d+$/.test(value)) continue
+                for (const piece of pieces) {
 
-                members.push({ name: value, online: classifyMemberColor(leaf.color) })
+                    const value = (piece || '').trim()
+
+                    if (!value) continue
+                    if (value === `${label}:`) continue
+                    if (/^[[\],]+$/.test(value)) continue
+                    if (/^\d+$/.test(value)) continue
+
+                    members.push({ name: value, online: classifyMemberColor(leaf.color) })
+
+                }
 
             }
 
@@ -2908,6 +3027,10 @@ class BotSession {
         if (this.shuttingDown) return
         if (!this.botEnabled) return
 
+        if (this.config.platform === 'bedrock') {
+            return this.connectBedrock()
+        }
+
         this.lifeStealReached = false
         this.recoveryRunning = false
 
@@ -3304,6 +3427,210 @@ class BotSession {
     }
 
     // --------------------------------------------------------
+    // CONNECT (Bedrock)
+    // --------------------------------------------------------
+    // No automation here by design (no trivia, no Black Market ping,
+    // no LifeSteal autopilot - normalizeBotConfig() forces
+    // lifestealAutopilot off for platform: 'bedrock'). Team tracking,
+    // KOTH/death logging, chat relay, and manual actions (Kick, AFK,
+    // Quick Actions) all still work since those are either passive
+    // text parsing or user-triggered, not autonomous behavior. HP,
+    // inventory/Keys, the KOTH Capture card, Action Bar, and low-HP
+    // auto-kick are NOT supported yet - those need Bedrock-specific
+    // packet handling (different formats than Java's) that hasn't
+    // been built.
+    //
+    // No proxy/localAddress support yet either - bedrock-protocol's
+    // connection options weren't verified against those, so this
+    // always connects directly.
+    async connectBedrock() {
+
+        if (this.shuttingDown) return
+        if (!this.botEnabled) return
+
+        this.stopJqRetry()
+        this.stopHomeTimer()
+        this.stopRecoveryTimer()
+
+        this.currentWorld = 'Unknown'
+        this.setState('CONNECTING')
+        this.bedrockSpawned = false
+        this.bedrockPlayers.clear()
+
+        this.log(`Connecting (Bedrock) to ${this.config.host}:${this.config.port}...`)
+
+        originalLog(`[${new Date().toLocaleString()}] [${this.username}] Connecting (Bedrock) to ${this.config.host}:${this.config.port}...`)
+
+        const profilesFolder = path.join(AUTH_CACHE_DIR, `${this.username}-bedrock`)
+        fs.mkdirSync(profilesFolder, { recursive: true })
+
+        this.bot = bedrock.createClient({
+
+            host: this.config.host,
+            port: this.config.port || 19132,
+            username: this.config.microsoftEmail,
+            profilesFolder,
+            raknetBackend: 'jsp-raknet',
+
+            onMsaCode: data => {
+
+                io.to(this.username).emit('msaCode', {
+                    verificationUri: data.verification_uri,
+                    userCode: data.user_code,
+                    message: data.message
+                })
+
+                originalLog(`[MSA:${this.username}] ${data.message}`)
+
+                this.log(`Microsoft sign-in required: ${data.message}`)
+
+            }
+
+        })
+
+        this.bot.on('join', () => {
+            this.setState('LOGGED IN')
+            this.log('Minecraft (Bedrock) login successful.')
+        })
+
+        this.bot.on('spawn', () => {
+
+            this.connectedAt = Date.now()
+            this.reconnectDelay = RECONNECT_DELAY
+            this.bedrockSpawned = true
+            this.currentWorld = 'Online'
+
+            this.setState('ONLINE')
+            this.log('Spawned (Bedrock).')
+
+            this.updateDashboard()
+
+        })
+
+        // Server-wide tab-list add/remove, same role bot.players plays
+        // on the Java side - uuid is stable across a rename, username
+        // isn't (see getUuidToUsername()/renames in Threats/Allies/
+        // Auto-Invite).
+        this.bot.on('player_list', packet => {
+
+            const records = packet.records?.records || []
+
+            if (packet.records?.type === 'add') {
+
+                for (const record of records) {
+                    if (record.uuid && record.username) {
+                        this.bedrockPlayers.set(record.uuid, record.username)
+                    }
+                }
+
+            } else if (packet.records?.type === 'remove') {
+
+                for (const record of records) {
+                    if (record.uuid) {
+                        this.bedrockPlayers.delete(record.uuid)
+                    }
+                }
+
+            }
+
+        })
+
+        this.bot.on('text', packet => {
+
+            const text = packet.message || ''
+
+            if (!text.trim()) return
+
+            if (packet.type === 'chat' || packet.type === 'whisper' || packet.type === 'announcement') {
+
+                this.broadcastChat(packet.source_name || 'Unknown', text)
+                return
+
+            }
+
+            // Everything else (system/raw/announcements/etc.) is
+            // server-originated text - same text-parsing pipeline the
+            // Java path uses, minus checkBlackMarket (no automation on
+            // Bedrock by design) and anything lifestealAutopilot-gated
+            // (already forced off for this platform).
+            this.tryParseTeamInfoLine(text)
+            this.checkAutoReinvite(text)
+            this.checkTeamRosterChange(text)
+            this.checkKothCapture(text)
+            this.checkTeamDeath(text)
+
+            const dedupeKey = `${packet.type}:${text}`
+
+            if (dedupeKey !== this.lastServerMessageKey) {
+
+                this.lastServerMessageKey = dedupeKey
+
+                this.lastChatMessage = text
+                this.lastChatTime = new Date().toLocaleTimeString()
+
+                io.to(this.username).emit('chat', { username: 'SERVER', message: text, time: this.lastChatTime })
+
+                this.log(`[SERVER] ${text}`)
+
+            }
+
+        })
+
+        this.bot.on('kick', packet => {
+
+            this.lastDisconnectReason = packet?.message || 'Unknown reason'
+
+            originalLog(`[KICKED:${this.username}] ${this.lastDisconnectReason}`)
+
+            this.log(`Kicked: ${this.lastDisconnectReason}`)
+
+        })
+
+        this.bot.on('error', error => {
+
+            this.log(`Error: ${error.message}`)
+
+            originalError(`[ERROR:${this.username}] ${error.message}`)
+
+            this.updateDashboard()
+
+        })
+
+        this.bot.on('close', () => {
+
+            this.stopJqRetry()
+            this.stopHomeTimer()
+            this.stopRecoveryTimer()
+
+            this.bot = null
+            this.bedrockSpawned = false
+            this.bedrockPlayers.clear()
+            this.connectedAt = null
+            this.currentWorld = 'Disconnected'
+
+            this.setState('OFFLINE')
+
+            this.updateDashboard()
+
+            if (this.shuttingDown) return
+            if (!this.botEnabled) return
+            if (this.reconnectTimer) return
+
+            this.reconnectCount++
+            this.reconnectDelay = RECONNECT_DELAY
+
+            originalLog(`[${this.username}] Disconnected (Bedrock). Reconnecting in ${RECONNECT_DELAY / 1000} seconds...`)
+
+            this.reconnectTimer = setTimeout(() => {
+                this.reconnectTimer = null
+                this.connect()
+            }, RECONNECT_DELAY)
+
+        })
+
+    }
+
+    // --------------------------------------------------------
     // STOP (full stop, used on server shutdown)
     // --------------------------------------------------------
 
@@ -3327,7 +3654,17 @@ class BotSession {
         }
 
         if (this.bot) {
-            try { this.bot.quit('Bot manually stopped') } catch {}
+
+            try {
+
+                if (this.config.platform === 'bedrock') {
+                    this.bot.disconnect('Bot manually stopped')
+                } else {
+                    this.bot.quit('Bot manually stopped')
+                }
+
+            } catch {}
+
         }
 
     }
@@ -3811,9 +4148,85 @@ app.get('/api/admin/accounts', (req, res) => {
 
     const users = loadUsers()
         .filter(user => user.username !== DASHBOARD_USERNAME)
-        .map(user => ({ username: user.username, createdAt: user.createdAt || null }))
+        .map(user => {
+
+            const botSession = sessions.get(user.username)
+            const config = getBotConfig(user.username)
+
+            return {
+                username: user.username,
+                createdAt: user.createdAt || null,
+                platform: config?.platform === 'bedrock' ? 'bedrock' : 'java',
+                configured: !!config,
+                state: botSession?.botState || 'OFFLINE'
+            }
+
+        })
 
     res.json({ users })
+
+})
+
+// Bulk start/stop for the admin's "select several accounts" UI -
+// same per-account checks (configured, no Microsoft-account conflict)
+// as the normal single-account start/stop path, just looped, with a
+// per-account result reported back rather than one all-or-nothing
+// response.
+app.post('/api/admin/bulk-start', (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can do this.' })
+    }
+
+    const usernames = Array.isArray(req.body?.usernames) ? req.body.usernames : []
+
+    const results = usernames.map(username => {
+
+        const config = getBotConfig(username)
+
+        if (!config) {
+            return { username, ok: false, error: 'Not configured yet.' }
+        }
+
+        const conflict = findConflictingSession(username, config.microsoftEmail)
+
+        if (conflict) {
+            return { username, ok: false, error: `Already connected under ${conflict.username}.` }
+        }
+
+        getOrCreateSession(username).startBotRemote()
+
+        return { username, ok: true }
+
+    })
+
+    res.json({ results })
+
+})
+
+app.post('/api/admin/bulk-stop', (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can do this.' })
+    }
+
+    const usernames = Array.isArray(req.body?.usernames) ? req.body.usernames : []
+
+    const results = usernames.map(username => {
+
+        const botSession = sessions.get(username)
+
+        if (!botSession) {
+            return { username, ok: false, error: 'Not running.' }
+        }
+
+        botSession.stopBotRemote()
+
+        return { username, ok: true }
+
+    })
+
+    res.json({ results })
 
 })
 

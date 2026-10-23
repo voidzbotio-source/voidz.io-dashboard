@@ -2400,13 +2400,98 @@
             border-radius: var(--radius-sm);
         }
 
+        .manage-account-name-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .manage-account-checkbox {
+            flex-shrink: 0;
+            width: 15px;
+            height: 15px;
+            accent-color: var(--blue);
+        }
+
         .manage-account-name {
+            flex: 1;
+            min-width: 0;
+
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
 
             font-weight: 700;
             font-size: 13px;
+        }
+
+        .manage-account-badge {
+            flex-shrink: 0;
+
+            padding: 2px 7px;
+
+            border-radius: 20px;
+
+            font-size: 9.5px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .manage-account-badge.java {
+            background: rgba(99, 102, 241, 0.14);
+            color: var(--blue);
+        }
+
+        .manage-account-badge.bedrock {
+            background: rgba(34, 197, 94, 0.14);
+            color: var(--green);
+        }
+
+        .manage-account-state {
+            flex-shrink: 0;
+
+            padding: 2px 7px;
+
+            border-radius: 20px;
+
+            font-size: 9.5px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+
+            background: var(--panel);
+            color: var(--faint);
+        }
+
+        .manage-account-state.online {
+            background: rgba(34, 197, 94, 0.14);
+            color: var(--green);
+        }
+
+        .manage-accounts-bulk-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+
+            margin-bottom: 8px;
+        }
+
+        .manage-accounts-select-all {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+
+            font-size: 11.5px;
+            font-weight: 700;
+            color: var(--muted);
+        }
+
+        .manage-accounts-bulk-actions {
+            display: flex;
+            gap: 8px;
         }
 
         .manage-account-actions {
@@ -4816,6 +4901,18 @@
                         <input id="settingsEmail" type="email" placeholder="you@outlook.com" autocomplete="off">
                     </div>
 
+                    <div class="field">
+                        <label for="settingsPlatform">Platform</label>
+                        <select id="settingsPlatform" onchange="onSettingsPlatformChange()">
+                            <option value="java">Java Edition</option>
+                            <option value="bedrock">Bedrock Edition</option>
+                        </select>
+                    </div>
+
+                    <div id="settingsBedrockNote" class="settings-section-desc" style="display: none;">
+                        Bedrock accounts get team tracking, KOTH/death logging, and chat/manual actions (Kick, AFK, Quick Actions) &mdash; but not HP, Keys/inventory, the KOTH Capture card, Action Bar, or low-HP auto-kick, and no automation (LifeSteal Autopilot, trivia, Black Market ping are all off).
+                    </div>
+
                     <div class="settings-field-row">
 
                         <div class="field">
@@ -4830,12 +4927,12 @@
 
                     </div>
 
-                    <div class="field">
+                    <div id="settingsVersionField" class="field">
                         <label for="settingsVersion">Minecraft Version</label>
                         <input id="settingsVersion" type="text" placeholder="Leave blank to auto-detect" autocomplete="off">
                     </div>
 
-                    <label class="settings-checkbox">
+                    <label id="settingsAutopilotRow" class="settings-checkbox">
                         <input id="settingsAutopilot" type="checkbox">
                         <span>Enable LifeSteal Autopilot &mdash; FlareMC-style auto /jq, hub recovery, and daily keyall. Only turn this on if your server matches that setup.</span>
                     </label>
@@ -5025,6 +5122,20 @@
                     </p>
 
                     <div id="manageAccountsError" class="settings-error"></div>
+
+                    <div id="manageAccountsBulkBar" class="manage-accounts-bulk-bar" style="display: none;">
+
+                        <label class="manage-accounts-select-all">
+                            <input type="checkbox" id="manageAccountsSelectAll" class="manage-account-checkbox" onchange="toggleSelectAllAccounts(this.checked)">
+                            <span>Select all</span>
+                        </label>
+
+                        <div class="manage-accounts-bulk-actions">
+                            <button class="manage-account-btn" onclick="bulkAccountAction('stop')">Stop Selected</button>
+                            <button class="manage-account-btn manage-account-btn-primary" onclick="bulkAccountAction('start')">Start Selected</button>
+                        </div>
+
+                    </div>
 
                     <div id="manageAccountsList" class="manage-accounts-list">
                         <div class="empty-state">No other accounts yet.</div>
@@ -5730,6 +5841,24 @@
 
         }
 
+        function onSettingsPlatformChange() {
+
+            const isBedrock = $('settingsPlatform').value === 'bedrock'
+
+            $('settingsBedrockNote').style.display = isBedrock ? 'block' : 'none'
+            $('settingsVersionField').style.display = isBedrock ? 'none' : 'block'
+            $('settingsAutopilotRow').style.display = isBedrock ? 'none' : 'flex'
+
+            if (isBedrock) {
+                $('settingsAutopilot').checked = false
+            }
+
+            if (!$('settingsPort').value || Number($('settingsPort').value) === (isBedrock ? 25565 : 19132)) {
+                $('settingsPort').value = isBedrock ? 19132 : 25565
+            }
+
+        }
+
         function openSettingsModal() {
 
             switchSettingsTab('bot')
@@ -5752,10 +5881,13 @@
                 .then(config => {
 
                     $('settingsEmail').value = config.microsoftEmail || ''
+                    $('settingsPlatform').value = config.platform === 'bedrock' ? 'bedrock' : 'java'
                     $('settingsHost').value = config.host || ''
-                    $('settingsPort').value = config.port || 25565
+                    $('settingsPort').value = config.port || (config.platform === 'bedrock' ? 19132 : 25565)
                     $('settingsVersion').value = config.version || ''
                     $('settingsAutopilot').checked = !!config.lifestealAutopilot
+
+                    onSettingsPlatformChange()
                     $('settingsAfkCommand').value = config.afkCommand || '/home AFK'
                     $('settingsLocalAddress').value = config.localAddress || ''
                     $('settingsProxyHost').value = config.proxyHost || ''
@@ -5816,8 +5948,9 @@
 
             const payload = {
                 microsoftEmail: $('settingsEmail').value.trim(),
+                platform: $('settingsPlatform').value === 'bedrock' ? 'bedrock' : 'java',
                 host: $('settingsHost').value.trim(),
-                port: Number($('settingsPort').value) || 25565,
+                port: Number($('settingsPort').value) || ($('settingsPlatform').value === 'bedrock' ? 19132 : 25565),
                 version: $('settingsVersion').value.trim(),
                 lifestealAutopilot: $('settingsAutopilot').checked,
                 afkCommand: $('settingsAfkCommand').value.trim(),
@@ -6018,21 +6151,35 @@
 
                     const users = data.users || []
 
+                    $('manageAccountsBulkBar').style.display = users.length > 0 ? 'flex' : 'none'
+                    $('manageAccountsSelectAll').checked = false
+
                     if (users.length === 0) {
                         list.innerHTML = '<div class="empty-state">No other accounts yet.</div>'
                         return
                     }
 
-                    list.innerHTML = users.map(user => `
+                    list.innerHTML = users.map(user => {
+
+                        const online = user.state && user.state !== 'OFFLINE' && user.state !== 'STOPPED'
+
+                        return `
                         <div class="manage-account-row">
-                            <div class="manage-account-name">${escapeHtml(user.username)}</div>
+                            <div class="manage-account-name-row">
+                                <input type="checkbox" class="manage-account-checkbox manage-account-select" value="${escapeHtml(user.username)}">
+                                <div class="manage-account-name">${escapeHtml(user.username)}</div>
+                                <span class="manage-account-badge ${user.platform}">${user.platform === 'bedrock' ? 'Bedrock' : 'Java'}</span>
+                                <span class="manage-account-state ${online ? 'online' : ''}">${escapeHtml(user.state || 'OFFLINE')}</span>
+                            </div>
                             <div class="manage-account-actions">
                                 <input type="password" class="manage-account-password-input" id="resetPw-${escapeHtml(user.username)}" placeholder="New password" autocomplete="new-password">
                                 <button class="manage-account-btn" onclick="resetUserPassword('${escapeHtml(user.username)}')">Reset</button>
                                 <button class="manage-account-btn manage-account-btn-primary" onclick="impersonateUser('${escapeHtml(user.username)}')">Log In As</button>
                             </div>
                         </div>
-                    `).join('')
+                    `
+
+                    }).join('')
 
                 })
                 .catch(() => {
@@ -6041,6 +6188,50 @@
                     errorBox.classList.add('show')
 
                 })
+
+        }
+
+        function toggleSelectAllAccounts(checked) {
+
+            document.querySelectorAll('.manage-account-select').forEach(checkbox => {
+                checkbox.checked = checked
+            })
+
+        }
+
+        function bulkAccountAction(action) {
+
+            const usernames = [...document.querySelectorAll('.manage-account-select:checked')]
+                .map(checkbox => checkbox.value)
+
+            if (usernames.length === 0) {
+                showToast('Select at least one account first.', 'error')
+                return
+            }
+
+            const endpoint = action === 'start' ? '/api/admin/bulk-start' : '/api/admin/bulk-stop'
+
+            fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ usernames })
+            })
+                .then(response => response.json())
+                .then(data => {
+
+                    const results = data.results || []
+                    const failed = results.filter(result => !result.ok)
+
+                    if (failed.length === 0) {
+                        showToast(`${action === 'start' ? 'Started' : 'Stopped'} ${results.length} account${results.length === 1 ? '' : 's'}.`, 'success')
+                    } else {
+                        showToast(`${failed.length} failed: ${failed.map(result => `${result.username} (${result.error})`).join(', ')}`, 'error')
+                    }
+
+                    setTimeout(renderManageAccounts, 500)
+
+                })
+                .catch(() => showToast('Could not reach the server.', 'error'))
 
         }
 

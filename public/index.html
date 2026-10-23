@@ -8266,12 +8266,28 @@
 
             const byPlayer = {}
 
+            // Entries logged after this feature shipped carry the
+            // player's UUID (captured while they were online, at the
+            // moment of the KOTH/death event) - grouping by that
+            // instead of the name string means a rename no longer
+            // splits one player's totals into two rows. Older entries
+            // without a uuid still group by name as before, so nothing
+            // existing gets dropped - they just merge into the uuid-
+            // based row naturally once they age out of the 50-entry
+            // history cap.
             const tally = (entry, isCapture) => {
 
-                const key = entry.player.toLowerCase()
+                const key = entry.uuid || entry.player.toLowerCase()
 
                 if (!byPlayer[key]) {
-                    byPlayer[key] = { name: entry.player, captures: 0, deaths: 0, net: 0 }
+                    byPlayer[key] = { name: entry.player, lastSeenAt: 0, captures: 0, deaths: 0, net: 0 }
+                }
+
+                // Display whichever name was logged most recently, so a
+                // renamed player's combined row shows their current name.
+                if ((entry.timestamp || 0) >= byPlayer[key].lastSeenAt) {
+                    byPlayer[key].name = entry.player
+                    byPlayer[key].lastSeenAt = entry.timestamp || 0
                 }
 
                 byPlayer[key].net += entry.points

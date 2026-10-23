@@ -1291,6 +1291,30 @@ class BotSession {
 
     }
 
+    // UUID for a currently-visible player, used to tag KOTH/death
+    // history entries at the moment they're logged - the player just
+    // triggered the event, so they're online right now and findable.
+    // Lets the Leaderboard aggregate by UUID instead of name later,
+    // so a rename doesn't split one player's totals into two rows
+    // (see renderLeaderboard() on the client).
+    findUuidForPlayerName(name) {
+
+        const lower = String(name || '').toLowerCase()
+
+        if (!lower) return null
+
+        const uuidToUsername = this.getUuidToUsername()
+
+        for (const uuid in uuidToUsername) {
+            if (String(uuidToUsername[uuid] || '').toLowerCase() === lower) {
+                return uuid
+            }
+        }
+
+        return null
+
+    }
+
     // Reads the live sidebar scoreboard (the "LIFESTEAL / Season.. /
     // KOTH: .. / Capping: .. / Time Left: .." panel in the top-right
     // of the game) via the raw scoreboard tracker (see
@@ -2687,6 +2711,7 @@ class BotSession {
         this.kothHistory.push({
             timestamp: Date.now(),
             player: match[1],
+            uuid: this.findUuidForPlayerName(match[1]),
             points: Number(match[2])
         })
 
@@ -2723,6 +2748,7 @@ class BotSession {
         this.deathHistory.push({
             timestamp: Date.now(),
             player: match[2],
+            uuid: this.findUuidForPlayerName(match[2]),
             points: -Number(match[1])
         })
 

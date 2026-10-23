@@ -6560,7 +6560,18 @@
         // MICROSOFT SIGN-IN MODAL
         // ==================================================
 
+        // Tracks WHICH account the currently-shown code belongs to
+        // (null = the primary bot, otherwise a fleet account id) - the
+        // dashboard's regular status tick used to auto-close this modal
+        // the instant ANY account reported online, which included the
+        // primary bot being online already while a totally unrelated
+        // fleet/Bedrock account's code was still showing, snapping it
+        // shut before there was any chance to actually use it.
+        let currentMsaAccountId = null
+
         function openMsaModal(data) {
+
+            currentMsaAccountId = data.accountId || null
 
             const prefix = data.accountId ? `[${data.accountLabel || 'Fleet account'}] ` : ''
 
@@ -6581,7 +6592,19 @@
         }
 
         function closeMsaModal() {
+            currentMsaAccountId = null
             $('msaModalOverlay')?.classList.remove('show')
+        }
+
+        // Only auto-closes if the modal is currently showing a code for
+        // THIS account - called when an account's status flips online,
+        // never as a blanket "something somewhere is online" trigger.
+        function closeMsaModalIfShowing(accountId) {
+
+            if (currentMsaAccountId === (accountId || null)) {
+                closeMsaModal()
+            }
+
         }
 
         $('msaModalOverlay')?.addEventListener('click', event => {
@@ -7202,7 +7225,7 @@
             }
 
             if (data.online) {
-                closeMsaModal()
+                closeMsaModalIfShowing(null)
             }
 
             // ----------------------------------------------
@@ -10141,8 +10164,14 @@
 
         }
 
-        socket.on('fleetUpdate', () => {
+        socket.on('fleetUpdate', data => {
+
+            if (data?.online) {
+                closeMsaModalIfShowing(data.id)
+            }
+
             renderFleet()
+
         })
 
         renderFleet()

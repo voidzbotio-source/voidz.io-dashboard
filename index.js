@@ -2441,6 +2441,29 @@ class BotSession {
 
     }
 
+    // Kicks a team member via /t kick - triggered from the Kick
+    // button next to a name in the Team card. The name comes from
+    // the client, so it's validated against real Minecraft username
+    // rules before ever reaching sendMinecraftChat - otherwise a
+    // crafted name with a space/slash in it could inject an arbitrary
+    // chat command.
+    kickTeamMember(name) {
+
+        const trimmed = String(name || '').trim()
+
+        if (!/^[a-zA-Z0-9_]{1,16}$/.test(trimmed)) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Invalid username.' })
+            return
+        }
+
+        this.log(`Kicking ${trimmed} from the team (manual).`)
+
+        this.sendMinecraftChat(`/t kick ${trimmed}`)
+
+        io.to(this.username).emit('notice', { type: 'info', text: `Kicked ${trimmed} from the team.` })
+
+    }
+
     // Wipes Points history, KOTH captures, and deaths entirely -
     // triggered from the Reset button on the Team card. The live
     // roster itself (teamRoster) is untouched since that's just the
@@ -3480,6 +3503,8 @@ function handleWebCommand(username, command) {
                 botSession.sendMinecraftChat(command.substring(4))
             } else if (lower.startsWith('reset-player ')) {
                 botSession.removePlayerFromHistory(command.substring('reset-player '.length))
+            } else if (lower.startsWith('kick-player ')) {
+                botSession.kickTeamMember(command.substring('kick-player '.length))
             }
 
             break

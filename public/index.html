@@ -2770,6 +2770,40 @@
             box-shadow: none;
         }
 
+        .team-member-name {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .team-member-kick {
+            flex-shrink: 0;
+
+            padding: 3px 8px;
+
+            border-radius: var(--radius-sm);
+
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--red);
+
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            opacity: 0.7;
+        }
+
+        .team-member-kick:hover {
+            opacity: 1;
+            background: rgba(239, 68, 68, 0.14);
+            border-color: rgba(239, 68, 68, 0.4);
+            transform: none;
+            box-shadow: none;
+        }
+
         /* ================================================= */
         /* INVENTORY */
         /* ================================================= */
@@ -7525,7 +7559,8 @@
                                                 return `
                                                     <div class="team-member">
                                                         <span class="member-dot ${statusClass}"></span>
-                                                        <span>${escapeHtml(member.name)}</span>
+                                                        <span class="team-member-name">${escapeHtml(member.name)}</span>
+                                                        <button class="team-member-kick" onclick="sendCommand('kick-player ${escapeHtml(member.name)}', { confirm: 'Kick ${escapeHtml(member.name)} from the team?' })" title="Kick from team">Kick</button>
                                                     </div>
                                                 `
 

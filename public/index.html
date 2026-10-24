@@ -2329,36 +2329,32 @@
         }
 
         .stat-modal-card {
-            /* min() instead of a bare max-width: a flex/grid ancestor
-               with max-width alone can still get pushed wider than the
-               viewport by a child that refuses to shrink (see
-               .team-modal-col below) - this clamps the box itself
-               regardless of what's inside it. */
-            width: min(980px, 94vw);
-            max-width: 980px;
-            max-height: 85vh;
+            /* Wide, desktop-first: the modal should fill most of the
+               screen rather than reading as a tall narrow dialog -
+               min() still clamps it so it never exceeds the viewport
+               (a flex/grid ancestor with max-width alone can still get
+               pushed wider than the viewport by a child that refuses
+               to shrink - see .team-modal-panel below). */
+            width: min(1480px, 92vw);
+            max-width: 1480px;
+            max-height: 90vh;
             overflow-y: auto;
             overflow-x: hidden;
         }
 
-        /* Landscape layout: two columns side by side instead of one
-           long vertical stack - "laying down" rather than "standing
-           up" now that there's enough content (chart, logs, two
-           leaderboards, full roster) to actually fill the width.
-           auto-fit sizes columns off the ACTUAL rendered width of
-           this grid (which follows the card's own min(980px, 94vw)
-           sizing), not an arbitrary viewport breakpoint - a fixed
-           max-width: 760px media query was collapsing to one column
-           any time the browser window itself was under 760px even
-           though the centered card still had plenty of room beside
-           it, which is what caused the "still standing up" bug.
-           Each column only ever drops to a stack once there's
-           genuinely not enough width left to fit two, regardless of
-           why the container got narrow. */
-        .team-modal-columns {
+        /* Flowing module grid, not a fixed 2-column layout: each
+           section is its own panel, and auto-fit lays out as many
+           panels per row as actually fit the available width - 3-4
+           across on a wide desktop window (using most of the screen,
+           as asked), fewer on a narrower one, and a single stacked
+           column only once there's genuinely no room for more than
+           one - which in practice is the phone tier. Sized off the
+           grid's own rendered width (which follows the card's width
+           above), not a guessed viewport breakpoint. */
+        .team-modal-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-            gap: 16px 28px;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
 
             min-width: 0;
         }
@@ -2369,14 +2365,24 @@
            was pushing the whole modal, and with it the page itself,
            wider than the viewport instead of staying contained and
            scrolling internally. min-width: 0 is the standard fix:
-           it lets the column shrink and defers to each item's own
+           it lets each panel shrink and defer to its own content's
            overflow/ellipsis/wrap rules instead. */
-        .team-modal-col {
+        .team-modal-panel {
             min-width: 0;
+
+            padding: 14px 16px;
+
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
         }
 
-        .team-modal-col > .koth-history:first-child,
-        .team-modal-col > .team-modal-section:first-child {
+        .team-modal-panel-wide {
+            grid-column: span 2;
+        }
+
+        .team-modal-panel > .koth-history:first-child,
+        .team-modal-panel > .team-modal-section:first-child {
             margin-top: 0;
             padding-top: 0;
             border-top: none;
@@ -5642,9 +5648,9 @@
 
             <div id="teamModalStatsRow" class="team-modules-row"></div>
 
-            <div class="team-modal-columns">
+            <div class="team-modal-grid">
 
-                <div class="team-modal-col">
+                <div class="team-modal-panel team-modal-panel-wide">
 
                     <div class="stat-modal-hero">
                         <div class="stat-modal-value" id="teamStatModalCurrent">-</div>
@@ -5655,20 +5661,23 @@
 
                     <div id="teamStatModalBody" class="detail-chart-wrap"></div>
 
+                </div>
+
+                <div class="team-modal-panel">
                     <div class="koth-history">
                         <div class="koth-history-label">Recent Points Events</div>
                         <div id="teamStatKothList" class="koth-history-list scroll"></div>
                     </div>
-
                 </div>
 
-                <div class="team-modal-col">
-
+                <div class="team-modal-panel">
                     <div class="koth-history">
                         <div class="koth-history-label">Team Activity Log</div>
                         <div id="teamActivityLogList" class="koth-history-list scroll"></div>
                     </div>
+                </div>
 
+                <div class="team-modal-panel">
                     <div class="team-modal-section">
                         <div class="team-modal-section-label">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v6a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0 2 3.5"/><path d="M17 6h3a2 2 0 0 1-2 3.5"/></svg>
@@ -5676,7 +5685,9 @@
                         </div>
                         <div id="teamModalLeaderboard" class="team-modal-mini-leaderboard"></div>
                     </div>
+                </div>
 
+                <div class="team-modal-panel">
                     <div class="team-modal-section">
                         <div class="team-modal-section-label">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -5684,7 +5695,9 @@
                         </div>
                         <div id="teamModalServerLeaderboard" class="team-modal-mini-leaderboard"></div>
                     </div>
+                </div>
 
+                <div class="team-modal-panel">
                     <div class="team-modal-section">
                         <div class="team-modal-section-label">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -5692,7 +5705,6 @@
                         </div>
                         <div id="teamModalRoster" class="team-modal-roster"></div>
                     </div>
-
                 </div>
 
             </div>

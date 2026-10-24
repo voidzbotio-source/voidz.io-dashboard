@@ -198,6 +198,11 @@
             min-height: 100vh;
             min-height: 100dvh;
 
+            /* Safety backstop - the page itself should never scroll
+               sideways. Anything wide (a modal, a card) is responsible
+               for containing its own overflow instead. */
+            overflow-x: hidden;
+
             background: var(--background);
 
             color: var(--text);
@@ -2324,9 +2329,16 @@
         }
 
         .stat-modal-card {
+            /* min() instead of a bare max-width: a flex/grid ancestor
+               with max-width alone can still get pushed wider than the
+               viewport by a child that refuses to shrink (see
+               .team-modal-col below) - this clamps the box itself
+               regardless of what's inside it. */
+            width: min(980px, 94vw);
             max-width: 980px;
             max-height: 85vh;
             overflow-y: auto;
+            overflow-x: hidden;
         }
 
         /* Landscape layout: two columns side by side instead of one
@@ -2335,8 +2347,22 @@
            leaderboards, full roster) to actually fill the width. */
         .team-modal-columns {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
             gap: 28px;
+
+            min-width: 0;
+        }
+
+        /* Grid tracks default to min-width: auto, which refuses to
+           shrink a column below its content's natural size (the
+           520px-wide chart SVG, long KOTH history rows, etc.) - that
+           was pushing the whole modal, and with it the page itself,
+           wider than the viewport instead of staying contained and
+           scrolling internally. min-width: 0 is the standard fix:
+           it lets the column shrink and defers to each item's own
+           overflow/ellipsis/wrap rules instead. */
+        .team-modal-col {
+            min-width: 0;
         }
 
         .team-modal-col > .koth-history:first-child,
@@ -2357,7 +2383,7 @@
 
         .team-modules-row {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 8px;
 
             margin: 0 0 16px;

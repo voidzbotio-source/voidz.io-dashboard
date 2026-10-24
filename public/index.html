@@ -1053,6 +1053,7 @@
         .card[data-card-id="players"] { --card-accent: var(--blue); }
         .card[data-card-id="team"] { --card-accent: var(--purple); }
         .card[data-card-id="leaderboard"] { --card-accent: var(--yellow); }
+        .card[data-card-id="nemesis"] { --card-accent: var(--red); }
         .card[data-card-id="serveractivity"] { --card-accent: var(--blue); }
         .card[data-card-id="badges"] { --card-accent: var(--purple); }
         .card[data-card-id="inventory"] { --card-accent: var(--orange); }
@@ -2607,6 +2608,14 @@
             font-size: 11px;
         }
 
+        .fleet-row-uptime {
+            flex-shrink: 0;
+
+            color: var(--faint);
+            font-size: 10.5px;
+            font-weight: 700;
+        }
+
         .manage-account-actions {
             display: flex;
             align-items: center;
@@ -2922,6 +2931,28 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+
+        .threat-name-wrap {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        .threat-name-wrap .threat-name {
+            flex: initial;
+        }
+
+        .threat-usual-hours {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+
+            color: var(--faint);
+            font-size: 10px;
+            font-weight: 600;
         }
 
         .threat-status, .ally-status, .autoinvite-status {
@@ -4799,6 +4830,23 @@
 
                 <div id="leaderboardBody" class="leaderboard-body scroll">
                     <div class="empty-state">No KOTH captures or deaths logged yet.</div>
+                </div>
+
+            </section>
+
+            <!-- ========================================== -->
+            <!-- NEMESIS TRACKER -->
+            <!-- ========================================== -->
+
+            <section class="card col-1" data-card-id="nemesis" draggable="true" style="animation-delay: 0.1935s;">
+
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-7 7c0 3 2 5 2 8h10c0-3 2-5 2-8a7 7 0 0 0-7-7Z"/><path d="M9 21h6"/><path d="M10 17h4"/></svg>
+                    Nemesis Tracker
+                </div>
+
+                <div id="nemesisBody" class="leaderboard-body scroll">
+                    <div class="empty-state">No deaths logged yet - good.</div>
                 </div>
 
             </section>
@@ -6839,6 +6887,14 @@
 
             showToast(data?.text || 'Something happened.', data?.type || 'info')
 
+            // Noteworthy server-side events (role changes, etc.) are
+            // worth a permanent-ish trace beyond a toast that
+            // disappears in a few seconds - the Activity Log already
+            // exists for exactly this.
+            if (data?.logActivity) {
+                pushActivity(data.text, data.type)
+            }
+
         })
 
         // ==================================================
@@ -7669,6 +7725,7 @@
             renderBadges(data.badgeProgress || null)
             renderActionBar(data.actionBar || null)
             renderKothCapture(data.kothCapture || null)
+            renderNemesis(data.nemesisHistory || [])
 
             // ----------------------------------------------
             // FLAGS
@@ -8728,6 +8785,49 @@
 
         }
 
+        // Who's actually killed the bot the most - tallied server-side
+        // from its own death messages (see checkNemesisDeath()).
+        function renderNemesis(history) {
+
+            const container = $('nemesisBody')
+
+            if (!container) return
+
+            const byKiller = {}
+
+            for (const entry of history || []) {
+
+                const key = (entry.killer || '').toLowerCase()
+
+                if (!key) continue
+
+                byKiller[key] = byKiller[key] || { name: entry.killer, count: 0 }
+                byKiller[key].count++
+
+            }
+
+            const rows = Object.values(byKiller).sort((a, b) => b.count - a.count)
+
+            if (!rows.length) {
+                container.innerHTML = '<div class="empty-state">No deaths logged yet - good.</div>'
+                return
+            }
+
+            container.innerHTML = rows
+                .map((row, index) => `
+                    <div class="leaderboard-row">
+                        <div class="leaderboard-rank">${index + 1}</div>
+                        <div class="leaderboard-info">
+                            <div class="leaderboard-name">${escapeHtml(row.name)}</div>
+                            <div class="leaderboard-meta">${row.count} kill${row.count === 1 ? '' : 's'}</div>
+                        </div>
+                        <div class="leaderboard-net negative">${row.count}</div>
+                    </div>
+                `)
+                .join('')
+
+        }
+
         // Every KOTH capture seen server-wide, not just ours - real
         // competitive intel instead of just discarding what the
         // isTeamMember filter excludes from the team-scoped log.
@@ -9316,6 +9416,82 @@
         }
 
         // ==================================================
+        // ONLINE-TIME HEATMAP (Threats)
+        // ==================================================
+        // A rough "usually online around 4-7pm" per tracked Threat,
+        // instead of just a dot that only ever says right-now. Samples
+        // the current hour-of-day into a 24-slot counter at most once
+        // every 5 minutes per threat while they're online (frequent
+        // enough to build a picture over days of use, not so frequent
+        // that one long session dominates the whole histogram).
+
+        const HOUR_SAMPLE_INTERVAL_MS = 5 * 60 * 1000
+
+        function sampleOnlineHour(threat) {
+
+            const now = Date.now()
+
+            if (threat.lastHourSampleAt && now - threat.lastHourSampleAt < HOUR_SAMPLE_INTERVAL_MS) {
+                return false
+            }
+
+            if (!Array.isArray(threat.hourCounts) || threat.hourCounts.length !== 24) {
+                threat.hourCounts = new Array(24).fill(0)
+            }
+
+            threat.hourCounts[new Date().getHours()]++
+            threat.lastHourSampleAt = now
+
+            return true
+
+        }
+
+        // Picks the busiest 3-hour window (today's local time) rather
+        // than just the single busiest hour, since "online around
+        // 4-7pm" reads better than "online at exactly 5pm" and is more
+        // robust to a session that happened to start at :55.
+        function getUsualOnlineHours(threat) {
+
+            const counts = threat?.hourCounts
+
+            if (!Array.isArray(counts) || counts.length !== 24) return null
+
+            const totalSamples = counts.reduce((sum, count) => sum + count, 0)
+
+            if (totalSamples < 3) return null
+
+            let bestStart = 0
+            let bestSum = -1
+
+            for (let start = 0; start < 24; start++) {
+
+                let sum = 0
+
+                for (let offset = 0; offset < 3; offset++) {
+                    sum += counts[(start + offset) % 24]
+                }
+
+                if (sum > bestSum) {
+                    bestSum = sum
+                    bestStart = start
+                }
+
+            }
+
+            if (bestSum === 0) return null
+
+            const formatHour = hour => {
+                const h = hour % 24
+                const period = h < 12 ? 'AM' : 'PM'
+                const display = h % 12 === 0 ? 12 : h % 12
+                return `${display}${period}`
+            }
+
+            return `~${formatHour(bestStart)}-${formatHour(bestStart + 3)}`
+
+        }
+
+        // ==================================================
         // TRACKED-PLAYER ACTIVITY / AFK DETECTION
         // ==================================================
 
@@ -9665,6 +9841,7 @@
             let newlyOnline = false
             let newlyOffline = false
             let onlineCount = 0
+            let hourSampleTaken = false
 
             for (const threat of threats) {
 
@@ -9680,6 +9857,10 @@
                     // online, so a future rename can be followed.
                     if (!threat.uuid) {
                         threat.uuid = findUuidForName(uuidToUsername, threat.name)
+                    }
+
+                    if (sampleOnlineHour(threat)) {
+                        hourSampleTaken = true
                     }
 
                 }
@@ -9718,7 +9899,7 @@
                 playThreatOfflineAlert()
             }
 
-            if (newlyOnline || newlyOffline || renamed) {
+            if (newlyOnline || newlyOffline || renamed || hourSampleTaken) {
                 saveThreats()
             }
 
@@ -9777,11 +9958,15 @@
                             const dotState = online ? (afk ? 'afk' : 'online') : 'offline'
                             const statusClass = online ? (afk ? 'afk' : 'online') : ''
                             const statusText = online ? (afk ? 'AFK' : 'Online') : escapeHtml(timeAgo(threat.lastSeen))
+                            const usualHours = getUsualOnlineHours(threat)
 
                             return `
                                 <div class="threat-row ${online && !afk ? 'online' : ''}">
                                     <span class="member-dot ${dotState}"></span>
-                                    <span class="threat-name">${escapeHtml(threat.name)}</span>
+                                    <div class="threat-name-wrap">
+                                        <span class="threat-name">${escapeHtml(threat.name)}</span>
+                                        ${usualHours ? `<span class="threat-usual-hours">Usually online ${usualHours}</span>` : ''}
+                                    </div>
                                     <span class="threat-status ${statusClass}">${statusText}</span>
                                     <button class="threat-remove" onclick="removeThreat(${index})" title="Stop tracking">&times;</button>
                                 </div>
@@ -10494,6 +10679,7 @@
                             <span class="manage-account-badge ${account.platform}">${account.platform === 'bedrock' ? 'Bedrock' : 'Java'}</span>
                             <span class="fleet-row-name">${escapeHtml(account.label || account.microsoftEmail)}</span>
                             <span class="manage-account-state ${account.online ? 'online' : ''}">${escapeHtml(account.state)}</span>
+                            <span class="fleet-row-uptime" title="Uptime since this account was added, and how many times it's had to reconnect">${account.uptimePercent ?? 0}% &middot; &#8635;${account.reconnectCount ?? 0}</span>
                             ${account.online || account.botEnabled
                                 ? `<button class="manage-account-btn" onclick="fleetAction('${escapeHtml(account.id)}', 'stop')">Stop</button>`
                                 : `<button class="manage-account-btn manage-account-btn-primary" onclick="fleetAction('${escapeHtml(account.id)}', 'connect')">Connect</button>`

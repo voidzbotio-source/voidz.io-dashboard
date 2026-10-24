@@ -544,6 +544,33 @@ function saveDeathHistory(username, history) {
     saveBotConfigs(configs)
 }
 
+// Who got promoted/demoted and when - see checkRoleChanges() below.
+function getRoleChangeHistory(username) {
+    const configs = loadBotConfigs()
+    const history = configs[username]?.roleChangeHistory
+    return Array.isArray(history) ? history : []
+}
+
+function saveRoleChangeHistory(username, history) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], roleChangeHistory: history }
+    saveBotConfigs(configs)
+}
+
+// Every death the bot itself suffers, with the killer's name if the
+// server's death message named one - see checkNemesisDeath() below.
+function getNemesisHistory(username) {
+    const configs = loadBotConfigs()
+    const history = configs[username]?.nemesisHistory
+    return Array.isArray(history) ? history : []
+}
+
+function saveNemesisHistory(username, history) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], nemesisHistory: history }
+    saveBotConfigs(configs)
+}
+
 // Manual fix for the Leaderboard showing a renamed player as two
 // separate rows - checkKothCapture/checkTeamDeath only tag NEW
 // entries with a UUID, so the old ones under a previous name stay
@@ -1279,6 +1306,14 @@ class BotSession {
         // that one's scoped to our own team only.
         this.serverActivity = getServerActivity(username)
 
+        // Promotions/demotions seen across consecutive /t info
+        // captures - see checkRoleChanges().
+        this.roleChangeHistory = getRoleChangeHistory(username)
+
+        // Every death the bot itself suffers, with the killer's name
+        // when the death message named one - see checkNemesisDeath().
+        this.nemesisHistory = getNemesisHistory(username)
+
         // Lifetime badge-unlock counters, independent of the prunable
         // history arrays above.
         this.badgeProgress = getBadgeProgress(username)
@@ -1678,6 +1713,7 @@ class BotSession {
 
             serverActivity: this.serverActivity,
             badgeProgress: this.badgeProgress,
+            nemesisHistory: this.nemesisHistory,
 
             timestamp: Date.now()
 
@@ -2887,6 +2923,81 @@ class BotSession {
 
     }
 
+    // Compares the roster just finished against the one from the
+    // previous /t info capture and logs anyone whose role changed -
+    // promoted or demoted, by anyone, not just through the perm-rank
+    // feature. Skipped on the very first capture (nothing to diff
+    // against yet - previousMembers is empty then).
+    checkRoleChanges(previousMembers, newMembers) {
+
+        if (previousMembers.length === 0) return
+
+        const previousRoleByName = new Map(
+            previousMembers.map(member => [member.name.toLowerCase(), member.role])
+        )
+
+        for (const member of newMembers) {
+
+            const previousRole = previousRoleByName.get(member.name.toLowerCase())
+
+            if (!previousRole || previousRole === member.role) continue
+
+            this.roleChangeHistory.push({
+                timestamp: Date.now(),
+                player: member.name,
+                fromRole: previousRole,
+                toRole: member.role
+            })
+
+            this.roleChangeHistory = this.roleChangeHistory.slice(-50)
+
+            saveRoleChangeHistory(this.username, this.roleChangeHistory)
+
+            this.log(`${member.name} role changed: ${previousRole} -> ${member.role}`)
+
+            io.to(this.username).emit('notice', {
+                type: 'info',
+                text: `${member.name}: ${previousRole} → ${member.role}`,
+                logActivity: true
+            })
+
+        }
+
+    }
+
+    // Tallies who's actually killed the bot, from its own death
+    // message ("<BotName> was slain by <Killer>" and the many other
+    // vanilla death-message verbs - "was ... by <Name>" covers them
+    // generically). Not every death names a killer (fell, drowned,
+    // etc. have no "by <Name>" at all), which is fine - those just
+    // don't match and nothing gets logged for them.
+    checkNemesisDeath(text) {
+
+        const botName = this.bot?.username
+
+        if (!botName) return
+
+        const match = cleanMessage(text).match(
+            new RegExp(`^${botName} was .*? by ([A-Za-z0-9_]{1,16})\\b`, 'i')
+        )
+
+        if (!match) return
+
+        const killer = match[1]
+
+        this.nemesisHistory.push({
+            timestamp: Date.now(),
+            killer
+        })
+
+        this.nemesisHistory = this.nemesisHistory.slice(-200)
+
+        saveNemesisHistory(this.username, this.nemesisHistory)
+
+        this.log(`Died to ${killer}.`)
+
+    }
+
     // Runs every dashboard tick (~1s) while connected. Any Auto-Invite
     // tracked player whose tab-list HP drops below 2.5 hearts (5 HP)
     // gets kicked off the team and immediately reinvited - kicking
@@ -2999,6 +3110,8 @@ class BotSession {
             ([role, roleMembers]) => roleMembers.map(member => ({ ...member, role }))
         )
 
+        const previousMembers = this.teamRoster?.members || []
+
         this.teamRoster = {
             header: this.teamInfoCapture.header,
             balance: this.teamInfoCapture.balance,
@@ -3042,6 +3155,8 @@ class BotSession {
             }
 
         }
+
+        this.checkRoleChanges(previousMembers, members)
 
         this.teamInfoCapture = null
 
@@ -3392,6 +3507,7 @@ class BotSession {
             this.checkTeamRosterChange(text)
             this.checkKothCapture(text)
             this.checkTeamDeath(text)
+            this.checkNemesisDeath(text)
             this.checkBlackMarket(text)
 
             // Action bar text ('game_info') refreshes far too often to
@@ -3756,6 +3872,7 @@ class BotSession {
             this.checkTeamRosterChange(text)
             this.checkKothCapture(text)
             this.checkTeamDeath(text)
+            this.checkNemesisDeath(text)
 
             const dedupeKey = `${packet.type}:${text}`
 
@@ -3899,6 +4016,21 @@ class FleetAccount {
         this.shuttingDown = false
         this.reconnectTimer = null
 
+        // Lightweight uptime tracking for the Account Fleet row - not
+        // trying to be exact, just enough to tell a flaky alt from a
+        // stable one at a glance.
+        this.createdAt = Date.now()
+        this.totalConnectedMs = 0
+        this.reconnectCount = 0
+
+    }
+
+    recordDisconnect() {
+
+        if (this.connectedAt) {
+            this.totalConnectedMs += Date.now() - this.connectedAt
+        }
+
     }
 
     setState(state) {
@@ -3916,6 +4048,10 @@ class FleetAccount {
             ? !!(this.bot && this.bedrockSpawned)
             : !!(this.bot && this.bot.entity)
 
+        const connectedMs = this.totalConnectedMs + (this.connectedAt ? Date.now() - this.connectedAt : 0)
+        const elapsedMs = Date.now() - this.createdAt
+        const uptimePercent = elapsedMs > 0 ? Math.round((connectedMs / elapsedMs) * 100) : 0
+
         return {
             id: this.id,
             label: this.config.label || this.config.microsoftEmail,
@@ -3926,7 +4062,9 @@ class FleetAccount {
             state: this.state,
             online,
             botEnabled: this.botEnabled,
-            lastError: this.lastError
+            lastError: this.lastError,
+            reconnectCount: this.reconnectCount,
+            uptimePercent
         }
 
     }
@@ -3934,11 +4072,15 @@ class FleetAccount {
     abortConnect(message) {
 
         this.lastError = message
+        this.recordDisconnect()
+        this.connectedAt = null
         this.setState('OFFLINE')
 
         if (this.shuttingDown) return
         if (!this.botEnabled) return
         if (this.reconnectTimer) return
+
+        this.reconnectCount++
 
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null
@@ -4062,6 +4204,8 @@ class FleetAccount {
 
             if (reason) this.lastError = this.lastError || String(reason)
 
+            this.recordDisconnect()
+
             this.bot = null
             this.connectedAt = null
 
@@ -4070,6 +4214,8 @@ class FleetAccount {
             if (this.shuttingDown) return
             if (!this.botEnabled) return
             if (this.reconnectTimer) return
+
+            this.reconnectCount++
 
             this.reconnectTimer = setTimeout(() => {
                 this.reconnectTimer = null
@@ -4154,6 +4300,8 @@ class FleetAccount {
 
         this.bot.on('close', () => {
 
+            this.recordDisconnect()
+
             this.bot = null
             this.bedrockSpawned = false
             this.connectedAt = null
@@ -4163,6 +4311,8 @@ class FleetAccount {
             if (this.shuttingDown) return
             if (!this.botEnabled) return
             if (this.reconnectTimer) return
+
+            this.reconnectCount++
 
             this.reconnectTimer = setTimeout(() => {
                 this.reconnectTimer = null

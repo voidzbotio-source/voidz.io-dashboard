@@ -2033,6 +2033,34 @@
         /* TITLE ACTION BUTTON */
         /* ================================================= */
 
+        .team-expand-hint {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+
+            margin-left: auto;
+
+            color: var(--purple);
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: none;
+            letter-spacing: normal;
+
+            opacity: 0;
+            transform: translateX(-4px);
+            transition: opacity 0.15s ease, transform 0.15s ease;
+        }
+
+        .team-expand-hint svg {
+            width: 12px;
+            height: 12px;
+        }
+
+        .card[data-card-id="team"]:hover .team-expand-hint {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
         .title-action {
             margin-left: auto;
 
@@ -2069,23 +2097,86 @@
         /* ================================================= */
 
         .team-header {
+            position: relative;
+
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
+            align-items: center;
             gap: 12px;
 
-            margin-bottom: 14px;
+            padding: 14px;
+            margin: -4px -4px 14px;
+
+            border-radius: var(--radius-sm);
+
+            background:
+                radial-gradient(
+                    circle at 0% 0%,
+                    color-mix(in srgb, var(--purple) 16%, transparent),
+                    transparent 65%
+                );
+
+            overflow: hidden;
         }
 
         .team-name {
+            font-family: var(--font-display);
             font-weight: 800;
-            font-size: 15px;
+            font-size: 17px;
+            letter-spacing: -0.01em;
+
+            background: linear-gradient(135deg, var(--blue), var(--purple));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
         .team-meta {
             color: var(--muted);
             font-size: 12px;
             margin-top: 3px;
+        }
+
+        .team-online-ring-wrap {
+            position: relative;
+            flex-shrink: 0;
+
+            width: 56px;
+            height: 56px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .team-online-ring-track {
+            fill: none;
+            stroke: var(--border);
+            stroke-width: 5;
+        }
+
+        .team-online-ring-fill {
+            fill: none;
+            stroke: var(--purple);
+            stroke-width: 5;
+            stroke-linecap: round;
+
+            transform: rotate(-90deg);
+            transform-origin: center;
+
+            transition: stroke-dasharray 0.5s ease;
+
+            filter: drop-shadow(0 0 4px color-mix(in srgb, var(--purple) 70%, transparent));
+        }
+
+        .team-online-ring-label {
+            position: absolute;
+
+            font-family: var(--font-display);
+            font-size: 12px;
+            font-weight: 800;
+
+            font-variant-numeric: tabular-nums;
         }
 
         .team-sparklines {
@@ -2096,12 +2187,19 @@
         }
 
         .team-stat {
+            position: relative;
+
             flex: 1;
             min-width: 0;
 
-            padding: 10px 12px;
+            padding: 12px 14px;
 
-            background: var(--panel-2);
+            background:
+                linear-gradient(
+                    135deg,
+                    color-mix(in srgb, var(--purple) 10%, var(--panel-2)),
+                    var(--panel-2)
+                );
             border: 1px solid var(--border);
             border-radius: var(--radius-sm);
 
@@ -2109,9 +2207,30 @@
             flex-direction: column;
             gap: 4px;
 
+            overflow: hidden;
+
             cursor: pointer;
-            transition: border-color 0.15s ease, background-color 0.15s ease;
+            transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
         }
+
+        .team-stat:active {
+            transform: scale(0.98);
+        }
+
+        .team-stat-value-row {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+        }
+
+        .team-stat-trend {
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .team-stat-trend.positive { color: var(--green); }
+        .team-stat-trend.negative { color: var(--red); }
+        .team-stat-trend.neutral { color: var(--muted); }
 
         .team-stat:hover {
             border-color: var(--border-strong);
@@ -2802,13 +2921,26 @@
 
         .team-stat-value {
             font-family: var(--font-display);
-            font-size: 17px;
-            font-weight: 700;
+            font-size: 20px;
+            font-weight: 800;
+
+            font-variant-numeric: tabular-nums;
         }
 
         .sparkline {
             display: block;
             margin-top: 2px;
+        }
+
+        .sparkline-pulse {
+            transform-origin: center;
+            transform-box: fill-box;
+            animation: sparkline-pulse 2.2s ease-out infinite;
+        }
+
+        @keyframes sparkline-pulse {
+            0% { transform: scale(1); opacity: 0.5; }
+            100% { transform: scale(2.6); opacity: 0; }
         }
 
         .team-online-count {
@@ -2822,20 +2954,39 @@
         }
 
         .role-group {
-            margin-bottom: 12px;
+            --role-color: var(--muted);
+
+            margin-bottom: 14px;
+            padding-left: 10px;
+
+            border-left: 2px solid color-mix(in srgb, var(--role-color) 45%, transparent);
         }
 
         .role-group:last-child {
             margin-bottom: 0;
         }
 
+        .role-group.role-leader { --role-color: var(--yellow); }
+        .role-group.role-captain { --role-color: var(--orange); }
+        .role-group.role-officer { --role-color: var(--purple); }
+        .role-group.role-member { --role-color: var(--blue); }
+
         .role-label {
-            color: var(--muted);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+
+            color: var(--role-color);
             font-size: 11px;
-            font-weight: 700;
+            font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.06em;
             margin-bottom: 6px;
+        }
+
+        .role-icon {
+            font-size: 12px;
+            line-height: 1;
         }
 
         .team-member {
@@ -2844,11 +2995,22 @@
             flex-wrap: wrap;
             gap: 8px;
 
-            padding: 6px 0;
+            padding: 7px 8px;
+            margin-bottom: 2px;
+
+            border-radius: var(--radius-sm);
 
             font-size: 13px;
 
-            border-bottom: 1px solid var(--border);
+            transition: background-color 0.15s ease;
+        }
+
+        .team-member:hover {
+            background: var(--panel-2);
+        }
+
+        .team-member:last-child {
+            margin-bottom: 0;
         }
 
         .team-member:last-child {
@@ -2865,6 +3027,17 @@
         .member-dot.online {
             background: var(--green);
             box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+        }
+
+        /* Scoped to the Team card specifically, not the shared dot
+           class in general (Threats/Allies/Auto-Invite use it too). */
+        .team-member .member-dot.online {
+            animation: team-dot-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes team-dot-pulse {
+            0%, 100% { box-shadow: 0 0 6px rgba(34, 197, 94, 0.6); }
+            50% { box-shadow: 0 0 10px rgba(34, 197, 94, 0.95); }
         }
 
         .member-dot.offline {
@@ -4784,6 +4957,7 @@
                 <div class="card-title">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     Team
+                    <span class="team-expand-hint">View details <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
                     <button class="title-action" id="teamRefreshBtn" title="Refresh team info (/t info)" onclick="refreshTeam()">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
                     </button>
@@ -8210,11 +8384,27 @@
                 .join(' ')
 
             const [lastX, lastY] = coords[coords.length - 1]
+            const [firstX] = coords[0]
+
+            // Closed area path (line path + down to the baseline + back
+            // along the bottom) for the gradient fill underneath -
+            // turns a plain trend line into something with real depth.
+            const areaPath = `${path} L${lastX.toFixed(1)},${(height - yPad).toFixed(1)} L${firstX.toFixed(1)},${(height - yPad).toFixed(1)} Z`
+
+            const gradientId = `sparkGrad${Math.random().toString(36).slice(2, 9)}`
 
             return `
                 <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="sparkline">
-                    <path d="${path}" fill="none" stroke="var(--faint)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-                    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="4" fill="var(--blue)" stroke="var(--panel-2)" stroke-width="2"/>
+                    <defs>
+                        <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="var(--purple)" stop-opacity="0.45"/>
+                            <stop offset="100%" stop-color="var(--purple)" stop-opacity="0"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="${areaPath}" fill="url(#${gradientId})" stroke="none"/>
+                    <path d="${path}" fill="none" stroke="var(--purple)" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
+                    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="4.5" fill="var(--purple)" stroke="var(--panel-2)" stroke-width="2"/>
+                    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="4.5" fill="var(--purple)" opacity="0.5" class="sparkline-pulse"/>
                 </svg>
             `
 
@@ -8278,6 +8468,22 @@
 
         }
 
+        // Icon + color-key per role group, matched loosely against
+        // FlareMC's usual labels (Leaders/Officers/Members) so an
+        // unfamiliar label still falls back to something sane instead
+        // of breaking.
+        function classifyRole(role) {
+
+            const normalized = role.trim().toLowerCase()
+
+            if (normalized.startsWith('leader')) return { key: 'leader', icon: '👑' }
+            if (normalized.startsWith('captain')) return { key: 'captain', icon: '🎖️' }
+            if (normalized.startsWith('officer')) return { key: 'officer', icon: '🛡️' }
+
+            return { key: 'member', icon: '●' }
+
+        }
+
         function renderTeam(team) {
 
             const container =
@@ -8334,10 +8540,11 @@
                             // at the top of the rank ladder - Kick and
                             // the perm-rank picker don't apply to them.
                             const isLeaderGroup = role.trim().toLowerCase().startsWith('leader')
+                            const roleInfo = classifyRole(role)
 
                             return `
-                            <div class="role-group">
-                                <div class="role-label">${escapeHtml(role)} (${members.length})</div>
+                            <div class="role-group role-${roleInfo.key}">
+                                <div class="role-label"><span class="role-icon">${roleInfo.icon}</span>${escapeHtml(role)} (${members.length})</div>
                                 ${
                                     members
                                         .map(
@@ -8398,19 +8605,57 @@
             renderLeaderboard()
             renderDangerMeter()
 
-            const pointsSpark = buildSparkline(history.map(entry => entry.points), 140, 32)
+            const pointsValues = history.map(entry => entry.points)
+                .filter(value => typeof value === 'number' && Number.isFinite(value))
+
+            const pointsSpark = buildSparkline(pointsValues, 140, 32)
+
+            const currentPoints = pointsValues.length ? pointsValues[pointsValues.length - 1] : null
+            const previousPoints = pointsValues.length > 1 ? pointsValues[pointsValues.length - 2] : null
+
+            let trendHtml = ''
+
+            if (currentPoints !== null && previousPoints !== null) {
+
+                const delta = currentPoints - previousPoints
+                const trendClass = delta > 0 ? 'positive' : delta < 0 ? 'negative' : 'neutral'
+                const arrow = delta > 0 ? '▲' : delta < 0 ? '▼' : '—'
+
+                trendHtml = `<span class="team-stat-trend ${trendClass}">${arrow} ${delta > 0 ? '+' : ''}${delta}</span>`
+
+            }
 
             const sparklinesHtml = pointsSpark
                 ? `
                     <div class="team-sparklines">
                         <div class="team-stat">
                             <div class="team-stat-label">Points</div>
-                            <div class="team-stat-value">${team.points ?? '-'}</div>
+                            <div class="team-stat-value-row">
+                                <div class="team-stat-value">${team.points ?? '-'}</div>
+                                ${trendHtml}
+                            </div>
                             ${pointsSpark}
                         </div>
                     </div>
                 `
                 : ''
+
+            // Circular "how much of the team is online right now" ring,
+            // instead of a flat X/Y number buried in the corner.
+            const onlineFraction = team.totalCount > 0 ? team.onlineCount / team.totalCount : 0
+            const ringRadius = 22
+            const ringCircumference = 2 * Math.PI * ringRadius
+            const ringFilled = onlineFraction * ringCircumference
+
+            const onlineRingHtml = `
+                <div class="team-online-ring-wrap" title="${team.onlineCount} of ${team.totalCount} online">
+                    <svg viewBox="0 0 56 56" width="56" height="56">
+                        <circle class="team-online-ring-track" cx="28" cy="28" r="${ringRadius}"></circle>
+                        <circle class="team-online-ring-fill" cx="28" cy="28" r="${ringRadius}" stroke-dasharray="${ringFilled.toFixed(1)} ${ringCircumference.toFixed(1)}"></circle>
+                    </svg>
+                    <div class="team-online-ring-label">${team.onlineCount}/${team.totalCount}</div>
+                </div>
+            `
 
             container.innerHTML = `
                 <div class="team-header">
@@ -8418,7 +8663,7 @@
                         <div class="team-name">${escapeHtml(team.name || 'Unknown Team')}</div>
                         <div class="team-meta">${escapeHtml(metaParts.join(' • '))}</div>
                     </div>
-                    <div class="team-online-count">${team.onlineCount}/${team.totalCount}</div>
+                    ${onlineRingHtml}
                 </div>
                 ${sparklinesHtml}
                 ${rolesHtml || '<div class="empty-state">No members found.</div>'}

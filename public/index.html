@@ -2324,9 +2324,35 @@
         }
 
         .stat-modal-card {
-            max-width: 640px;
+            max-width: 980px;
             max-height: 85vh;
             overflow-y: auto;
+        }
+
+        /* Landscape layout: two columns side by side instead of one
+           long vertical stack - "laying down" rather than "standing
+           up" now that there's enough content (chart, logs, two
+           leaderboards, full roster) to actually fill the width. */
+        .team-modal-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 28px;
+        }
+
+        .team-modal-col > .koth-history:first-child,
+        .team-modal-col > .team-modal-section:first-child {
+            margin-top: 0;
+            padding-top: 0;
+            border-top: none;
+        }
+
+        @media (max-width: 760px) {
+
+            .team-modal-columns {
+                grid-template-columns: 1fr;
+                gap: 0;
+            }
+
         }
 
         .team-modules-row {
@@ -3204,6 +3230,33 @@
             color: var(--faint);
             font-size: 10px;
             font-weight: 600;
+        }
+
+        .threat-danger-badge {
+            margin-left: 6px;
+
+            padding: 1px 6px;
+
+            border-radius: 999px;
+
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+        }
+
+        .threat-danger-badge.low {
+            background: color-mix(in srgb, var(--yellow) 18%, transparent);
+            color: var(--yellow);
+        }
+
+        .threat-danger-badge.medium {
+            background: color-mix(in srgb, var(--orange) 18%, transparent);
+            color: var(--orange);
+        }
+
+        .threat-danger-badge.high {
+            background: color-mix(in srgb, var(--red) 20%, transparent);
+            color: var(--red);
         }
 
         .threat-status, .ally-status, .autoinvite-status {
@@ -5562,39 +5615,59 @@
 
             <div id="teamModalStatsRow" class="team-modules-row"></div>
 
-            <div class="stat-modal-hero">
-                <div class="stat-modal-value" id="teamStatModalCurrent">-</div>
-                <div class="stat-modal-delta" id="teamStatModalDelta"></div>
-            </div>
+            <div class="team-modal-columns">
 
-            <div id="teamStatBestDay" class="stat-modal-bestday"></div>
+                <div class="team-modal-col">
 
-            <div id="teamStatModalBody" class="detail-chart-wrap"></div>
+                    <div class="stat-modal-hero">
+                        <div class="stat-modal-value" id="teamStatModalCurrent">-</div>
+                        <div class="stat-modal-delta" id="teamStatModalDelta"></div>
+                    </div>
 
-            <div class="koth-history">
-                <div class="koth-history-label">Recent Points Events</div>
-                <div id="teamStatKothList" class="koth-history-list scroll"></div>
-            </div>
+                    <div id="teamStatBestDay" class="stat-modal-bestday"></div>
 
-            <div class="koth-history">
-                <div class="koth-history-label">Team Activity Log</div>
-                <div id="teamActivityLogList" class="koth-history-list scroll"></div>
-            </div>
+                    <div id="teamStatModalBody" class="detail-chart-wrap"></div>
 
-            <div class="team-modal-section">
-                <div class="team-modal-section-label">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v6a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0 2 3.5"/><path d="M17 6h3a2 2 0 0 1-2 3.5"/></svg>
-                    Top Players
+                    <div class="koth-history">
+                        <div class="koth-history-label">Recent Points Events</div>
+                        <div id="teamStatKothList" class="koth-history-list scroll"></div>
+                    </div>
+
                 </div>
-                <div id="teamModalLeaderboard" class="team-modal-mini-leaderboard"></div>
-            </div>
 
-            <div class="team-modal-section">
-                <div class="team-modal-section-label">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                    Full Roster
+                <div class="team-modal-col">
+
+                    <div class="koth-history">
+                        <div class="koth-history-label">Team Activity Log</div>
+                        <div id="teamActivityLogList" class="koth-history-list scroll"></div>
+                    </div>
+
+                    <div class="team-modal-section">
+                        <div class="team-modal-section-label">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v6a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0 2 3.5"/><path d="M17 6h3a2 2 0 0 1-2 3.5"/></svg>
+                            Top Players (Your Team)
+                        </div>
+                        <div id="teamModalLeaderboard" class="team-modal-mini-leaderboard"></div>
+                    </div>
+
+                    <div class="team-modal-section">
+                        <div class="team-modal-section-label">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            Server Leaderboard
+                        </div>
+                        <div id="teamModalServerLeaderboard" class="team-modal-mini-leaderboard"></div>
+                    </div>
+
+                    <div class="team-modal-section">
+                        <div class="team-modal-section-label">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                            Full Roster
+                        </div>
+                        <div id="teamModalRoster" class="team-modal-roster"></div>
+                    </div>
+
                 </div>
-                <div id="teamModalRoster" class="team-modal-roster"></div>
+
             </div>
 
             <div class="modal-actions">
@@ -7759,6 +7832,53 @@
         // DASHBOARD UPDATE
         // ==================================================
 
+        // Shown once per page load (not once per dashboard tick), the
+        // first time real team data arrives. Compares against a
+        // localStorage timestamp from the last time this browser had
+        // the dashboard open, so reopening it after a while catches
+        // you up instead of making you scroll the various logs to
+        // piece together what happened while you were away.
+        let catchUpDigestShown = false
+
+        function showCatchUpDigestIfNeeded(team) {
+
+            if (catchUpDigestShown) return
+            if (!team) return
+
+            catchUpDigestShown = true
+
+            let lastVisitAt = null
+
+            try {
+                lastVisitAt = Number(localStorage.getItem('lastVisitAt')) || null
+            } catch {}
+
+            try {
+                localStorage.setItem('lastVisitAt', String(Date.now()))
+            } catch {}
+
+            if (!lastVisitAt) return
+
+            const since = entries => (entries || []).filter(entry => entry.timestamp > lastVisitAt).length
+
+            const kothCount = since(team.kothHistory)
+            const deathCount = since(team.deathHistory)
+            const roleChangeCount = since(team.roleChangeHistory)
+            const teamEventCount = since(team.teamEventHistory)
+
+            const parts = []
+
+            if (kothCount) parts.push(`${kothCount} KOTH${kothCount === 1 ? '' : 's'}`)
+            if (deathCount) parts.push(`${deathCount} death${deathCount === 1 ? '' : 's'}`)
+            if (roleChangeCount) parts.push(`${roleChangeCount} role change${roleChangeCount === 1 ? '' : 's'}`)
+            if (teamEventCount) parts.push(`${teamEventCount} roster event${teamEventCount === 1 ? '' : 's'}`)
+
+            if (!parts.length) return
+
+            showToast(`Since your last visit: ${parts.join(', ')}.`, 'info')
+
+        }
+
         function updateDashboard(
             data
         ) {
@@ -7766,6 +7886,8 @@
             if (!data) {
                 return
             }
+
+            showCatchUpDigestIfNeeded(data.team)
 
             if (data.online) {
                 closeMsaModalIfShowing(null)
@@ -7996,7 +8118,8 @@
                 data.inventory || []
             )
 
-            renderServerActivity(data.serverActivity || [])
+            lastServerActivity = Array.isArray(data.serverActivity) ? data.serverActivity : []
+            renderServerActivity(lastServerActivity)
             lastBadgeProgress = data.badgeProgress || null
             renderBadges(data.badgeProgress || null)
             renderActionBar(data.actionBar || null)
@@ -8448,6 +8571,7 @@
         let lastTeamEventHistory = []
         let lastBadgeProgress = null
         let lastTeamSnapshot = null
+        let lastServerActivity = []
 
         function buildSparkline(values, width, height) {
 
@@ -8978,6 +9102,7 @@
             renderTeamActivityLog()
             renderTeamModalStats()
             renderTeamModalLeaderboard()
+            renderTeamModalServerLeaderboard()
             renderTeamModalRoster()
 
         }
@@ -9061,6 +9186,57 @@
                 `
 
             }).join('')
+
+        }
+
+        // Who's actually capturing the most KOTHs server-wide, any
+        // team - serverActivity logs every capture seen (not just
+        // ours), tagged isOwnTeam, so this is the real competitive
+        // picture instead of only ever seeing our own numbers. FlareMC's
+        // capture message doesn't name the capturing player's team, so
+        // this ranks individuals rather than teams - that data just
+        // isn't available to build a true team-vs-team scoreboard from.
+        function renderTeamModalServerLeaderboard() {
+
+            const container = $('teamModalServerLeaderboard')
+
+            if (!container) return
+
+            const byPlayer = {}
+
+            for (const entry of lastServerActivity) {
+
+                const key = entry.player.toLowerCase()
+
+                if (!byPlayer[key]) {
+                    byPlayer[key] = { name: entry.player, captures: 0, points: 0, isOwnTeam: entry.isOwnTeam }
+                }
+
+                byPlayer[key].captures++
+                byPlayer[key].points += entry.points || 0
+
+            }
+
+            const rows = Object.values(byPlayer).sort((a, b) => b.captures - a.captures).slice(0, 5)
+
+            if (!rows.length) {
+                container.innerHTML = '<div class="empty-state">No server-wide KOTH activity seen yet.</div>'
+                return
+            }
+
+            container.innerHTML = rows.map((row, index) => `
+                <div class="leaderboard-row">
+                    <div class="leaderboard-rank">${index + 1}</div>
+                    <div class="leaderboard-info">
+                        <div class="leaderboard-name">
+                            ${escapeHtml(row.name)}
+                            ${row.isOwnTeam ? '<span class="server-activity-own">YOUR TEAM</span>' : ''}
+                        </div>
+                        <div class="leaderboard-meta">${row.captures} KOTH${row.captures === 1 ? '' : 's'}</div>
+                    </div>
+                    <div class="leaderboard-net positive">+${row.points}</div>
+                </div>
+            `).join('')
 
         }
 
@@ -10043,6 +10219,31 @@
 
         }
 
+        // How active a tracked Threat has actually been capturing
+        // KOTHs recently, from the same server-wide serverActivity
+        // feed the Server Leaderboard uses - turns "online" (which
+        // says nothing about whether they're actually a problem)
+        // into an at-a-glance tier instead of needing to go dig
+        // through Server Activity yourself.
+        const THREAT_DANGER_WINDOW_MS = 2 * 60 * 60 * 1000
+
+        function computeThreatDangerScore(name) {
+
+            const lower = name.toLowerCase()
+            const now = Date.now()
+
+            const recentCaptures = lastServerActivity.filter(entry =>
+                entry.player.toLowerCase() === lower && (now - entry.timestamp) < THREAT_DANGER_WINDOW_MS
+            ).length
+
+            if (recentCaptures === 0) return null
+            if (recentCaptures === 1) return { tier: 'low', label: 'Low', captures: recentCaptures }
+            if (recentCaptures <= 3) return { tier: 'medium', label: 'Medium', captures: recentCaptures }
+
+            return { tier: 'high', label: 'High', captures: recentCaptures }
+
+        }
+
         // ==================================================
         // TRACKED-PLAYER ACTIVITY / AFK DETECTION
         // ==================================================
@@ -10511,12 +10712,16 @@
                             const statusClass = online ? (afk ? 'afk' : 'online') : ''
                             const statusText = online ? (afk ? 'AFK' : 'Online') : escapeHtml(timeAgo(threat.lastSeen))
                             const usualHours = getUsualOnlineHours(threat)
+                            const danger = computeThreatDangerScore(threat.name)
 
                             return `
                                 <div class="threat-row ${online && !afk ? 'online' : ''}">
                                     <span class="member-dot ${dotState}"></span>
                                     <div class="threat-name-wrap">
-                                        <span class="threat-name">${escapeHtml(threat.name)}</span>
+                                        <span class="threat-name">
+                                            ${escapeHtml(threat.name)}
+                                            ${danger ? `<span class="threat-danger-badge ${danger.tier}" title="${danger.captures} KOTH capture${danger.captures === 1 ? '' : 's'} seen in the last 2 hours">⚠ ${danger.label}</span>` : ''}
+                                        </span>
                                         ${usualHours ? `<span class="threat-usual-hours">Usually online ${usualHours}</span>` : ''}
                                     </div>
                                     <span class="threat-status ${statusClass}">${statusText}</span>

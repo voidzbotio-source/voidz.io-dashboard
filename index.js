@@ -530,6 +530,82 @@ function saveDeathHistory(username, history) {
     saveBotConfigs(configs)
 }
 
+// Manual fix for the Leaderboard showing a renamed player as two
+// separate rows - checkKothCapture/checkTeamDeath only tag NEW
+// entries with a UUID, so the old ones under a previous name stay
+// split until they age out of the 50-entry cap (see renderLeaderboard
+// on the client). This closes that gap immediately instead of
+// waiting: retags every koth/death entry for EITHER given name with
+// the same UUID, so the Leaderboard's uuid-based grouping merges
+// their captures/deaths/net into one row right away.
+function combineLeaderboardPlayers(username, nameA, nameB) {
+
+    const normalizedA = String(nameA || '').trim()
+    const normalizedB = String(nameB || '').trim()
+
+    if (!normalizedA || !normalizedB) {
+        return { ok: false, error: 'Both names are required.' }
+    }
+
+    if (normalizedA.toLowerCase() === normalizedB.toLowerCase()) {
+        return { ok: false, error: 'Pick two different names.' }
+    }
+
+    const matches = name => {
+        const lower = String(name || '').toLowerCase()
+        return lower === normalizedA.toLowerCase() || lower === normalizedB.toLowerCase()
+    }
+
+    const kothHistory = getKothHistory(username)
+    const deathHistory = getDeathHistory(username)
+
+    const session = sessions.get(username)
+
+    // Prefer a real UUID: either name currently online (if the bot's
+    // connected), or whichever existing entry for either name is
+    // already tagged from a previous capture/death. Only synthesizes
+    // one as a last resort - it just needs to be a stable shared key
+    // for aggregation, not a verified Mojang UUID.
+    let uuid = session
+        ? (session.findUuidForPlayerName(normalizedA) || session.findUuidForPlayerName(normalizedB))
+        : null
+
+    if (!uuid) {
+
+        const tagged = [...kothHistory, ...deathHistory].find(entry => entry.uuid && matches(entry.player))
+
+        uuid = tagged?.uuid || crypto.randomUUID()
+
+    }
+
+    let touched = 0
+
+    for (const entry of kothHistory) {
+        if (matches(entry.player)) { entry.uuid = uuid; touched++ }
+    }
+
+    for (const entry of deathHistory) {
+        if (matches(entry.player)) { entry.uuid = uuid; touched++ }
+    }
+
+    saveKothHistory(username, kothHistory)
+    saveDeathHistory(username, deathHistory)
+
+    if (session) {
+
+        session.kothHistory = kothHistory
+        session.deathHistory = deathHistory
+
+        session.log(`Combined leaderboard entries for "${normalizedA}" and "${normalizedB}" (${touched} entries, uuid ${uuid}).`)
+
+        session.updateDashboard()
+
+    }
+
+    return { ok: true, uuid, touched }
+
+}
+
 // Every KOTH capture seen server-wide, not just our own team's -
 // separate from kothHistory so a Team card Reset doesn't wipe out the
 // wider activity feed, and vice versa.
@@ -4610,6 +4686,20 @@ app.post('/api/fleet/stop-all', (req, res) => {
     const results = accounts.map(account => ({ id: account.id, ...stopFleetAccount(req.session.username, account.id) }))
 
     res.json({ results })
+
+})
+
+// Manual merge for two Leaderboard rows that should be the same
+// player (a rename - see combineLeaderboardPlayers above).
+app.post('/api/combine-leaderboard', (req, res) => {
+
+    const result = combineLeaderboardPlayers(req.session.username, req.body?.nameA, req.body?.nameB)
+
+    if (!result.ok) {
+        return res.status(400).json({ error: result.error })
+    }
+
+    res.json(result)
 
 })
 

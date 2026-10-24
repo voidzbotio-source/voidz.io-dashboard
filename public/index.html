@@ -7,7 +7,7 @@
 
     <meta
         name="viewport"
-        content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     >
 
     <title>Fleaxer Dashboard</title>
@@ -3810,6 +3810,23 @@
         /* ================================================= */
         /* RESPONSIVE */
         /* ================================================= */
+        /* Three tiers below desktop:
+             - "2-column" (<=1100px): just the card grid narrows,
+               sidebar untouched - still plenty of room for it.
+             - TABLET (1024px down to 701px): the sidebar stays a
+               real vertical sidebar - narrowed to an icon-only rail
+               - instead of collapsing, since tablets have the width
+               for it and are touch-primary like phones, not mouse-
+               primary like desktop. Everything interactive gets
+               phone-sized touch targets.
+             - PHONE (<=700px): sidebar collapses into a horizontal
+               top bar, grid goes single-column, spacing/typography
+               shrink, touch targets grow further.
+           Previously tablets and phones shared one 900px breakpoint
+           that collapsed the sidebar to the phone-style top bar for
+           both - squeezing portrait tablets (iPad ~768-834px, most
+           Android tablets ~800px) into a layout built for screens
+           half that width. */
 
         @media (
             max-width: 1100px
@@ -3829,8 +3846,115 @@
 
         }
 
+        /* ---------------- TABLET (701-1024px) ---------------- */
+
         @media (
-            max-width: 900px
+            max-width: 1024px
+        ) and (
+            min-width: 701px
+        ) {
+
+            .main-content {
+                padding: 22px;
+            }
+
+            .sidebar {
+                width: 84px;
+                padding: 18px 8px;
+                padding-top: max(18px, env(safe-area-inset-top));
+                align-items: center;
+            }
+
+            .brand {
+                flex-direction: column;
+                gap: 4px;
+                padding: 2px 0 18px;
+                margin-right: 0;
+            }
+
+            .brand h1 {
+                font-size: 10px;
+                text-align: center;
+                line-height: 1.2;
+            }
+
+            .brand p {
+                display: none;
+            }
+
+            .connection {
+                width: 100%;
+                justify-content: center;
+                padding: 10px 6px;
+            }
+
+            .connection-text {
+                display: none;
+            }
+
+            .sidebar .control-button {
+                padding: 13px 6px;
+                min-height: 48px;
+            }
+
+            .control-button span {
+                display: none;
+            }
+
+            .sidebar-nav-item {
+                width: 100%;
+                justify-content: center;
+                padding: 13px 6px;
+                min-height: 48px;
+            }
+
+            .sidebar-nav-item span {
+                display: none;
+            }
+
+            .sidebar-account {
+                flex-direction: column;
+                gap: 8px;
+                padding: 14px 0 2px;
+            }
+
+            .sidebar-account-name {
+                display: none;
+            }
+
+            .sidebar-logout-btn {
+                width: 44px;
+                height: 44px;
+            }
+
+            /* Touch-primary like a phone, even though the layout
+               otherwise stays closer to desktop - the actual action
+               buttons (not small icon-only utility buttons like the
+               threat/ally remove "x", which are sized deliberately)
+               get a real touch target instead of a mouse-sized one. */
+            .modal-ok, .modal-confirm, .manage-account-btn,
+            .command-grid button,
+            .manage-account-row .manage-account-password-input,
+            .fleet-row button,
+            select {
+                min-height: 40px;
+            }
+
+            input[type="text"],
+            input[type="email"],
+            input[type="password"],
+            input[type="number"],
+            select,
+            textarea {
+                font-size: 16px;
+            }
+
+        }
+
+        /* ---------------- PHONE (<=700px) ---------------- */
+
+        @media (
+            max-width: 700px
         ) {
 
             .app-shell {
@@ -3895,6 +4019,7 @@
                 order: 4;
                 width: 100%;
                 margin-bottom: 0;
+                min-height: 46px;
             }
 
             .sidebar-divider {
@@ -3911,7 +4036,8 @@
                 flex: 1 1 0;
 
                 justify-content: center;
-                padding: 10px;
+                padding: 12px;
+                min-height: 46px;
             }
 
             .sidebar-nav-item span {
@@ -3929,17 +4055,8 @@
             }
 
             .sidebar-logout-btn {
-                width: 36px;
-                height: 36px;
-            }
-
-            /* Blur is expensive to composite on mobile GPUs, and this
-               page stacks a lot of it (sidebar + every card + modals).
-               Keep the glass look but cut the cost. */
-            .card {
-            }
-
-            .modal-card {
+                width: 40px;
+                height: 40px;
             }
 
             .orb {
@@ -3951,23 +4068,18 @@
                 height: 320px;
             }
 
-        }
-
-        @media (
-            max-width: 700px
-        ) {
-
             .main-content {
-                padding: 15px;
+                padding: 14px;
             }
 
             .control-button {
-                min-height: 44px;
+                min-height: 46px;
             }
 
             .grid {
                 grid-template-columns:
                     1fr;
+                gap: 12px;
             }
 
             .col-1, .col-2, .col-3, .col-4 {
@@ -3976,6 +4088,10 @@
 
             .card {
                 padding: 16px;
+            }
+
+            .card-title {
+                font-size: 13.5px;
             }
 
             .keys-grid {
@@ -4012,12 +4128,65 @@
                 font-size: 30px;
             }
 
+            .hero-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+
             .toast-container {
                 left: 12px;
                 right: 12px;
                 bottom: max(14px, env(safe-area-inset-bottom));
 
                 max-width: none;
+            }
+
+            /* Real action buttons get a real touch target on phone -
+               not the small icon-only utility buttons (threat/ally
+               remove "x", title-action edit icons), which are sized
+               deliberately and would look broken stretched to 40px. */
+            .modal-ok, .modal-confirm, .manage-account-btn,
+            .command-grid button,
+            .manage-account-row .manage-account-password-input,
+            .fleet-row button,
+            .qa-add-btn,
+            select {
+                min-height: 40px;
+            }
+
+            /* Safari zooms the whole page in when a focused input's
+               font-size is under 16px - this is the actual fix for
+               that (the viewport maximum-scale/user-scalable lock
+               above is the belt to this suspenders). */
+            input[type="text"],
+            input[type="email"],
+            input[type="password"],
+            input[type="number"],
+            select,
+            textarea {
+                font-size: 16px;
+            }
+
+            /* Modals get the full screen on phone instead of floating
+               as a centered card with wasted margin on both sides. */
+            .modal-card,
+            .settings-card {
+                width: 100%;
+                max-width: none;
+                max-height: 100vh;
+                max-height: 100dvh;
+
+                border-radius: 0;
+            }
+
+            /* Any card with a wide inner element (tables, long rows)
+               scrolls its own content sideways instead of blowing out
+               the page's width. */
+            .fleet-row,
+            .manage-account-row,
+            .leaderboard-row,
+            .koth-history-row {
+                overflow-x: auto;
             }
 
         }
@@ -4030,13 +4199,18 @@
                 grid-template-columns: 1fr;
             }
 
-            .settings-field-row {
+            .settings-field-row,
+            .fleet-field-row {
                 flex-direction: column;
                 gap: 14px;
             }
 
             .settings-tab span {
                 display: none;
+            }
+
+            .command-grid {
+                grid-template-columns: 1fr;
             }
 
         }
@@ -4583,6 +4757,25 @@
                 <div class="card-title">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v6a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0 2 3.5"/><path d="M17 6h3a2 2 0 0 1-2 3.5"/></svg>
                     Leaderboard
+                    <button class="title-action" id="leaderboardCombineToggle" title="Combine two names (fix a rename)" onclick="toggleLeaderboardCombine()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                    </button>
+                </div>
+
+                <div id="leaderboardCombineEditor" class="quick-action-editor">
+
+                    <p class="settings-section-desc" style="margin: 0 0 10px;">
+                        Same player under two names (a rename)? Combine them - their KOTHs and deaths merge into one row going forward.
+                    </p>
+
+                    <div class="qa-editor-row">
+                        <input id="leaderboardCombineA" type="text" placeholder="Old name" class="qa-input" autocomplete="off">
+                        <input id="leaderboardCombineB" type="text" placeholder="New name" class="qa-input" autocomplete="off">
+                        <button class="qa-add-btn" onclick="combineLeaderboardNames()">Combine</button>
+                    </div>
+
+                    <div id="leaderboardCombineError" class="settings-error"></div>
+
                 </div>
 
                 <div id="leaderboardBody" class="leaderboard-body scroll">
@@ -8357,6 +8550,65 @@
 
                 })
                 .join('')
+
+        }
+
+        function toggleLeaderboardCombine() {
+
+            const editor = $('leaderboardCombineEditor')
+            const btn = $('leaderboardCombineToggle')
+
+            const showing = editor.classList.toggle('show')
+
+            btn.classList.toggle('active', showing)
+
+            if (showing) {
+                $('leaderboardCombineA')?.focus()
+            }
+
+        }
+
+        function combineLeaderboardNames() {
+
+            const errorBox = $('leaderboardCombineError')
+            const nameA = $('leaderboardCombineA').value.trim()
+            const nameB = $('leaderboardCombineB').value.trim()
+
+            errorBox.classList.remove('show')
+            errorBox.textContent = ''
+
+            if (!nameA || !nameB) {
+                errorBox.textContent = 'Enter both names.'
+                errorBox.classList.add('show')
+                return
+            }
+
+            fetch('/api/combine-leaderboard', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nameA, nameB })
+            })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+
+                    if (!ok) {
+                        errorBox.textContent = data.error || 'Could not combine those names.'
+                        errorBox.classList.add('show')
+                        return
+                    }
+
+                    $('leaderboardCombineA').value = ''
+                    $('leaderboardCombineB').value = ''
+
+                    toggleLeaderboardCombine()
+
+                    showToast(`Combined "${nameA}" and "${nameB}" (${data.touched} entr${data.touched === 1 ? 'y' : 'ies'}).`, 'success')
+
+                })
+                .catch(() => {
+                    errorBox.textContent = 'Could not reach the server. Try again.'
+                    errorBox.classList.add('show')
+                })
 
         }
 

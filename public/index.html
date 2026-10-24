@@ -2324,9 +2324,87 @@
         }
 
         .stat-modal-card {
-            max-width: 420px;
+            max-width: 640px;
             max-height: 85vh;
             overflow-y: auto;
+        }
+
+        .team-modules-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+
+            margin: 0 0 16px;
+        }
+
+        @media (max-width: 560px) {
+            .team-modules-row {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .team-module-tile {
+            padding: 10px 12px;
+
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+        }
+
+        .team-module-tile-label {
+            color: var(--muted);
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 3px;
+        }
+
+        .team-module-tile-value {
+            font-family: var(--font-display);
+            font-size: 16px;
+            font-weight: 800;
+
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+
+            font-variant-numeric: tabular-nums;
+        }
+
+        .team-modal-section {
+            margin-top: 18px;
+            padding-top: 14px;
+
+            border-top: 1px solid var(--border);
+        }
+
+        .team-modal-section-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 8px;
+        }
+
+        .team-modal-roster {
+            max-height: 220px;
+            overflow-y: auto;
+
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .team-modal-mini-leaderboard {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
         }
 
         .koth-history {
@@ -5482,6 +5560,8 @@
                 <span id="teamStatModalTitle">Team</span>
             </h3>
 
+            <div id="teamModalStatsRow" class="team-modules-row"></div>
+
             <div class="stat-modal-hero">
                 <div class="stat-modal-value" id="teamStatModalCurrent">-</div>
                 <div class="stat-modal-delta" id="teamStatModalDelta"></div>
@@ -5499,6 +5579,22 @@
             <div class="koth-history">
                 <div class="koth-history-label">Team Activity Log</div>
                 <div id="teamActivityLogList" class="koth-history-list scroll"></div>
+            </div>
+
+            <div class="team-modal-section">
+                <div class="team-modal-section-label">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v6a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0 2 3.5"/><path d="M17 6h3a2 2 0 0 1-2 3.5"/></svg>
+                    Top Players
+                </div>
+                <div id="teamModalLeaderboard" class="team-modal-mini-leaderboard"></div>
+            </div>
+
+            <div class="team-modal-section">
+                <div class="team-modal-section-label">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    Full Roster
+                </div>
+                <div id="teamModalRoster" class="team-modal-roster"></div>
             </div>
 
             <div class="modal-actions">
@@ -7901,6 +7997,7 @@
             )
 
             renderServerActivity(data.serverActivity || [])
+            lastBadgeProgress = data.badgeProgress || null
             renderBadges(data.badgeProgress || null)
             renderActionBar(data.actionBar || null)
             renderKothCapture(data.kothCapture || null)
@@ -8349,6 +8446,8 @@
         let lastDeathHistory = []
         let lastRoleChangeHistory = []
         let lastTeamEventHistory = []
+        let lastBadgeProgress = null
+        let lastTeamSnapshot = null
 
         function buildSparkline(values, width, height) {
 
@@ -8393,18 +8492,28 @@
 
             const gradientId = `sparkGrad${Math.random().toString(36).slice(2, 9)}`
 
+            // Crypto-ticker style: green if net up over the visible
+            // window, red if net down, purple (neutral) if flat -
+            // colored by the overall first-vs-last trend rather than
+            // a fixed color, same as a price chart.
+            const trendColor = points[points.length - 1] > points[0]
+                ? 'var(--green)'
+                : points[points.length - 1] < points[0]
+                    ? 'var(--red)'
+                    : 'var(--purple)'
+
             return `
                 <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="sparkline">
                     <defs>
                         <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stop-color="var(--purple)" stop-opacity="0.45"/>
-                            <stop offset="100%" stop-color="var(--purple)" stop-opacity="0"/>
+                            <stop offset="0%" stop-color="${trendColor}" stop-opacity="0.45"/>
+                            <stop offset="100%" stop-color="${trendColor}" stop-opacity="0"/>
                         </linearGradient>
                     </defs>
                     <path d="${areaPath}" fill="url(#${gradientId})" stroke="none"/>
-                    <path d="${path}" fill="none" stroke="var(--purple)" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
-                    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="4.5" fill="var(--purple)" stroke="var(--panel-2)" stroke-width="2"/>
-                    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="4.5" fill="var(--purple)" opacity="0.5" class="sparkline-pulse"/>
+                    <path d="${path}" fill="none" stroke="${trendColor}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
+                    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="4.5" fill="${trendColor}" stroke="var(--panel-2)" stroke-width="2"/>
+                    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="4.5" fill="${trendColor}" opacity="0.5" class="sparkline-pulse"/>
                 </svg>
             `
 
@@ -8596,6 +8705,7 @@
 
             const history = Array.isArray(team.history) ? team.history : []
 
+            lastTeamSnapshot = team
             lastTeamHistory = history
             lastKothHistory = Array.isArray(team.kothHistory) ? team.kothHistory : []
             lastDeathHistory = Array.isArray(team.deathHistory) ? team.deathHistory : []
@@ -8866,6 +8976,133 @@
             renderKothHistoryList()
             renderBestDay()
             renderTeamActivityLog()
+            renderTeamModalStats()
+            renderTeamModalLeaderboard()
+            renderTeamModalRoster()
+
+        }
+
+        // Quick-glance tile row at the top of the modal: Balance and
+        // Size come straight from the latest /t info, Total KOTHs is
+        // the lifetime counter (badgeProgress.totalKothCaptures -
+        // independent of the 50-entry history cap, so it never resets
+        // when history does), and Recent Net sums whatever's currently
+        // in the Points Events log.
+        function renderTeamModalStats() {
+
+            const container = $('teamModalStatsRow')
+
+            if (!container) return
+
+            const team = lastTeamSnapshot
+
+            const recentNet = [...lastKothHistory, ...lastDeathHistory]
+                .reduce((sum, entry) => sum + (entry.points || 0), 0)
+
+            const tiles = [
+                { label: 'Balance', value: team?.balance || '-' },
+                { label: 'Size', value: team?.size || `${team?.totalCount ?? '-'}` },
+                { label: 'Total KOTHs', value: lastBadgeProgress?.totalKothCaptures ?? '-' },
+                { label: 'Recent Net', value: `${recentNet > 0 ? '+' : ''}${recentNet}` }
+            ]
+
+            container.innerHTML = tiles.map(tile => `
+                <div class="team-module-tile">
+                    <div class="team-module-tile-label">${escapeHtml(tile.label)}</div>
+                    <div class="team-module-tile-value">${escapeHtml(String(tile.value))}</div>
+                </div>
+            `).join('')
+
+        }
+
+        // Condensed version of the Leaderboard card, embedded directly
+        // in the modal so "who's actually carrying this team" doesn't
+        // need a separate card lookup.
+        function renderTeamModalLeaderboard() {
+
+            const container = $('teamModalLeaderboard')
+
+            if (!container) return
+
+            const byPlayer = {}
+
+            for (const entry of [...lastKothHistory.map(entry => ({ ...entry, isCapture: true })), ...lastDeathHistory.map(entry => ({ ...entry, isCapture: false }))]) {
+
+                const key = entry.uuid || entry.player.toLowerCase()
+
+                if (!byPlayer[key]) {
+                    byPlayer[key] = { name: entry.player, net: 0 }
+                }
+
+                byPlayer[key].net += entry.points
+
+            }
+
+            const rows = Object.values(byPlayer).sort((a, b) => b.net - a.net).slice(0, 5)
+
+            if (!rows.length) {
+                container.innerHTML = '<div class="empty-state">No KOTH captures or deaths logged yet.</div>'
+                return
+            }
+
+            container.innerHTML = rows.map((row, index) => {
+
+                const netClass = row.net > 0 ? 'positive' : row.net < 0 ? 'negative' : 'neutral'
+                const sign = row.net > 0 ? '+' : ''
+
+                return `
+                    <div class="leaderboard-row">
+                        <div class="leaderboard-rank">${index + 1}</div>
+                        <div class="leaderboard-info">
+                            <div class="leaderboard-name">${escapeHtml(row.name)}</div>
+                        </div>
+                        <div class="leaderboard-net ${netClass}">${sign}${row.net}</div>
+                    </div>
+                `
+
+            }).join('')
+
+        }
+
+        // Read-only full roster (no Kick/perm-rank controls - those
+        // stay exclusive to the compact Team card to avoid duplicating
+        // interactive logic across two places).
+        function renderTeamModalRoster() {
+
+            const container = $('teamModalRoster')
+
+            if (!container) return
+
+            const roles = lastTeamSnapshot?.roles || {}
+
+            if (!Object.keys(roles).length) {
+                container.innerHTML = '<div class="empty-state">No members found.</div>'
+                return
+            }
+
+            container.innerHTML = Object.entries(roles).map(([role, members]) => {
+
+                const roleInfo = classifyRole(role)
+
+                return `
+                    <div class="role-group role-${roleInfo.key}">
+                        <div class="role-label"><span class="role-icon">${roleInfo.icon}</span>${escapeHtml(role)} (${members.length})</div>
+                        ${members.map(member => {
+
+                            const statusClass = member.online === true ? 'online' : member.online === false ? 'offline' : 'unknown'
+
+                            return `
+                                <div class="team-member">
+                                    <span class="member-dot ${statusClass}"></span>
+                                    <span class="team-member-name">${escapeHtml(member.name)}</span>
+                                </div>
+                            `
+
+                        }).join('')}
+                    </div>
+                `
+
+            }).join('')
 
         }
 

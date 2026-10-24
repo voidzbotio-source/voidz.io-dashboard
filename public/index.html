@@ -8223,6 +8223,18 @@
                 return
             }
 
+            // The dashboard re-renders this card roughly once a second.
+            // A <select> keeps DOM focus for as long as its native
+            // options list is open - replacing the whole card's
+            // innerHTML out from under it (as this function normally
+            // does) destroys that element mid-interaction, which closes
+            // the dropdown instantly. Skip this tick's render entirely
+            // while a rank select is focused, so picking an option
+            // actually has time to register.
+            if (document.activeElement?.classList?.contains('team-member-rank-select')) {
+                return
+            }
+
             if (!team) {
 
                 container.innerHTML =
@@ -8252,7 +8264,14 @@
             const rolesHtml =
                 Object.entries(team.roles || {})
                     .map(
-                        ([role, members]) => `
+                        ([role, members]) => {
+
+                            // The Leader can't be kicked and is already
+                            // at the top of the rank ladder - Kick and
+                            // the perm-rank picker don't apply to them.
+                            const isLeaderGroup = role.trim().toLowerCase().startsWith('leader')
+
+                            return `
                             <div class="role-group">
                                 <div class="role-label">${escapeHtml(role)} (${members.length})</div>
                                 ${
@@ -8266,6 +8285,17 @@
                                                         : member.online === false
                                                             ? 'offline'
                                                             : 'unknown'
+
+                                                if (isLeaderGroup) {
+
+                                                    return `
+                                                        <div class="team-member">
+                                                            <span class="member-dot ${statusClass}"></span>
+                                                            <span class="team-member-name">${escapeHtml(member.name)}</span>
+                                                        </div>
+                                                    `
+
+                                                }
 
                                                 const permRank = getPermRank(member.name)
 
@@ -8288,6 +8318,8 @@
                                 }
                             </div>
                         `
+
+                        }
                     )
                     .join('')
 

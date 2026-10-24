@@ -451,6 +451,20 @@ function saveAutoReinviteList(username, list) {
     saveBotConfigs(configs)
 }
 
+// Permanent team rank assignments - see checkAutoPromote() below.
+// {name, rank: 'officer' | 'captain'} per entry.
+function getPermRanks(username) {
+    const configs = loadBotConfigs()
+    const list = configs[username]?.permRanks
+    return Array.isArray(list) ? list : []
+}
+
+function savePermRanks(username, list) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], permRanks: list }
+    saveBotConfigs(configs)
+}
+
 // Lightweight extra accounts (see FleetAccount) - separate from the
 // user's own primary bot config above.
 function getFleetAccounts(username) {
@@ -2590,6 +2604,43 @@ class BotSession {
 
     }
 
+    // Watches for the same "X has joined the team." broadcast and,
+    // if that player has a permanent rank assigned (set from the Team
+    // card - see /api/perm-ranks/set), promotes them back up to it.
+    // Rejoining a team resets a player to plain Member rank, so
+    // someone who was Officer/Captain before leaving/getting kicked
+    // would otherwise need re-promoting by hand every single time.
+    // FlareMC's rank ladder only has a single /t promote step between
+    // each rank, so Officer needs one, Captain needs two run back to
+    // back - staggered slightly so the second isn't sent before the
+    // server's finished applying the first.
+    checkAutoPromote(text) {
+
+        const match = text.match(/^TEAMS ➟ (.+?) has joined the team\.?$/i)
+
+        if (!match) return
+
+        const username = match[1].trim()
+        const list = Array.isArray(this.config.permRanks) ? this.config.permRanks : []
+
+        const entry = list.find(item => (item?.name || '').toLowerCase() === username.toLowerCase())
+
+        if (!entry) return
+
+        const promotions = entry.rank === 'captain' ? 2 : entry.rank === 'officer' ? 1 : 0
+
+        if (promotions === 0) return
+
+        this.log(`${username} rejoined with a permanent ${entry.rank} rank - promoting ${promotions}x.`)
+
+        for (let i = 0; i < promotions; i++) {
+            setTimeout(() => this.sendMinecraftChat(`/t promote ${username}`), 500 + i * 700)
+        }
+
+        io.to(this.username).emit('notice', { type: 'success', text: `Promoting ${username} back to ${entry.rank}` })
+
+    }
+
     // Keeps the Team card current without waiting for the next manual
     // refresh: any "X has joined/left the team" or "X has been
     // kicked" broadcast triggers a fresh /t info. The "kicked" wording
@@ -3337,6 +3388,7 @@ class BotSession {
 
             this.tryParseTeamInfoLine(text, message.json)
             this.checkAutoReinvite(text)
+            this.checkAutoPromote(text)
             this.checkTeamRosterChange(text)
             this.checkKothCapture(text)
             this.checkTeamDeath(text)
@@ -3700,6 +3752,7 @@ class BotSession {
             // (already forced off for this platform).
             this.tryParseTeamInfoLine(text)
             this.checkAutoReinvite(text)
+            this.checkAutoPromote(text)
             this.checkTeamRosterChange(text)
             this.checkKothCapture(text)
             this.checkTeamDeath(text)
@@ -4519,6 +4572,48 @@ app.post('/api/auto-reinvite', (req, res) => {
 
     if (existing) {
         existing.config.autoReinvite = list
+    }
+
+    res.json({ ok: true, list })
+
+})
+
+// ============================================================
+// PERMANENT TEAM RANKS (see checkAutoPromote above)
+// ============================================================
+
+app.get('/api/perm-ranks', (req, res) => {
+    res.json({ list: getPermRanks(req.session.username) })
+})
+
+app.post('/api/perm-ranks/set', (req, res) => {
+
+    const name = String(req.body?.name || '').trim()
+    const rank = String(req.body?.rank || '').trim().toLowerCase()
+
+    if (!name) {
+        return res.status(400).json({ error: 'Name is required.' })
+    }
+
+    if (rank && rank !== 'officer' && rank !== 'captain') {
+        return res.status(400).json({ error: 'Rank must be "officer", "captain", or empty to clear.' })
+    }
+
+    const list = getPermRanks(req.session.username).filter(entry => {
+        const entryName = typeof entry === 'string' ? entry : entry?.name || ''
+        return entryName.toLowerCase() !== name.toLowerCase()
+    })
+
+    if (rank) {
+        list.push({ name, rank })
+    }
+
+    savePermRanks(req.session.username, list)
+
+    const existing = sessions.get(req.session.username)
+
+    if (existing) {
+        existing.config.permRanks = list
     }
 
     res.json({ ok: true, list })

@@ -2832,6 +2832,7 @@
         .team-member {
             display: flex;
             align-items: center;
+            flex-wrap: wrap;
             gap: 8px;
 
             padding: 6px 0;
@@ -2974,6 +2975,24 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+
+        .team-member-rank-select {
+            flex-shrink: 0;
+            width: auto;
+            max-width: 110px;
+
+            padding: 3px 6px;
+
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+
+            background: var(--panel-2);
+            color: var(--muted);
+
+            font-family: inherit;
+            font-size: 10px;
+            font-weight: 700;
         }
 
         .team-member-kick {
@@ -8137,6 +8156,64 @@
 
         }
 
+        // ==================================================
+        // PERMANENT TEAM RANKS
+        // ==================================================
+        // Rejoining a team resets you to plain Member, so a teammate
+        // who was Officer/Captain needs manual re-promoting every
+        // time they leave/get kicked and come back. Assigning a perm
+        // rank here means the server does it automatically instead -
+        // see checkAutoPromote() server-side.
+
+        let permRanks = []
+
+        function loadPermRanks() {
+
+            fetch('/api/perm-ranks')
+                .then(response => response.json())
+                .then(data => {
+                    // No need to force a re-render - the regular ~1s
+                    // dashboard tick calls renderTeam() on its own and
+                    // will pick this up on the very next one.
+                    permRanks = Array.isArray(data.list) ? data.list : []
+                })
+                .catch(() => {})
+
+        }
+
+        function getPermRank(name) {
+
+            const lower = String(name || '').toLowerCase()
+            const entry = permRanks.find(item => (item?.name || '').toLowerCase() === lower)
+
+            return entry?.rank || ''
+
+        }
+
+        function setPermRank(name, rank) {
+
+            fetch('/api/perm-ranks/set', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, rank })
+            })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+
+                    if (!ok) {
+                        showToast(data.error || 'Could not set that rank.', 'error')
+                        return
+                    }
+
+                    permRanks = data.list
+
+                    showToast(rank ? `${name} set as permanent ${rank}.` : `${name}'s permanent rank cleared.`, 'success')
+
+                })
+                .catch(() => showToast('Could not reach the server.', 'error'))
+
+        }
+
         function renderTeam(team) {
 
             const container =
@@ -8190,10 +8267,17 @@
                                                             ? 'offline'
                                                             : 'unknown'
 
+                                                const permRank = getPermRank(member.name)
+
                                                 return `
                                                     <div class="team-member">
                                                         <span class="member-dot ${statusClass}"></span>
                                                         <span class="team-member-name">${escapeHtml(member.name)}</span>
+                                                        <select class="team-member-rank-select" title="Permanent rank - re-promoted automatically if they rejoin" onchange="setPermRank('${escapeHtml(member.name)}', this.value)">
+                                                            <option value="" ${!permRank ? 'selected' : ''}>No perm rank</option>
+                                                            <option value="officer" ${permRank === 'officer' ? 'selected' : ''}>Perm Officer</option>
+                                                            <option value="captain" ${permRank === 'captain' ? 'selected' : ''}>Perm Captain</option>
+                                                        </select>
                                                         <button class="team-member-kick" onclick="sendCommand('kick-player ${escapeHtml(member.name)}', { confirm: 'Kick ${escapeHtml(member.name)} from the team?' })" title="Kick from team">Kick</button>
                                                     </div>
                                                 `
@@ -10427,6 +10511,7 @@
         })
 
         renderFleet()
+        loadPermRanks()
 
         // ==================================================
         // PREFERENCES SYNC (Threats/Allies/Appearance across devices)

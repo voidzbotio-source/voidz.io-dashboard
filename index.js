@@ -557,6 +557,19 @@ function saveRoleChangeHistory(username, history) {
     saveBotConfigs(configs)
 }
 
+// Who joined/left/got kicked and when - see logTeamEvent() below.
+function getTeamEventHistory(username) {
+    const configs = loadBotConfigs()
+    const history = configs[username]?.teamEventHistory
+    return Array.isArray(history) ? history : []
+}
+
+function saveTeamEventHistory(username, history) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], teamEventHistory: history }
+    saveBotConfigs(configs)
+}
+
 // Every death the bot itself suffers, with the killer's name if the
 // server's death message named one - see checkNemesisDeath() below.
 function getNemesisHistory(username) {
@@ -847,6 +860,19 @@ function cleanMessage(text) {
         .replace(/\s+/g, ' ')
         .trim()
 
+}
+
+// Join/left/kicked broadcasts (reinvite and the Kick button both
+// trigger these) are already reflected in the Team card's roster and
+// the new Team Activity Log, so they're just noise in the live Chat
+// panel now - still processed normally (checkTeamRosterChange,
+// logTeamEvent, etc. all run unconditionally elsewhere), just not
+// broadcast to the dashboard's chat feed.
+function isTeamRosterNoiseMessage(text) {
+    return (
+        /^TEAMS ➟ .+ has (joined|left) the team\.?$/i.test(text) ||
+        /^TEAMS ➟ .+ has been kicked\b/i.test(text)
+    )
 }
 
 function sendDiscordWebhook(webhookUrl, content, roleId) {
@@ -1310,6 +1336,9 @@ class BotSession {
         // captures - see checkRoleChanges().
         this.roleChangeHistory = getRoleChangeHistory(username)
 
+        // Who joined/left/got kicked and when - see logTeamEvent().
+        this.teamEventHistory = getTeamEventHistory(username)
+
         // Every death the bot itself suffers, with the killer's name
         // when the death message named one - see checkNemesisDeath().
         this.nemesisHistory = getNemesisHistory(username)
@@ -1707,7 +1736,9 @@ class BotSession {
                     updatedAt: this.teamRoster.updatedAt,
                     history: this.teamHistory,
                     kothHistory: this.kothHistory,
-                    deathHistory: this.deathHistory
+                    deathHistory: this.deathHistory,
+                    roleChangeHistory: this.roleChangeHistory,
+                    teamEventHistory: this.teamEventHistory
                 }
                 : null,
 
@@ -2693,15 +2724,24 @@ class BotSession {
     // promptly before.
     checkTeamRosterChange(text) {
 
+        const joinLeftMatch = text.match(/^TEAMS ➟ (.+?) has (joined|left) the team\.?$/i)
+        const kickedMatch = !joinLeftMatch && text.match(/^TEAMS ➟ (.+?) has been kicked\b/i)
+
         const isRosterChange =
-            /^TEAMS ➟ .+ has (joined|left) the team\.?$/i.test(text) ||
-            /^TEAMS ➟ .+ has been kicked\b/i.test(text) ||
+            !!joinLeftMatch ||
+            !!kickedMatch ||
             /^TEAMS ➟ .+ is now (online|offline)!?$/i.test(text) ||
             /\bKOTH has been captured!?$/i.test(text) ||
             /\bhas received\b.*\bteam points\b/i.test(text) ||
             /\byour team has lost \d+ points? due to\b/i.test(text)
 
         if (!isRosterChange) return
+
+        if (joinLeftMatch) {
+            this.logTeamEvent(joinLeftMatch[1].trim(), joinLeftMatch[2].toLowerCase())
+        } else if (kickedMatch) {
+            this.logTeamEvent(kickedMatch[1].trim(), 'kicked')
+        }
 
         // A burst of these (e.g. several people leaving/getting
         // kicked at once) shouldn't each fire their own /t info -
@@ -2711,6 +2751,19 @@ class BotSession {
         this.lastTeamRefreshRequestAt = Date.now()
 
         this.requestTeamInfo()
+
+    }
+
+    // Persists a joined/left/kicked event for the Team Detail modal's
+    // Activity Log - these used to only ever trigger a silent /t info
+    // refresh, with no lasting record of who actually joined/left/got
+    // kicked or when.
+    logTeamEvent(player, type) {
+
+        this.teamEventHistory.push({ timestamp: Date.now(), player, type })
+        this.teamEventHistory = this.teamEventHistory.slice(-50)
+
+        saveTeamEventHistory(this.username, this.teamEventHistory)
 
     }
 
@@ -3524,7 +3577,7 @@ class BotSession {
             // the 'chat' event above, which knows the real username -
             // broadcasting it again here would duplicate it. This
             // covers system messages and join/leave/announcements.
-            if (position !== 'chat' && position !== 'game_info') {
+            if (position !== 'chat' && position !== 'game_info' && !isTeamRosterNoiseMessage(text)) {
 
                 const dedupeKey = `${position}:${text}`
 
@@ -3874,18 +3927,22 @@ class BotSession {
             this.checkTeamDeath(text)
             this.checkNemesisDeath(text)
 
-            const dedupeKey = `${packet.type}:${text}`
+            if (!isTeamRosterNoiseMessage(text)) {
 
-            if (dedupeKey !== this.lastServerMessageKey) {
+                const dedupeKey = `${packet.type}:${text}`
 
-                this.lastServerMessageKey = dedupeKey
+                if (dedupeKey !== this.lastServerMessageKey) {
 
-                this.lastChatMessage = text
-                this.lastChatTime = new Date().toLocaleTimeString()
+                    this.lastServerMessageKey = dedupeKey
 
-                io.to(this.username).emit('chat', { username: 'SERVER', message: text, time: this.lastChatTime })
+                    this.lastChatMessage = text
+                    this.lastChatTime = new Date().toLocaleTimeString()
 
-                this.log(`[SERVER] ${text}`)
+                    io.to(this.username).emit('chat', { username: 'SERVER', message: text, time: this.lastChatTime })
+
+                    this.log(`[SERVER] ${text}`)
+
+                }
 
             }
 

@@ -4779,7 +4779,7 @@
             <!-- TEAM -->
             <!-- ========================================== -->
 
-            <section class="card col-2" data-card-id="team" draggable="true" style="animation-delay: 0.19s;">
+            <section class="card col-2" data-card-id="team" draggable="true" style="animation-delay: 0.19s;" onclick="handleTeamCardClick(event)" title="Click for team history and activity log">
 
                 <div class="card-title">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -5305,7 +5305,7 @@
 
             <h3>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8 13 13.7l-3-3L4.7 16"/></svg>
-                <span id="teamStatModalTitle">Points History</span>
+                <span id="teamStatModalTitle">Team</span>
             </h3>
 
             <div class="stat-modal-hero">
@@ -5320,6 +5320,11 @@
             <div class="koth-history">
                 <div class="koth-history-label">Recent Points Events</div>
                 <div id="teamStatKothList" class="koth-history-list scroll"></div>
+            </div>
+
+            <div class="koth-history">
+                <div class="koth-history-label">Team Activity Log</div>
+                <div id="teamActivityLogList" class="koth-history-list scroll"></div>
             </div>
 
             <div class="modal-actions">
@@ -8168,6 +8173,8 @@
         let lastTeamHistory = []
         let lastKothHistory = []
         let lastDeathHistory = []
+        let lastRoleChangeHistory = []
+        let lastTeamEventHistory = []
 
         function buildSparkline(values, width, height) {
 
@@ -8385,6 +8392,8 @@
             lastTeamHistory = history
             lastKothHistory = Array.isArray(team.kothHistory) ? team.kothHistory : []
             lastDeathHistory = Array.isArray(team.deathHistory) ? team.deathHistory : []
+            lastRoleChangeHistory = Array.isArray(team.roleChangeHistory) ? team.roleChangeHistory : []
+            lastTeamEventHistory = Array.isArray(team.teamEventHistory) ? team.teamEventHistory : []
 
             renderLeaderboard()
             renderDangerMeter()
@@ -8394,7 +8403,7 @@
             const sparklinesHtml = pointsSpark
                 ? `
                     <div class="team-sparklines">
-                        <div class="team-stat" onclick="openTeamStatDetail()" title="Click for a detailed view">
+                        <div class="team-stat">
                             <div class="team-stat-label">Points</div>
                             <div class="team-stat-value">${team.points ?? '-'}</div>
                             ${pointsSpark}
@@ -8561,7 +8570,21 @@
 
         }
 
-        function openTeamStatDetail() {
+        // Clicking the Team card opens the detail modal, EXCEPT when
+        // the click actually landed on one of the card's own
+        // interactive controls (refresh button, perm-rank select,
+        // Kick button) - those should just do their own thing.
+        function handleTeamCardClick(event) {
+
+            if (event.target.closest('select, button')) {
+                return
+            }
+
+            openTeamDetailModal()
+
+        }
+
+        function openTeamDetailModal() {
 
             const values = lastTeamHistory.map(entry => entry.points)
                 .filter(value => typeof value === 'number' && Number.isFinite(value))
@@ -8569,7 +8592,6 @@
             const current = values.length ? values[values.length - 1] : null
             const previous = values.length > 1 ? values[values.length - 2] : null
 
-            $('teamStatModalTitle').textContent = 'Points History'
             $('teamStatModalCurrent').textContent = current ?? '-'
 
             const deltaEl = $('teamStatModalDelta')
@@ -8598,6 +8620,7 @@
 
             renderKothHistoryList()
             renderBestDay()
+            renderTeamActivityLog()
 
         }
 
@@ -9094,6 +9117,53 @@
                                 <span class="koth-history-verb">${verb}</span>
                             </span>
                             <span class="koth-history-points">${sign}${entry.points}</span>
+                            <span class="koth-history-date">${formatKothDate(entry.timestamp)}</span>
+                        </div>
+                    `
+
+                })
+                .join('')
+
+        }
+
+        // Joined/left/kicked (teamEventHistory) + promoted/demoted
+        // (roleChangeHistory), merged into one timeline - the raw
+        // "TEAMS ➟ ..." text for these stopped showing up in the live
+        // Chat panel (redundant once the roster/this log already
+        // reflect it), so this is the only place that history is
+        // still visible.
+        function renderTeamActivityLog() {
+
+            const container = $('teamActivityLogList')
+
+            if (!container) return
+
+            const events = [
+                ...lastTeamEventHistory.map(entry => ({ ...entry, kind: 'event' })),
+                ...lastRoleChangeHistory.map(entry => ({ ...entry, kind: 'role' }))
+            ].sort((a, b) => b.timestamp - a.timestamp)
+
+            if (!events.length) {
+                container.innerHTML = '<div class="empty-state">No team activity logged yet.</div>'
+                return
+            }
+
+            container.innerHTML = events
+                .slice(0, 30)
+                .map(entry => {
+
+                    const verb = entry.kind === 'role'
+                        ? `${entry.fromRole} → ${entry.toRole}`
+                        : entry.type === 'joined' ? 'joined the team'
+                            : entry.type === 'left' ? 'left the team'
+                                : 'was kicked'
+
+                    return `
+                        <div class="koth-history-row">
+                            <span class="koth-history-player">
+                                ${escapeHtml(entry.player)}
+                                <span class="koth-history-verb">${escapeHtml(verb)}</span>
+                            </span>
                             <span class="koth-history-date">${formatKothDate(entry.timestamp)}</span>
                         </div>
                     `

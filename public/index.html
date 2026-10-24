@@ -2344,11 +2344,21 @@
         /* Landscape layout: two columns side by side instead of one
            long vertical stack - "laying down" rather than "standing
            up" now that there's enough content (chart, logs, two
-           leaderboards, full roster) to actually fill the width. */
+           leaderboards, full roster) to actually fill the width.
+           auto-fit sizes columns off the ACTUAL rendered width of
+           this grid (which follows the card's own min(980px, 94vw)
+           sizing), not an arbitrary viewport breakpoint - a fixed
+           max-width: 760px media query was collapsing to one column
+           any time the browser window itself was under 760px even
+           though the centered card still had plenty of room beside
+           it, which is what caused the "still standing up" bug.
+           Each column only ever drops to a stack once there's
+           genuinely not enough width left to fit two, regardless of
+           why the container got narrow. */
         .team-modal-columns {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-            gap: 28px;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 16px 28px;
 
             min-width: 0;
         }
@@ -2370,15 +2380,6 @@
             margin-top: 0;
             padding-top: 0;
             border-top: none;
-        }
-
-        @media (max-width: 760px) {
-
-            .team-modal-columns {
-                grid-template-columns: 1fr;
-                gap: 0;
-            }
-
         }
 
         .team-modules-row {

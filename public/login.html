@@ -7,7 +7,7 @@
 
     <meta
         name="viewport"
-        content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     >
 
     <title>Voidz.IO Dashboard — Login</title>
@@ -370,7 +370,13 @@
             color: var(--text);
 
             font-family: inherit;
-            font-size: 14px;
+            /* 16px, not 14 - Safari auto-zooms the whole page in on
+               focus for any input under that size, regardless of the
+               viewport's maximum-scale/user-scalable lock above (that
+               lock only stops manual pinch-zoom, which iOS Safari
+               actually ignores anyway - this is the part that
+               actually works). */
+            font-size: 16px;
             font-weight: 500;
 
             outline: none;

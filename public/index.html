@@ -11486,6 +11486,14 @@
                 $('fleetPort').value = isBedrock ? 19132 : 25565
             }
 
+            // Java and Bedrock often live on different hostnames on the
+            // same server (e.g. java.example.net vs bedrock.example.net)
+            // - a wrong host here is the single most common reason a
+            // Bedrock fleet account just sits on "CONNECTING" forever,
+            // so make the example reflect whichever platform is picked
+            // instead of a generic one that quietly implies Java.
+            $('fleetHost').placeholder = isBedrock ? 'bedrock.example.net' : 'play.example.net'
+
         }
 
         function addFleetAccount() {

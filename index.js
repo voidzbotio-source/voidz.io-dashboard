@@ -4314,6 +4314,16 @@ class FleetAccount {
         if (this.shuttingDown) return
         if (!this.botEnabled) return
 
+        // A missing host is the single most common reason a Bedrock
+        // fleet account used to just sit on "CONNECTING" forever with
+        // no visible feedback - bedrock-protocol would still attempt a
+        // connection, time out after several seconds, and silently
+        // retry forever. Fail it immediately and visibly instead.
+        if (!this.config.host) {
+            this.abortConnect('No server host set for this account.')
+            return
+        }
+
         this.setState('CONNECTING')
         this.lastError = null
         this.bedrockSpawned = false
@@ -4375,10 +4385,18 @@ class FleetAccount {
 
         this.bot.on('kick', packet => {
             this.lastError = packet?.message || 'Kicked'
+            this.broadcastUpdate()
         })
 
+        // broadcastUpdate() here, not just setting lastError, so the
+        // Fleet row shows the real failure (wrong host, timed out,
+        // unsupported protocol version, etc.) right away instead of
+        // waiting on the 'close' event a moment later to push it -
+        // and in case 'close' never follows for some reason, the
+        // error at least isn't silently swallowed either way.
         this.bot.on('error', error => {
             this.lastError = error.message
+            this.broadcastUpdate()
         })
 
         this.bot.on('close', () => {

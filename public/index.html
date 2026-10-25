@@ -3575,6 +3575,17 @@
             transition: opacity 0.2s ease;
         }
 
+        /* The confirm modal can be triggered from inside another
+           already-open modal (e.g. right-clicking a chart point, or
+           Kick/Reset, while the Team detail modal is open) - both
+           share the same .modal-overlay z-index, so without this the
+           confirm dialog was painting BEHIND whichever modal is later
+           in the DOM and effectively invisible/unclickable. This
+           keeps it on top of every other overlay unconditionally. */
+        #modalOverlay {
+            z-index: 1300;
+        }
+
         .modal-overlay.show {
             opacity: 1;
             pointer-events: auto;

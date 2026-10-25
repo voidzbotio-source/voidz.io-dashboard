@@ -203,6 +203,107 @@ function requireAuth(req, res, next) {
 }
 
 // ============================================================
+// LOGIN RATE LIMITING (brute-force protection)
+// ============================================================
+// In-memory, per-IP - this is a single-process dashboard, not a
+// cluster, so there's no need for a shared/distributed store.
+// Tracks FAILED attempts only; a correct login always clears an
+// IP's record. Once an IP hits the max within the window, every
+// further attempt is blocked (even a correct password) until the
+// lockout expires - this is what actually stops a brute-force or
+// credential-guessing run, not just slowing it down.
+
+const LOGIN_ATTEMPT_WINDOW_MS = 10 * 60 * 1000  // 10 minutes
+const LOGIN_MAX_ATTEMPTS = 5
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000         // 15 minutes
+
+const loginAttempts = new Map() // ip -> { count, firstAttemptAt, lockedUntil }
+
+function getLoginAttemptState(ip) {
+
+    let state = loginAttempts.get(ip)
+    const now = Date.now()
+
+    if (!state) {
+        state = { count: 0, firstAttemptAt: now, lockedUntil: 0 }
+        loginAttempts.set(ip, state)
+    }
+
+    // Stale window with no active lockout - start counting fresh
+    // instead of letting attempts from days ago still count.
+    if (now > state.lockedUntil && now - state.firstAttemptAt > LOGIN_ATTEMPT_WINDOW_MS) {
+        state.count = 0
+        state.firstAttemptAt = now
+        state.lockedUntil = 0
+    }
+
+    return state
+
+}
+
+function recordFailedLogin(ip) {
+
+    const state = getLoginAttemptState(ip)
+
+    state.count++
+
+    if (state.count >= LOGIN_MAX_ATTEMPTS) {
+        state.lockedUntil = Date.now() + LOGIN_LOCKOUT_MS
+    }
+
+}
+
+function clearLoginAttempts(ip) {
+    loginAttempts.delete(ip)
+}
+
+// Housekeeping so this Map doesn't grow forever from one-off
+// scanners/bots that never come back to retry.
+setInterval(() => {
+
+    const now = Date.now()
+
+    for (const [ip, state] of loginAttempts) {
+        if (now > state.lockedUntil && now - state.firstAttemptAt > LOGIN_ATTEMPT_WINDOW_MS) {
+            loginAttempts.delete(ip)
+        }
+    }
+
+}, 5 * 60 * 1000)
+
+// General per-IP request throttle on every pre-auth route (login,
+// signup, and anything else not behind requireAuth) - independent
+// of the attempt-counting lockout above, this just caps raw request
+// volume so a script can't hammer the endpoint fast enough to make
+// the 5-in-10-minutes lockout irrelevant.
+const REQUEST_RATE_WINDOW_MS = 60 * 1000
+const REQUEST_RATE_MAX = 30
+
+const requestRateTracker = new Map() // ip -> { count, windowStart }
+
+function rateLimitPreAuth(req, res, next) {
+
+    const ip = req.ip
+    const now = Date.now()
+
+    let entry = requestRateTracker.get(ip)
+
+    if (!entry || now - entry.windowStart > REQUEST_RATE_WINDOW_MS) {
+        entry = { count: 0, windowStart: now }
+        requestRateTracker.set(ip, entry)
+    }
+
+    entry.count++
+
+    if (entry.count > REQUEST_RATE_MAX) {
+        return res.status(429).json({ error: 'Too many requests. Slow down and try again shortly.' })
+    }
+
+    next()
+
+}
+
+// ============================================================
 // PROTOCOL SPAM FILTER + CONSOLE OVERRIDES
 // ============================================================
 
@@ -4666,13 +4767,13 @@ function handleWebCommand(username, command) {
 // LOGIN / SIGNUP / LOGOUT ROUTES (not protected)
 // ============================================================
 
-app.get('/login', (req, res) => {
+app.get('/login', rateLimitPreAuth, (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'login.html'))
 })
 
 // Self-signup is closed - accounts are created by the admin only
 // (see POST /api/admin/create-account, requireAuth-protected below).
-app.get('/signup', (req, res) => {
+app.get('/signup', rateLimitPreAuth, (req, res) => {
     res.redirect('/login')
 })
 
@@ -4682,11 +4783,26 @@ app.get('/favicon.svg', (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'favicon.svg'))
 })
 
-app.post('/login', (req, res) => {
+app.post('/login', rateLimitPreAuth, (req, res) => {
+
+    const ip = req.ip
+    const attemptState = getLoginAttemptState(ip)
+
+    if (Date.now() < attemptState.lockedUntil) {
+
+        const waitMin = Math.ceil((attemptState.lockedUntil - Date.now()) / 60000)
+
+        appLog(`Blocked login attempt from locked-out IP ${ip}`)
+
+        return res.status(429).json({ error: `Too many failed attempts. Try again in ${waitMin} minute${waitMin === 1 ? '' : 's'}.` })
+
+    }
 
     const { username, password } = req.body || {}
 
     if (username === DASHBOARD_USERNAME && password === DASHBOARD_PASSWORD) {
+
+        clearLoginAttempts(ip)
 
         req.session.loggedIn = true
         req.session.username = username
@@ -4702,6 +4818,8 @@ app.post('/login', (req, res) => {
 
     if (user && verifyPassword(password || '', user.salt, user.hash)) {
 
+        clearLoginAttempts(ip)
+
         req.session.loggedIn = true
         req.session.username = user.username
 
@@ -4711,13 +4829,15 @@ app.post('/login', (req, res) => {
 
     }
 
-    appLog(`Failed dashboard login attempt: ${username || '(empty)'}`)
+    recordFailedLogin(ip)
+
+    appLog(`Failed dashboard login attempt: ${username || '(empty)'} from ${ip}`)
 
     return res.status(401).json({ error: 'Invalid username or password' })
 
 })
 
-app.post('/signup', (req, res) => {
+app.post('/signup', rateLimitPreAuth, (req, res) => {
     res.status(403).json({ error: 'Signups are closed. Ask the site owner to create your account.' })
 })
 

@@ -2892,6 +2892,32 @@ class BotSession {
 
     }
 
+    // Removes a single Points reading from the chart - right-click a
+    // point on the detail chart on the dashboard. Matched by exact
+    // timestamp (unique per reading, assigned in requestTeamInfo).
+    removeTeamHistoryReading(timestampRaw) {
+
+        const timestamp = Number(timestampRaw)
+
+        if (!Number.isFinite(timestamp)) return
+
+        const before = this.teamHistory.length
+
+        this.teamHistory = this.teamHistory.filter(entry => entry.timestamp !== timestamp)
+
+        if (this.teamHistory.length === before) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Reading not found (already removed?).' })
+            return
+        }
+
+        saveTeamHistory(this.username, this.teamHistory)
+
+        io.to(this.username).emit('notice', { type: 'success', text: 'Reading removed.' })
+
+        this.updateDashboard()
+
+    }
+
     // Logs who captured a KOTH and how many team points it was worth,
     // parsed from "<player> has received Nx PvP Keys and N Team
     // Points!" - shown as a history list alongside the Points detail
@@ -4604,6 +4630,8 @@ function handleWebCommand(username, command) {
                 botSession.removePlayerFromHistory(command.substring('reset-player '.length))
             } else if (lower.startsWith('kick-player ')) {
                 botSession.kickTeamMember(command.substring('kick-player '.length))
+            } else if (lower.startsWith('remove-team-reading ')) {
+                botSession.removeTeamHistoryReading(command.substring('remove-team-reading '.length))
             }
 
             break

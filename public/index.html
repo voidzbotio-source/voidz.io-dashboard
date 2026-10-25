@@ -8998,6 +8998,15 @@
 
             const areaPath = `${linePath} L${lastX.toFixed(1)},${(yPad + innerHeight).toFixed(1)} L${firstX.toFixed(1)},${(yPad + innerHeight).toFixed(1)} Z`
 
+            // Crypto-ticker style, same as the small sparkline on the
+            // card: green if net up over the visible window, red if
+            // net down, purple (neutral) if flat.
+            const trendColor = points[points.length - 1] > points[0]
+                ? 'var(--green)'
+                : points[points.length - 1] < points[0]
+                    ? 'var(--red)'
+                    : 'var(--purple)'
+
             const gridRows = [
                 { fraction: 0, value: max },
                 { fraction: 0.5, value: Math.round((max + min) / 2) },
@@ -9022,19 +9031,19 @@
                     <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="detail-chart" id="teamDetailChartSvg">
                         <defs>
                             <linearGradient id="teamChartFade" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stop-color="var(--blue)" stop-opacity="0.28"/>
-                                <stop offset="100%" stop-color="var(--blue)" stop-opacity="0"/>
+                                <stop offset="0%" stop-color="${trendColor}" stop-opacity="0.28"/>
+                                <stop offset="100%" stop-color="${trendColor}" stop-opacity="0"/>
                             </linearGradient>
                         </defs>
                         ${gridLines}
                         <path d="${areaPath}" fill="url(#teamChartFade)" stroke="none"/>
-                        <path d="${linePath}" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-                        <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="5" fill="var(--blue)" stroke="var(--panel-2)" stroke-width="2"/>
+                        <path d="${linePath}" fill="none" stroke="${trendColor}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+                        <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="5" fill="${trendColor}" stroke="var(--panel-2)" stroke-width="2"/>
                         <line id="teamDetailHoverLine" x1="0" y1="${yPad}" x2="0" y2="${(yPad + innerHeight).toFixed(1)}" stroke="var(--border-strong)" stroke-width="1" style="display: none;"/>
-                        <circle id="teamDetailHoverDot" r="5" fill="var(--text)" stroke="var(--blue)" stroke-width="2" style="display: none;"/>
+                        <circle id="teamDetailHoverDot" r="5" fill="var(--text)" stroke="${trendColor}" stroke-width="2" style="display: none;"/>
                     </svg>
                     <div class="detail-chart-labels">
-                        <span>${points.length} reading${points.length === 1 ? '' : 's'}</span>
+                        <span>${points.length} reading${points.length === 1 ? '' : 's'} &middot; right-click a point to remove it</span>
                     </div>
                     <div class="chart-tooltip" id="teamStatChartTooltip"></div>
                 `,
@@ -9101,6 +9110,60 @@
 
         }
 
+        // Right-click a point on the Points detail chart to delete
+        // that one reading - finds the nearest coordinate the same
+        // way the hover crosshair does, then confirms and sends its
+        // timestamp to the server to remove.
+        function attachChartContextMenu(chart) {
+
+            const svg = $('teamDetailChartSvg')
+
+            if (!svg || !chart.coords || !chart.entries) return
+
+            svg.addEventListener('contextmenu', async event => {
+
+                event.preventDefault()
+
+                const rect = svg.getBoundingClientRect()
+                const mouseX = ((event.clientX - rect.left) / rect.width) * chart.width
+
+                let nearest = 0
+                let nearestDist = Infinity
+
+                chart.coords.forEach(([x], index) => {
+                    const dist = Math.abs(x - mouseX)
+                    if (dist < nearestDist) {
+                        nearestDist = dist
+                        nearest = index
+                    }
+                })
+
+                const entry = chart.entries[nearest]
+
+                if (!entry) return
+
+                const ok = await openConfirmModal(
+                    `Remove this reading (${entry.points} pts, ${formatKothDate(entry.timestamp)})? This cannot be undone.`
+                )
+
+                if (!ok) return
+
+                socket.emit('command', `remove-team-reading ${entry.timestamp}`)
+
+                // Optimistic update: redraw the chart now instead of
+                // waiting on the round trip - the server's own status
+                // broadcast (lastTeamHistory, picked up by the regular
+                // renderTeam() tick) will reconcile shortly after anyway.
+                lastTeamHistory = lastTeamHistory.filter(item => item.timestamp !== entry.timestamp)
+
+                showToast('Reading removed.', 'success')
+
+                openTeamDetailModal()
+
+            })
+
+        }
+
         // Clicking the Team card opens the detail modal, EXCEPT when
         // the click actually landed on one of the card's own
         // interactive controls (refresh button, perm-rank select,
@@ -9117,8 +9180,14 @@
 
         function openTeamDetailModal() {
 
-            const values = lastTeamHistory.map(entry => entry.points)
-                .filter(value => typeof value === 'number' && Number.isFinite(value))
+            // Entries and values are derived from the same filtered
+            // array (not values filtered separately) so their indices
+            // stay aligned - the context-menu handler needs entries[i]
+            // to be the exact reading behind coords[i]/points[i].
+            const entries = lastTeamHistory.filter(
+                entry => typeof entry.points === 'number' && Number.isFinite(entry.points)
+            )
+            const values = entries.map(entry => entry.points)
 
             const current = values.length ? values[values.length - 1] : null
             const previous = values.length > 1 ? values[values.length - 2] : null
@@ -9142,12 +9211,14 @@
             }
 
             const chart = buildDetailedChart(values, 520, 200)
+            chart.entries = entries
 
             $('teamStatModalBody').innerHTML = chart.html
 
             $('teamStatModalOverlay').classList.add('show')
 
             attachChartHover(chart)
+            attachChartContextMenu(chart)
 
             renderKothHistoryList()
             renderBestDay()

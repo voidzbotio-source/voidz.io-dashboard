@@ -2328,16 +2328,20 @@
             font-weight: 600;
         }
 
-        .stat-modal-card {
-            /* Wide, desktop-first: the modal should fill most of the
-               screen rather than reading as a tall narrow dialog -
-               min() still clamps it so it never exceeds the viewport
-               (a flex/grid ancestor with max-width alone can still get
-               pushed wider than the viewport by a child that refuses
-               to shrink - see .team-modal-panel below). */
-            width: min(1480px, 92vw);
-            max-width: 1480px;
-            max-height: 90vh;
+        /* Compound selector (.modal-card.stat-modal-card), not just
+           .stat-modal-card: the plain .modal-card rule below has the
+           exact same specificity (one class) and is declared later in
+           this stylesheet, so it was silently winning the cascade and
+           clamping this modal back down to max-width: 380px every
+           time - the real reason the widened modal never actually got
+           wider on screen despite the CSS being "correct" on its own. */
+        .modal-card.stat-modal-card {
+            /* Paper lying down: fills most of the screen, not all of
+               it - a visible margin stays on every side so it still
+               reads as a floating card over the dashboard. */
+            width: min(1600px, 95vw);
+            max-width: 1600px;
+            max-height: 92vh;
             overflow-y: auto;
             overflow-x: hidden;
         }

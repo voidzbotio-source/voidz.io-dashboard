@@ -2357,7 +2357,7 @@
            above), not a guessed viewport breakpoint. */
         .team-modal-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
             gap: 16px;
 
             min-width: 0;
@@ -2521,8 +2521,16 @@
             font-weight: 700;
         }
 
+        /* flex-shrink: 0 + white-space: nowrap - the verb/badge used to
+           live inside .koth-history-player, so its nowrap+ellipsis was
+           truncating the whole "name verb" string together ("joined the
+           team" -> "joine..."). As a sibling flex item it now keeps its
+           full text always; only the player name (which has its own
+           flex: 1 + min-width: 0 above) gives up width when the row is
+           tight. */
         .koth-history-verb {
-            margin-left: 6px;
+            flex-shrink: 0;
+            white-space: nowrap;
 
             color: var(--muted);
             font-size: 11.5px;
@@ -2531,6 +2539,7 @@
         }
 
         .server-activity-own {
+            flex-shrink: 0;
             margin-left: 6px;
 
             padding: 1px 6px;
@@ -9571,11 +9580,9 @@
                 .slice(0, 20)
                 .map(entry => `
                     <div class="koth-history-row">
-                        <span class="koth-history-player">
-                            ${escapeHtml(entry.player)}
-                            <span class="koth-history-verb">captured a KOTH</span>
-                            ${entry.isOwnTeam ? '<span class="server-activity-own">YOUR TEAM</span>' : ''}
-                        </span>
+                        <span class="koth-history-player">${escapeHtml(entry.player)}</span>
+                        <span class="koth-history-verb">captured a KOTH</span>
+                        ${entry.isOwnTeam ? '<span class="server-activity-own">YOUR TEAM</span>' : ''}
                         <span class="koth-history-date">${formatKothDate(entry.timestamp)}</span>
                     </div>
                 `)
@@ -9813,10 +9820,8 @@
 
                     return `
                         <div class="koth-history-row ${entry.type}">
-                            <span class="koth-history-player">
-                                ${escapeHtml(entry.player)}
-                                <span class="koth-history-verb">${verb}</span>
-                            </span>
+                            <span class="koth-history-player">${escapeHtml(entry.player)}</span>
+                            <span class="koth-history-verb">${verb}</span>
                             <span class="koth-history-points">${sign}${entry.points}</span>
                             <span class="koth-history-date">${formatKothDate(entry.timestamp)}</span>
                         </div>
@@ -9861,10 +9866,8 @@
 
                     return `
                         <div class="koth-history-row">
-                            <span class="koth-history-player">
-                                ${escapeHtml(entry.player)}
-                                <span class="koth-history-verb">${escapeHtml(verb)}</span>
-                            </span>
+                            <span class="koth-history-player">${escapeHtml(entry.player)}</span>
+                            <span class="koth-history-verb">${escapeHtml(verb)}</span>
                             <span class="koth-history-date">${formatKothDate(entry.timestamp)}</span>
                         </div>
                     `

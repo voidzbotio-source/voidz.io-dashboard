@@ -2648,6 +2648,24 @@
         .leaderboard-net.negative { color: var(--red); }
         .leaderboard-net.neutral { color: var(--muted); }
 
+        .nemesis-row {
+            cursor: pointer;
+            transition: border-color 0.15s ease;
+        }
+
+        .nemesis-row:hover,
+        .nemesis-row.expanded {
+            border-color: var(--border-strong);
+        }
+
+        .nemesis-kill-log {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+
+            margin: 6px 0 10px 30px;
+        }
+
         /* ================================================= */
         /* MANAGE ACCOUNTS */
         /* ================================================= */
@@ -8187,7 +8205,8 @@
             renderBadges(data.badgeProgress || null)
             renderActionBar(data.actionBar || null)
             renderKothCapture(data.kothCapture || null)
-            renderNemesis(data.nemesisHistory || [])
+            lastNemesisHistory = Array.isArray(data.nemesisHistory) ? data.nemesisHistory : []
+            renderNemesis(lastNemesisHistory)
 
             // ----------------------------------------------
             // FLAGS
@@ -9601,7 +9620,18 @@
         }
 
         // Who's actually killed the bot the most - tallied server-side
-        // from its own death messages (see checkNemesisDeath()).
+        // from its own death messages (see checkNemesisDeath()). Every
+        // individual kill is already logged (up to 200, server-side) -
+        // click a nemesis to expand the full timestamped kill log
+        // instead of just the aggregate count.
+        let lastNemesisHistory = []
+        let expandedNemesisKey = null
+
+        function toggleNemesisDetail(key) {
+            expandedNemesisKey = expandedNemesisKey === key ? null : key
+            renderNemesis(lastNemesisHistory)
+        }
+
         function renderNemesis(history) {
 
             const container = $('nemesisBody')
@@ -9616,8 +9646,9 @@
 
                 if (!key) continue
 
-                byKiller[key] = byKiller[key] || { name: entry.killer, count: 0 }
+                byKiller[key] = byKiller[key] || { name: entry.killer, count: 0, entries: [] }
                 byKiller[key].count++
+                byKiller[key].entries.push(entry.timestamp)
 
             }
 
@@ -9629,16 +9660,41 @@
             }
 
             container.innerHTML = rows
-                .map((row, index) => `
-                    <div class="leaderboard-row">
-                        <div class="leaderboard-rank">${index + 1}</div>
-                        <div class="leaderboard-info">
-                            <div class="leaderboard-name">${escapeHtml(row.name)}</div>
-                            <div class="leaderboard-meta">${row.count} kill${row.count === 1 ? '' : 's'}</div>
+                .map((row, index) => {
+
+                    const key = row.name.toLowerCase()
+                    const expanded = key === expandedNemesisKey
+
+                    const killLog = expanded
+                        ? `
+                            <div class="nemesis-kill-log">
+                                ${[...row.entries]
+                                    .sort((a, b) => b - a)
+                                    .map(timestamp => `
+                                        <div class="koth-history-row death">
+                                            <span class="koth-history-player">${escapeHtml(row.name)}</span>
+                                            <span class="koth-history-verb">killed you</span>
+                                            <span class="koth-history-date">${formatKothDate(timestamp)}</span>
+                                        </div>
+                                    `)
+                                    .join('')}
+                            </div>
+                        `
+                        : ''
+
+                    return `
+                        <div class="leaderboard-row nemesis-row ${expanded ? 'expanded' : ''}" onclick="toggleNemesisDetail('${key}')" title="Click to see every kill">
+                            <div class="leaderboard-rank">${index + 1}</div>
+                            <div class="leaderboard-info">
+                                <div class="leaderboard-name">${escapeHtml(row.name)}</div>
+                                <div class="leaderboard-meta">${row.count} kill${row.count === 1 ? '' : 's'}</div>
+                            </div>
+                            <div class="leaderboard-net negative">${row.count}</div>
                         </div>
-                        <div class="leaderboard-net negative">${row.count}</div>
-                    </div>
-                `)
+                        ${killLog}
+                    `
+
+                })
                 .join('')
 
         }

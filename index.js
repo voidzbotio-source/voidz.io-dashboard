@@ -876,6 +876,11 @@ function normalizeBotConfig(input) {
     const discordWebhookUrl = String(input?.discordWebhookUrl || '').trim()
     const discordRoleId = String(input?.discordRoleId || '').trim().replace(/\D/g, '')
 
+    // Off by default - this spends real in-game currency/keys the
+    // instant a restock is seen, not just pings about one. See
+    // checkBlackMarket()/autoBuyBlackMarket().
+    const blackMarketAutoBuy = platform === 'bedrock' ? false : !!input?.blackMarketAutoBuy
+
     // Optional SOCKS5 proxy for the outbound Minecraft connection only
     // (unrelated to proxySessionProblem elsewhere, which is about
     // FlareMC's own server-side proxy/anti-bot layer) - lets multiple
@@ -900,7 +905,7 @@ function normalizeBotConfig(input) {
 
     return {
         microsoftEmail, host, port, platform, version, lifestealAutopilot, afkCommand, discordWebhookUrl, discordRoleId,
-        proxyHost, proxyPort, proxyUsername, proxyPassword, localAddress
+        blackMarketAutoBuy, proxyHost, proxyPort, proxyUsername, proxyPassword, localAddress
     }
 
 }
@@ -3267,6 +3272,95 @@ class BotSession {
 
         io.to(this.username).emit('notice', { type: 'info', text: '🛒 Black Market has opened - limited stock!' })
 
+        if (this.config.blackMarketAutoBuy) {
+            this.autoBuyBlackMarket()
+        }
+
+    }
+
+    // Auto-clicks through the Black Market's buy flow for the Insane
+    // Key the instant a restock is announced, instead of just pinging
+    // and hoping a human reacts fast enough - limited stock usually
+    // doesn't survive a human reaction time. Off by default (this
+    // spends real in-game currency/keys), toggled per-account in
+    // Settings.
+    //
+    // Matches items by NAME/LORE TEXT on both screens (the shop, then
+    // the confirm dialog /bm opens after clicking an item) rather than
+    // a hardcoded slot index - same technique debugNextWindow() uses,
+    // which is the one that's actually been exercised against this
+    // shop before. A fixed slot number is exactly how an auto-buyer
+    // clicks the wrong thing the moment a GUI layout shifts; if no
+    // confirm-looking item is found, this aborts without clicking
+    // anything rather than guessing which slot to hit on a screen that
+    // spends real resources.
+    autoBuyBlackMarket() {
+
+        if (!this.bot) return
+
+        const findMatch = (window, pattern) => {
+
+            const entries = window.slots
+                .map((item, index) => ({ item, index }))
+                .filter(entry => entry.item)
+
+            return entries.find(({ item }) =>
+                pattern.test(item.displayName || '') ||
+                (item.nbt && pattern.test(JSON.stringify(item.nbt)))
+            )
+
+        }
+
+        this.log('Black Market auto-buy: opening /bm...')
+
+        const shopListener = shopWindow => {
+
+            const target = findMatch(shopWindow, /insane/i)
+
+            if (!target) {
+                this.log('Black Market auto-buy: no Insane Key in the shop (likely 0 stock) - skipping.')
+                return
+            }
+
+            const confirmTimeout = setTimeout(() => {
+                this.bot?.removeListener('windowOpen', confirmListener)
+                this.log('Black Market auto-buy: clicked the Insane Key but no confirm dialog appeared within 5s.')
+            }, 5000)
+
+            const confirmListener = confirmWindow => {
+
+                clearTimeout(confirmTimeout)
+
+                const confirmTarget = findMatch(confirmWindow, /confirm|purchase|buy|yes/i)
+
+                if (!confirmTarget) {
+
+                    this.log('Black Market auto-buy: confirm dialog opened but no obvious confirm button found in it - not guessing a slot, purchase NOT completed.')
+
+                    io.to(this.username).emit('notice', { type: 'error', text: 'Black Market: confirm dialog layout unrecognized - check it manually, nothing was clicked.' })
+
+                    return
+
+                }
+
+                this.bot?.clickWindow(confirmTarget.index, 0, 0).catch(() => {})
+
+                this.log('Black Market auto-buy: Insane Key purchase confirmed.')
+
+                io.to(this.username).emit('notice', { type: 'success', text: '🛒 Black Market: Insane Key auto-purchased!' })
+
+            }
+
+            this.bot.once('windowOpen', confirmListener)
+
+            this.bot.clickWindow(target.index, 0, 0).catch(() => {})
+
+        }
+
+        this.bot.once('windowOpen', shopListener)
+
+        this.sendMinecraftChat('/bm')
+
     }
 
     finalizeTeamInfoCapture() {
@@ -4871,6 +4965,7 @@ app.get('/api/bot-config', (req, res) => {
     const config = getBotConfig(req.session.username)
     res.json(config || {
         microsoftEmail: '', host: '', port: 25565, version: '', lifestealAutopilot: false, afkCommand: '/home AFK',
+        blackMarketAutoBuy: false,
         proxyHost: '', proxyPort: null, proxyUsername: '', proxyPassword: '', localAddress: ''
     })
 })

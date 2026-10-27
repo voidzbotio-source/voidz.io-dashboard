@@ -5851,6 +5851,11 @@
                         <span>Enable LifeSteal Autopilot &mdash; FlareMC-style auto /jq, hub recovery, and daily keyall. Only turn this on if your server matches that setup.</span>
                     </label>
 
+                    <label id="settingsBmAutoBuyRow" class="settings-checkbox">
+                        <input id="settingsBmAutoBuy" type="checkbox">
+                        <span>Auto-buy the Insane Key the instant the Black Market restocks &mdash; spends real in-game currency/keys automatically, with no confirmation. Off by default.</span>
+                    </label>
+
                     <div class="field">
                         <label for="settingsAfkCommand">AFK Command</label>
                         <input id="settingsAfkCommand" type="text" placeholder="/home AFK">
@@ -6762,9 +6767,11 @@
             $('settingsBedrockNote').style.display = isBedrock ? 'block' : 'none'
             $('settingsVersionField').style.display = isBedrock ? 'none' : 'block'
             $('settingsAutopilotRow').style.display = isBedrock ? 'none' : 'flex'
+            $('settingsBmAutoBuyRow').style.display = isBedrock ? 'none' : 'flex'
 
             if (isBedrock) {
                 $('settingsAutopilot').checked = false
+                $('settingsBmAutoBuy').checked = false
             }
 
             if (!$('settingsPort').value || Number($('settingsPort').value) === (isBedrock ? 25565 : 19132)) {
@@ -6800,6 +6807,7 @@
                     $('settingsPort').value = config.port || (config.platform === 'bedrock' ? 19132 : 25565)
                     $('settingsVersion').value = config.version || ''
                     $('settingsAutopilot').checked = !!config.lifestealAutopilot
+                    $('settingsBmAutoBuy').checked = !!config.blackMarketAutoBuy
 
                     onSettingsPlatformChange()
                     $('settingsAfkCommand').value = config.afkCommand || '/home AFK'
@@ -6867,6 +6875,7 @@
                 port: Number($('settingsPort').value) || ($('settingsPlatform').value === 'bedrock' ? 19132 : 25565),
                 version: $('settingsVersion').value.trim(),
                 lifestealAutopilot: $('settingsAutopilot').checked,
+                blackMarketAutoBuy: $('settingsBmAutoBuy').checked,
                 afkCommand: $('settingsAfkCommand').value.trim(),
                 localAddress: $('settingsLocalAddress').value.trim(),
                 proxyHost: $('settingsProxyHost').value.trim(),

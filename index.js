@@ -3179,35 +3179,20 @@ class BotSession {
     }
 
     // Runs every dashboard tick (~1s) while connected. Any Auto-Invite
-    // tracked player whose HP drops to 10 hearts (20 HP) or below
+    // tracked player whose tab-list HP drops below 2.5 hearts (5 HP)
     // gets kicked off the team and immediately reinvited - kicking
     // drops them from `/t info` shared-location tracking before an
     // enemy can use it against them at low HP, and the reinvite
     // brings them straight back in once they're safe. `lowHpHandled`
     // stops this firing every tick while someone stays critical.
     //
-    // Raw HP comes from the "below name" scoreboard objective
-    // (display slot 2 - exposed via RawScoreboardTracker since
-    // mineflayer's own bot.scoreboard never populates on this
-    // server's protocol version). What was never actually confirmed
-    // is whether that objective's raw numbers ARE HP 1:1, or some
-    // other scale (hearts, a halved/doubled value, etc.) - a
-    // threshold change from 5 to 20 broke the feature outright,
-    // which is the exact signature of a scale mismatch (e.g. if the
-    // real range tops out well under 20, "<=20" is true for everyone
-    // forever and it only ever fires once per player, right as
-    // tracking starts, then goes permanently quiet).
-    //
-    // Rather than guess a second magic number, this self-calibrates
-    // every tick: the SAME objective almost always has an entry for
-    // the bot's own name too, and the bot's own HP is independently
-    // known for certain via bot.health (mineflayer's standard,
-    // reliable health tracking - already trusted elsewhere, e.g.
-    // getMaxHealth()/showHealth()). Dividing the two gives the real
-    // scale factor live, and every tracked player's raw value is
-    // converted through it before comparing against the 20 HP
-    // threshold - so this works regardless of what units the
-    // objective actually turns out to use.
+    // HP comes from the "below name" scoreboard objective (display
+    // slot 2, the number shown under each player's nametag in-world -
+    // exposed here via RawScoreboardTracker since mineflayer's own
+    // bot.scoreboard never populates on this server's protocol
+    // version - see the class comment above BotSession). This 5 HP
+    // threshold is the one confirmed working in production - leave
+    // it alone unless there's real data backing a change.
     checkAutoInviteLowHealth() {
 
         if (!this.bot || !this.bot.players) return
@@ -3226,12 +3211,6 @@ class BotSession {
 
         if (!belowName) return
 
-        const ownRaw = Number(belowName.items.find(item => item.name === this.bot.username)?.value)
-
-        const scale = (Number.isFinite(ownRaw) && ownRaw > 0 && Number.isFinite(this.bot.health) && this.bot.health > 0)
-            ? this.bot.health / ownRaw
-            : 1
-
         const onlineNames = Object.keys(this.bot.players)
 
         for (const trackedName of trackedNames) {
@@ -3246,13 +3225,11 @@ class BotSession {
             }
 
             const scoreEntry = belowName.items.find(item => item.name === actualName)
-            const raw = Number(scoreEntry?.value)
+            const hp = Number.isFinite(scoreEntry?.value) ? scoreEntry.value : null
 
-            if (!Number.isFinite(raw)) continue
+            if (hp === null) continue
 
-            const hp = raw * scale
-
-            if (hp > 20) {
+            if (hp >= 5) {
                 this.lowHpHandled.delete(key)
                 continue
             }
@@ -3261,13 +3238,13 @@ class BotSession {
 
             this.lowHpHandled.add(key)
 
-            this.log(`${actualName} is at ~${hp.toFixed(1)} HP (raw ${raw}, scale ${scale.toFixed(2)}) - kicking and reinviting.`)
+            this.log(`${actualName} is at ${hp} HP - kicking and reinviting.`)
 
             this.sendMinecraftChat(`/t kick ${actualName}`)
 
             setTimeout(() => this.sendMinecraftChat(`/t invite ${actualName}`), 350)
 
-            io.to(this.username).emit('notice', { type: 'info', text: `${actualName} dropped to 10 hearts (20 HP) - kicked and reinvited` })
+            io.to(this.username).emit('notice', { type: 'info', text: `${actualName} dropped below 2.5 hearts - kicked and reinvited` })
 
         }
 

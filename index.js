@@ -3342,7 +3342,12 @@ class BotSession {
 
                 clearTimeout(confirmTimeout)
 
-                const confirmTarget = findMatch(confirmWindow, /confirm|purchase|buy|yes/i)
+                // Confirmed: the confirm dialog's "yes" button is
+                // minecraft:lime_wool (a wall of green blocks vs. a
+                // wall of red cancel blocks) - checked first, with the
+                // text match kept as a fallback in case this screen
+                // ever uses a different confirm item elsewhere.
+                const confirmTarget = findMatch(confirmWindow, /confirm|purchase|buy|yes/i, 'lime_wool')
 
                 if (!confirmTarget) {
 

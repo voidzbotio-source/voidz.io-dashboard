@@ -3197,6 +3197,17 @@ class BotSession {
     // brings them straight back in once they're safe. `lowHpHandled`
     // stops this firing every tick while someone stays critical.
     //
+    // Requires BOTH: on the Auto-Invite list AND currently a member of
+    // the team per the last /t info capture (isTeamMember(), the same
+    // roster checkTeamDeath()/checkKothCapture() trust) - being merely
+    // online on the server isn't enough. A player who's online but not
+    // actually in the team yet (mid-invite, just got kicked, never
+    // accepted) would previously still pass the old online-only check
+    // and get a pointless /t kick sent for someone who isn't on the
+    // team to begin with - which does nothing, silently, and reads as
+    // "doesn't always work" from the dashboard with no error to show
+    // for it.
+    //
     // HP comes from the "below name" scoreboard objective (display
     // slot 2, the number shown under each player's nametag in-world -
     // exposed here via RawScoreboardTracker since mineflayer's own
@@ -3230,7 +3241,7 @@ class BotSession {
 
             const actualName = onlineNames.find(name => name.toLowerCase() === key)
 
-            if (!actualName) {
+            if (!actualName || !this.isTeamMember(actualName)) {
                 this.lowHpHandled.delete(key)
                 continue
             }
@@ -3249,7 +3260,7 @@ class BotSession {
 
             this.lowHpHandled.add(key)
 
-            this.log(`${actualName} is at ${hp} HP - kicking and reinviting.`)
+            this.log(`${actualName} is at ${hp} HP and in the team - kicking ASAP and reinviting.`)
 
             this.sendMinecraftChat(`/t kick ${actualName}`)
 

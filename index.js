@@ -3179,11 +3179,12 @@ class BotSession {
     }
 
     // Runs every dashboard tick (~1s) while connected. Any Auto-Invite
-    // tracked player whose tab-list HP drops to 10 hearts (20 HP) or
-    // below gets kicked off the team and immediately reinvited -
-    // this is LifeSteal, so max HP climbs above the vanilla 20 as a
-    // player collects hearts and 20 is actually a meaningful "back
-    // down to baseline, now vulnerable" signal, not full health.
+    // tracked player whose tab-list HP drops below 2.5 hearts (5 HP)
+    // gets kicked off the team and immediately reinvited - this was
+    // raised to 20 HP once, but that broke it entirely (reported
+    // right after), so it's back to the originally-confirmed-working
+    // value until there's real data (sidebar-debug-hp) showing what
+    // this server's actual HP range/units look like in play.
     // Kicking
     // drops them from `/t info` shared-location tracking before an
     // enemy can use it against them at low HP, and the reinvite
@@ -3239,7 +3240,7 @@ class BotSession {
 
             if (hp === null) continue
 
-            if (hp > 20) {
+            if (hp >= 5) {
                 this.lowHpHandled.delete(key)
                 continue
             }
@@ -3254,7 +3255,7 @@ class BotSession {
 
             setTimeout(() => this.sendMinecraftChat(`/t invite ${actualName}`), 350)
 
-            io.to(this.username).emit('notice', { type: 'info', text: `${actualName} dropped to 10 hearts (20 HP) - kicked and reinvited` })
+            io.to(this.username).emit('notice', { type: 'info', text: `${actualName} dropped below 2.5 hearts - kicked and reinvited` })
 
         }
 

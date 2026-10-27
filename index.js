@@ -2540,7 +2540,13 @@ class BotSession {
 
             const entries = dumpWindow(shopWindow, 'SHOP')
 
+            // Confirmed: the Insane Key's underlying item is
+            // minecraft:red_dye (item.name === 'red_dye' in mineflayer,
+            // no namespace prefix) - checked first since it's the most
+            // reliable signal, with the lore-text match kept as a
+            // fallback/corroboration.
             const target = entries.find(({ item }) =>
+                item.name === 'red_dye' ||
                 /insane/i.test(item.displayName || '') ||
                 (item.nbt && /insane/i.test(JSON.stringify(item.nbt)))
             )
@@ -3298,13 +3304,14 @@ class BotSession {
 
         if (!this.bot) return
 
-        const findMatch = (window, pattern) => {
+        const findMatch = (window, pattern, itemName) => {
 
             const entries = window.slots
                 .map((item, index) => ({ item, index }))
                 .filter(entry => entry.item)
 
             return entries.find(({ item }) =>
+                (itemName && item.name === itemName) ||
                 pattern.test(item.displayName || '') ||
                 (item.nbt && pattern.test(JSON.stringify(item.nbt)))
             )
@@ -3315,7 +3322,11 @@ class BotSession {
 
         const shopListener = shopWindow => {
 
-            const target = findMatch(shopWindow, /insane/i)
+            // Confirmed: the Insane Key's underlying item is
+            // minecraft:red_dye - checked first as the most reliable
+            // signal, with the "insane" lore/name text match kept as a
+            // fallback/corroboration.
+            const target = findMatch(shopWindow, /insane/i, 'red_dye')
 
             if (!target) {
                 this.log('Black Market auto-buy: no Insane Key in the shop (likely 0 stock) - skipping.')

@@ -707,6 +707,36 @@
             color: var(--red);
         }
 
+        .sidebar-pages {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .page-nav-item.active {
+            background: var(--purple);
+            border-color: var(--purple);
+            color: #fff;
+        }
+
+        .page-nav-item.active:hover {
+            background: var(--purple);
+            color: #fff;
+        }
+
+        /* Real page switching, not a single long scroll - only the
+           active page's cards are in the layout at all (not just
+           visually hidden), so a hidden page's drag-reorder listeners
+           never receive events and its content can't be tabbed/clicked
+           into by accident. */
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
         .theme-swatches {
             display: flex;
             flex-wrap: wrap;
@@ -4552,18 +4582,41 @@
                 <span id="botToggleLabel">Start</span>
             </button>
 
-            <a
-                id="povViewerLink"
-                class="sidebar-nav-item"
-                href="#"
-                target="_blank"
-                rel="noopener"
-                style="display: none;"
-                title="Opens a live 3D view of what the bot sees in a new tab"
-            >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
-                <span>Bot POV</span>
-            </a>
+            <div class="sidebar-divider"></div>
+
+            <nav class="sidebar-pages">
+
+                <button class="sidebar-nav-item page-nav-item active" data-page-nav="overview" onclick="switchPage('overview')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+                    <span>Overview</span>
+                </button>
+
+                <button class="sidebar-nav-item page-nav-item" data-page-nav="team" onclick="switchPage('team')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-7 7c0 3 2 5 2 8h10c0-3 2-5 2-8a7 7 0 0 0-7-7Z"/><path d="M9 21h6"/><path d="M10 17h4"/></svg>
+                    <span>Team</span>
+                </button>
+
+                <button class="sidebar-nav-item page-nav-item" data-page-nav="threats" onclick="switchPage('threats')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    <span>Threats &amp; Allies</span>
+                </button>
+
+                <button class="sidebar-nav-item page-nav-item" data-page-nav="chat" onclick="switchPage('chat')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span>Chat</span>
+                </button>
+
+                <button class="sidebar-nav-item page-nav-item" data-page-nav="inventory" onclick="switchPage('inventory')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 8L12 4 4 8m16 0-8 4m8-4v8l-8 4m0-8L4 8m8 4v8M4 8v8l8 4"/></svg>
+                    <span>Inventory</span>
+                </button>
+
+                <button class="sidebar-nav-item page-nav-item" data-page-nav="pov" onclick="switchPage('pov')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <span>Point of View</span>
+                </button>
+
+            </nav>
 
             <div class="sidebar-divider"></div>
 
@@ -4607,7 +4660,10 @@
         <!-- ROW: HERO STATUS + COMMANDS -->
         <!-- ============================================== -->
 
-        <main class="grid" id="dashboardGrid">
+        <div class="pages">
+
+            <div class="page active" data-page="overview">
+            <main class="grid page-grid">
 
             <!-- ========================================== -->
             <!-- STATUS HERO -->
@@ -4987,6 +5043,12 @@
 
             </section>
 
+            </main>
+            </div>
+
+            <div class="page" data-page="team">
+            <main class="grid page-grid">
+
             <!-- ========================================== -->
             <!-- TEAM -->
             <!-- ========================================== -->
@@ -5081,6 +5143,12 @@
 
             </section>
 
+            </main>
+            </div>
+
+            <div class="page" data-page="inventory">
+            <main class="grid page-grid">
+
             <!-- ========================================== -->
             <!-- INVENTORY -->
             <!-- ========================================== -->
@@ -5100,6 +5168,12 @@
                 </div>
 
             </section>
+
+            </main>
+            </div>
+
+            <div class="page" data-page="threats">
+            <main class="grid page-grid">
 
             <!-- ========================================== -->
             <!-- THREATS -->
@@ -5202,6 +5276,12 @@
 
             </section>
 
+            </main>
+            </div>
+
+            <div class="page" data-page="chat">
+            <main class="grid page-grid">
+
             <!-- ========================================== -->
             <!-- CHAT -->
             <!-- ========================================== -->
@@ -5283,6 +5363,12 @@
 
             </section>
 
+            </main>
+            </div>
+
+            <div class="page" data-page="overview">
+            <main class="grid page-grid">
+
             <!-- ========================================== -->
             <!-- ACTIVITY LOG -->
             <!-- ========================================== -->
@@ -5326,7 +5412,35 @@
 
             </section>
 
-        </main>
+            </main>
+            </div>
+
+            <div class="page" data-page="pov">
+            <main class="grid page-grid">
+
+            <!-- ========================================== -->
+            <!-- POINT OF VIEW -->
+            <!-- ========================================== -->
+
+            <section class="card col-2" data-card-id="pov" draggable="true" style="animation-delay: 0s;">
+
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    Point of View
+                </div>
+
+                <p class="settings-section-desc">A live 3D render of what the main bot sees, reconstructed in real time from its own world data - not a screen capture, just a view of the world and nearby players around it.</p>
+
+                <div id="povPageStatus" class="status-value" style="max-width: 100%; text-align: left; display: block; margin-bottom: 14px;">Start the bot to view its POV.</div>
+
+                <a id="povPageLink" href="#" target="_blank" rel="noopener" class="modal-ok" style="display: none; width: 100%; text-align: center;">Open POV Viewer &#8599;</a>
+
+            </section>
+
+            </main>
+            </div>
+
+        </div>
 
         <!-- ============================================== -->
         <!-- FOOTER -->
@@ -7687,18 +7801,7 @@
                 closeMsaModalIfShowing(null)
             }
 
-            const povLink = $('povViewerLink')
-
-            if (povLink) {
-
-                if (data.online && data.povViewerPort) {
-                    povLink.href = `http://${window.location.hostname}:${data.povViewerPort}/`
-                    povLink.style.display = 'flex'
-                } else {
-                    povLink.style.display = 'none'
-                }
-
-            }
+            updatePovPage(data)
 
             // ----------------------------------------------
             // STATUS
@@ -9450,6 +9553,36 @@
                     </div>
                 `)
                 .join('')
+
+        }
+
+        // Point of View page - a live 3D render of what the main bot
+        // sees (prismarine-viewer), running on its own dedicated port
+        // per BotSession so it can't collide with another user's main
+        // bot. Opens in a new tab rather than an embedded iframe since
+        // it's served from a different port (its own http server), not
+        // this dashboard's origin.
+        function updatePovPage(data) {
+
+            const link = $('povPageLink')
+            const status = $('povPageStatus')
+
+            if (!link || !status) return
+
+            if (data.online && data.povViewerPort) {
+
+                link.href = `http://${window.location.hostname}:${data.povViewerPort}/`
+                link.style.display = ''
+                status.textContent = 'Live - opens in a new tab.'
+
+            } else {
+
+                link.style.display = 'none'
+                status.textContent = data.online
+                    ? 'Starting up - try again in a moment.'
+                    : 'Start the bot to view its POV.'
+
+            }
 
         }
 
@@ -11566,6 +11699,54 @@
         setInterval(tickKeyallCountdown, 1000)
 
         // ==================================================
+        // PAGE NAVIGATION (sidebar tabs)
+        // ==================================================
+        // A page's content only exists in a .page[data-page="X"]
+        // wrapper - there can be more than one for the same page (e.g.
+        // Overview is split across two non-adjacent chunks in the
+        // source, since cards weren't physically reordered to build
+        // this), so switching shows/hides EVERY element matching that
+        // page id, not just the first.
+
+        const PAGE_STORAGE_KEY = 'fleaxer-active-page'
+
+        function switchPage(pageId) {
+
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.toggle('active', page.dataset.page === pageId)
+            })
+
+            document.querySelectorAll('.page-nav-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.pageNav === pageId)
+            })
+
+            try {
+                localStorage.setItem(PAGE_STORAGE_KEY, pageId)
+            } catch {}
+
+        }
+
+        function initPageNav() {
+
+            let startPage = 'overview'
+
+            try {
+
+                const saved = localStorage.getItem(PAGE_STORAGE_KEY)
+
+                if (saved && document.querySelector(`.page[data-page="${saved}"]`)) {
+                    startPage = saved
+                }
+
+            } catch {}
+
+            switchPage(startPage)
+
+        }
+
+        initPageNav()
+
+        // ==================================================
         // DASHBOARD LAYOUT (drag to reorder cards)
         // ==================================================
 
@@ -11573,13 +11754,18 @@
 
         let draggedCard = null
 
+        // Cards now live in several page-scoped grids instead of one
+        // big dashboardGrid - reordering only ever needs to happen
+        // within a single page's own grid, never across pages (a
+        // hidden page's grid has display: none, so it can't receive
+        // drag events anyway). One shared order array still works
+        // fine across all of them: each grid only ever reorders the
+        // subset of that saved order that's actually one of ITS cards.
+        function getPageGrids() {
+            return Array.from(document.querySelectorAll('.page-grid'))
+        }
+
         function loadDashboardLayout() {
-
-            const grid = $('dashboardGrid')
-
-            if (!grid) {
-                return
-            }
 
             let savedOrder = null
 
@@ -11595,18 +11781,22 @@
                 return
             }
 
-            const cards = {}
+            for (const grid of getPageGrids()) {
 
-            grid.querySelectorAll('.card[data-card-id]').forEach(card => {
-                cards[card.dataset.cardId] = card
-            })
+                const cards = {}
 
-            for (const cardId of savedOrder) {
+                grid.querySelectorAll('.card[data-card-id]').forEach(card => {
+                    cards[card.dataset.cardId] = card
+                })
 
-                const card = cards[cardId]
+                for (const cardId of savedOrder) {
 
-                if (card) {
-                    grid.appendChild(card)
+                    const card = cards[cardId]
+
+                    if (card) {
+                        grid.appendChild(card)
+                    }
+
                 }
 
             }
@@ -11618,14 +11808,8 @@
 
         function saveDashboardLayout() {
 
-            const grid = $('dashboardGrid')
-
-            if (!grid) {
-                return
-            }
-
             const order =
-                Array.from(grid.querySelectorAll('.card[data-card-id]'))
+                Array.from(document.querySelectorAll('.card[data-card-id]'))
                     .map(card => card.dataset.cardId)
 
             try {
@@ -11681,93 +11865,91 @@
 
         function initDashboardDragDrop() {
 
-            const grid = $('dashboardGrid')
-
-            if (!grid) {
-                return
-            }
-
             const NON_DRAG_SELECTOR =
                 'button, input, a, select, textarea, .scroll, .settings-checkbox'
 
-            grid.addEventListener('dragstart', event => {
+            for (const grid of getPageGrids()) {
 
-                const card = event.target.closest('.card[data-card-id]')
+                grid.addEventListener('dragstart', event => {
 
-                if (!card) {
-                    return
-                }
+                    const card = event.target.closest('.card[data-card-id]')
 
-                const onTitle = event.target.closest('.card-title')
-                const onBlocked = event.target.closest(NON_DRAG_SELECTOR)
+                    if (!card) {
+                        return
+                    }
 
-                if (!onTitle && onBlocked) {
+                    const onTitle = event.target.closest('.card-title')
+                    const onBlocked = event.target.closest(NON_DRAG_SELECTOR)
+
+                    if (!onTitle && onBlocked) {
+                        event.preventDefault()
+                        return
+                    }
+
+                    draggedCard = card
+
+                    card.classList.add('dragging')
+
+                    event.dataTransfer.effectAllowed = 'move'
+
+                    try {
+                        event.dataTransfer.setData('text/plain', card.dataset.cardId)
+                    } catch {}
+
+                })
+
+                grid.addEventListener('dragover', event => {
+
+                    if (!draggedCard) {
+                        return
+                    }
+
                     event.preventDefault()
-                    return
-                }
 
-                draggedCard = card
+                    const { closest, insertAfter } =
+                        getClosestCardForDrag(grid, event.clientX, event.clientY)
 
-                card.classList.add('dragging')
+                    if (!closest) {
+                        return
+                    }
 
-                event.dataTransfer.effectAllowed = 'move'
+                    // dragover fires continuously while the mouse moves -
+                    // only touch the DOM when the target position has
+                    // actually changed. Reinserting on every single event
+                    // (even back into the same spot) was causing visible
+                    // jitter as neighboring cards kept reflowing.
+                    const alreadyInPlace = insertAfter
+                        ? closest.nextElementSibling === draggedCard
+                        : closest.previousElementSibling === draggedCard
 
-                try {
-                    event.dataTransfer.setData('text/plain', card.dataset.cardId)
-                } catch {}
+                    if (alreadyInPlace) {
+                        return
+                    }
 
-            })
+                    if (insertAfter) {
+                        closest.after(draggedCard)
+                    } else {
+                        closest.before(draggedCard)
+                    }
 
-            grid.addEventListener('dragover', event => {
+                })
 
-                if (!draggedCard) {
-                    return
-                }
+                grid.addEventListener('drop', event => {
+                    event.preventDefault()
+                })
 
-                event.preventDefault()
+                grid.addEventListener('dragend', () => {
 
-                const { closest, insertAfter } =
-                    getClosestCardForDrag(grid, event.clientX, event.clientY)
+                    if (draggedCard) {
+                        draggedCard.classList.remove('dragging')
+                        draggedCard = null
+                    }
 
-                if (!closest) {
-                    return
-                }
+                    saveDashboardLayout()
 
-                // dragover fires continuously while the mouse moves -
-                // only touch the DOM when the target position has
-                // actually changed. Reinserting on every single event
-                // (even back into the same spot) was causing visible
-                // jitter as neighboring cards kept reflowing.
-                const alreadyInPlace = insertAfter
-                    ? closest.nextElementSibling === draggedCard
-                    : closest.previousElementSibling === draggedCard
+                })
 
-                if (alreadyInPlace) {
-                    return
-                }
-
-                if (insertAfter) {
-                    closest.after(draggedCard)
-                } else {
-                    closest.before(draggedCard)
-                }
-
-            })
-
-            grid.addEventListener('drop', event => {
-                event.preventDefault()
-            })
-
-            grid.addEventListener('dragend', () => {
-
-                if (draggedCard) {
-                    draggedCard.classList.remove('dragging')
-                    draggedCard = null
-                }
-
-                saveDashboardLayout()
-
-            })
+            }
 
         }
 

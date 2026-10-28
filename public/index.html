@@ -1069,7 +1069,6 @@
         .card[data-card-id="actionbar"] { --card-accent: var(--yellow); }
         .card[data-card-id="kothcapture"] { --card-accent: var(--orange); }
         .card[data-card-id="activity"] { --card-accent: var(--orange); }
-        .card[data-card-id="fleet"] { --card-accent: var(--teal); }
         .card[data-card-id="lastActivity"] { --card-accent: var(--yellow); }
 
         .card::before {
@@ -2783,126 +2782,6 @@
             gap: 8px;
         }
 
-        /* ================================================= */
-        /* ACCOUNT FLEET */
-        /* ================================================= */
-
-        .fleet-adder {
-            display: none;
-
-            padding: 14px;
-            margin-bottom: 14px;
-
-            background: var(--panel-2);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-        }
-
-        .fleet-adder.show {
-            display: block;
-        }
-
-        .fleet-adder .field {
-            margin-bottom: 12px;
-        }
-
-        .fleet-adder .field:last-of-type {
-            margin-bottom: 14px;
-        }
-
-        .fleet-adder label {
-            display: block;
-
-            font-size: 10.5px;
-            font-weight: 700;
-            color: var(--muted);
-
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-
-            margin-bottom: 5px;
-        }
-
-        .fleet-adder input,
-        .fleet-adder select {
-            width: 100%;
-
-            padding: 9px 10px;
-
-            border: 1px solid var(--border-strong);
-            border-radius: 12px;
-
-            outline: none;
-
-            background: var(--panel-solid);
-            color: var(--text);
-
-            font-family: inherit;
-            font-size: 13px;
-        }
-
-        .fleet-adder input:focus,
-        .fleet-adder select:focus {
-            border-color: var(--blue);
-            box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 20%, transparent);
-        }
-
-        .fleet-field-row {
-            display: flex;
-            gap: 10px;
-        }
-
-        .fleet-field-row .field {
-            flex: 1;
-        }
-
-        .fleet-list {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .fleet-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
-
-            padding: 9px 10px;
-
-            background: var(--panel-2);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-
-            font-size: 12.5px;
-        }
-
-        .fleet-row-name {
-            flex: 1;
-            min-width: 100px;
-
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-
-            font-weight: 700;
-        }
-
-        .fleet-row-error {
-            flex-basis: 100%;
-
-            color: var(--red);
-            font-size: 11px;
-        }
-
-        .fleet-row-uptime {
-            flex-shrink: 0;
-
-            color: var(--faint);
-            font-size: 10.5px;
-            font-weight: 700;
-        }
-
         .manage-account-actions {
             display: flex;
             align-items: center;
@@ -4364,7 +4243,6 @@
             .modal-ok, .modal-confirm, .manage-account-btn,
             .command-grid button,
             .manage-account-row .manage-account-password-input,
-            .fleet-row button,
             select {
                 min-height: 40px;
             }
@@ -4577,7 +4455,6 @@
             .modal-ok, .modal-confirm, .manage-account-btn,
             .command-grid button,
             .manage-account-row .manage-account-password-input,
-            .fleet-row button,
             .qa-add-btn,
             select {
                 min-height: 40px;
@@ -4611,7 +4488,6 @@
             /* Any card with a wide inner element (tables, long rows)
                scrolls its own content sideways instead of blowing out
                the page's width. */
-            .fleet-row,
             .manage-account-row,
             .leaderboard-row,
             .koth-history-row {
@@ -4628,8 +4504,7 @@
                 grid-template-columns: 1fr;
             }
 
-            .settings-field-row,
-            .fleet-field-row {
+            .settings-field-row {
                 flex-direction: column;
                 gap: 14px;
             }
@@ -5494,118 +5369,6 @@
                     class="activity-list scroll"
                 >
                     <div class="empty-state">No activity yet.</div>
-                </div>
-
-            </section>
-
-            <!-- ========================================== -->
-            <!-- ACCOUNT FLEET -->
-            <!-- ========================================== -->
-
-            <section class="card col-4" data-card-id="fleet" draggable="true" style="animation-delay: 0.23s;">
-
-                <div class="card-title">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
-                    Account Fleet
-                    <button class="title-action" id="fleetAddToggle" title="Add an account" onclick="toggleFleetAdder()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    </button>
-                </div>
-
-                <p class="settings-section-desc">Extra Java/Bedrock accounts that just connect and go AFK - no team tracking, no automation. Doesn't affect your main dashboard above.</p>
-
-                <div id="fleetAdder" class="fleet-adder">
-
-                    <div class="fleet-field-row">
-
-                        <div class="field">
-                            <label for="fleetLabel">Label</label>
-                            <input id="fleetLabel" type="text" placeholder="e.g. Alt 1" autocomplete="off">
-                        </div>
-
-                        <div class="field">
-                            <label for="fleetPlatform">Platform</label>
-                            <select id="fleetPlatform" onchange="onFleetPlatformChange()">
-                                <option value="java">Java</option>
-                                <option value="bedrock">Bedrock</option>
-                            </select>
-                        </div>
-
-                    </div>
-
-                    <div class="field">
-                        <label for="fleetEmail">Microsoft Account Email</label>
-                        <input id="fleetEmail" type="email" placeholder="alt@outlook.com" autocomplete="off">
-                    </div>
-
-                    <div class="fleet-field-row">
-
-                        <div class="field">
-                            <label for="fleetHost">Server Host</label>
-                            <input id="fleetHost" type="text" placeholder="play.example.net" autocomplete="off">
-                        </div>
-
-                        <div class="field">
-                            <label for="fleetPort">Port</label>
-                            <input id="fleetPort" type="number" placeholder="25565" autocomplete="off">
-                        </div>
-
-                    </div>
-
-                    <div class="field">
-                        <label for="fleetAfkCommand">AFK Command (optional)</label>
-                        <input id="fleetAfkCommand" type="text" placeholder="/home AFK">
-                    </div>
-
-                    <div class="fleet-field-row">
-
-                        <div class="field">
-                            <label for="fleetProxyHost">SOCKS5 Proxy Host (optional)</label>
-                            <input id="fleetProxyHost" type="text" autocomplete="off">
-                        </div>
-
-                        <div class="field">
-                            <label for="fleetProxyPort">Proxy Port</label>
-                            <input id="fleetProxyPort" type="number" autocomplete="off">
-                        </div>
-
-                    </div>
-
-                    <div class="fleet-field-row">
-
-                        <div class="field">
-                            <label for="fleetProxyUsername">Proxy Username</label>
-                            <input id="fleetProxyUsername" type="text" autocomplete="off">
-                        </div>
-
-                        <div class="field">
-                            <label for="fleetProxyPassword">Proxy Password</label>
-                            <input id="fleetProxyPassword" type="password" autocomplete="new-password">
-                        </div>
-
-                    </div>
-
-                    <div class="field">
-                        <label for="fleetLocalAddress">Bind to Local IP (optional)</label>
-                        <input id="fleetLocalAddress" type="text" placeholder="Leave blank to use this machine's default IP" autocomplete="off">
-                    </div>
-
-                    <div id="fleetAddError" class="settings-error"></div>
-
-                    <button class="modal-ok" style="width: 100%;" onclick="addFleetAccount()">Add Account</button>
-
-                </div>
-
-                <div id="fleetBulkBar" class="manage-accounts-bulk-bar" style="display: none;">
-                    <span id="fleetCountLabel" style="font-size: 11.5px; font-weight: 700; color: var(--muted);">0 accounts</span>
-                    <div class="manage-accounts-bulk-actions">
-                        <button class="manage-account-btn" onclick="fleetBulkAction('stop-all')">Stop All</button>
-                        <button class="manage-account-btn manage-account-btn-primary" onclick="fleetBulkAction('connect-all')">Connect All</button>
-                    </div>
-                </div>
-
-                <div id="fleetList" class="fleet-list">
-                    <div class="empty-state">No extra accounts yet. Click + to add one.</div>
                 </div>
 
             </section>
@@ -7271,20 +7034,18 @@
         // MICROSOFT SIGN-IN MODAL
         // ==================================================
 
-        // Tracks WHICH account the currently-shown code belongs to
-        // (null = the primary bot, otherwise a fleet account id) - the
-        // dashboard's regular status tick used to auto-close this modal
-        // the instant ANY account reported online, which included the
-        // primary bot being online already while a totally unrelated
-        // fleet/Bedrock account's code was still showing, snapping it
-        // shut before there was any chance to actually use it.
+        // Tracks whether a code is currently showing - the dashboard's
+        // regular status tick used to auto-close this modal the instant
+        // the bot reported online, which could snap it shut before
+        // there was any chance to actually use it if that happened to
+        // race with a code just being shown.
         let currentMsaAccountId = null
 
         function openMsaModal(data) {
 
             currentMsaAccountId = data.accountId || null
 
-            const prefix = data.accountId ? `[${data.accountLabel || 'Fleet account'}] ` : ''
+            const prefix = data.accountId ? `[${data.accountLabel || 'Account'}] ` : ''
 
             $('msaMessage').textContent =
                 prefix + (data.message || 'Visit the link below and enter this code to connect your account.')
@@ -11549,170 +11310,6 @@
 
         loadAutoInvite()
 
-        // ==================================================
-        // ACCOUNT FLEET (extra Java/Bedrock connect-and-AFK accounts)
-        // ==================================================
-
-        function toggleFleetAdder() {
-
-            const adder = $('fleetAdder')
-            const btn = $('fleetAddToggle')
-
-            const showing = adder.classList.toggle('show')
-
-            btn.classList.toggle('active', showing)
-
-            if (showing) {
-                onFleetPlatformChange()
-                $('fleetLabel')?.focus()
-            }
-
-        }
-
-        function onFleetPlatformChange() {
-
-            const isBedrock = $('fleetPlatform').value === 'bedrock'
-
-            if (!$('fleetPort').value || Number($('fleetPort').value) === (isBedrock ? 25565 : 19132)) {
-                $('fleetPort').value = isBedrock ? 19132 : 25565
-            }
-
-            // Java and Bedrock often live on different hostnames on the
-            // same server (e.g. java.example.net vs bedrock.example.net)
-            // - a wrong host here is the single most common reason a
-            // Bedrock fleet account just sits on "CONNECTING" forever,
-            // so make the example reflect whichever platform is picked
-            // instead of a generic one that quietly implies Java.
-            $('fleetHost').placeholder = isBedrock ? 'bedrock.example.net' : 'play.example.net'
-
-        }
-
-        function addFleetAccount() {
-
-            const errorBox = $('fleetAddError')
-
-            errorBox.classList.remove('show')
-            errorBox.textContent = ''
-
-            const payload = {
-                label: $('fleetLabel').value.trim(),
-                platform: $('fleetPlatform').value === 'bedrock' ? 'bedrock' : 'java',
-                microsoftEmail: $('fleetEmail').value.trim(),
-                host: $('fleetHost').value.trim(),
-                port: Number($('fleetPort').value) || undefined,
-                afkCommand: $('fleetAfkCommand').value.trim(),
-                proxyHost: $('fleetProxyHost').value.trim(),
-                proxyPort: Number($('fleetProxyPort').value) || null,
-                proxyUsername: $('fleetProxyUsername').value.trim(),
-                proxyPassword: $('fleetProxyPassword').value,
-                localAddress: $('fleetLocalAddress').value.trim()
-            }
-
-            fetch('/api/fleet', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-                .then(response => response.json().then(data => ({ ok: response.ok, data })))
-                .then(({ ok, data }) => {
-
-                    if (!ok) {
-                        errorBox.textContent = data.error || 'Could not add that account.'
-                        errorBox.classList.add('show')
-                        return
-                    }
-
-                    ;['fleetLabel', 'fleetEmail', 'fleetHost', 'fleetPort', 'fleetAfkCommand',
-                        'fleetProxyHost', 'fleetProxyPort', 'fleetProxyUsername', 'fleetProxyPassword', 'fleetLocalAddress']
-                        .forEach(id => { $(id).value = '' })
-
-                    toggleFleetAdder()
-
-                    showToast(`Added "${data.account.label || data.account.microsoftEmail}" to the fleet.`, 'success')
-
-                    renderFleet()
-
-                })
-                .catch(() => {
-                    errorBox.textContent = 'Could not reach the server. Try again.'
-                    errorBox.classList.add('show')
-                })
-
-        }
-
-        function renderFleet() {
-
-            const list = $('fleetList')
-
-            fetch('/api/fleet')
-                .then(response => response.json())
-                .then(data => {
-
-                    const accounts = data.accounts || []
-
-                    $('fleetBulkBar').style.display = accounts.length > 0 ? 'flex' : 'none'
-                    $('fleetCountLabel').textContent = `${accounts.length} account${accounts.length === 1 ? '' : 's'}`
-
-                    if (accounts.length === 0) {
-                        list.innerHTML = '<div class="empty-state">No extra accounts yet. Click + to add one.</div>'
-                        return
-                    }
-
-                    list.innerHTML = accounts.map(account => `
-                        <div class="fleet-row" data-fleet-id="${escapeHtml(account.id)}">
-                            <span class="manage-account-badge ${account.platform}">${account.platform === 'bedrock' ? 'Bedrock' : 'Java'}</span>
-                            <span class="fleet-row-name">${escapeHtml(account.label || account.microsoftEmail)}</span>
-                            <span class="manage-account-state ${account.online ? 'online' : ''}">${escapeHtml(account.state)}</span>
-                            <span class="fleet-row-uptime" title="Uptime since this account was added, and how many times it's had to reconnect">${account.uptimePercent ?? 0}% &middot; &#8635;${account.reconnectCount ?? 0}</span>
-                            ${account.online || account.botEnabled
-                                ? `<button class="manage-account-btn" onclick="fleetAction('${escapeHtml(account.id)}', 'stop')">Stop</button>`
-                                : `<button class="manage-account-btn manage-account-btn-primary" onclick="fleetAction('${escapeHtml(account.id)}', 'connect')">Connect</button>`
-                            }
-                            <button class="manage-account-btn" onclick="removeFleetAccount('${escapeHtml(account.id)}')" title="Remove">&times;</button>
-                            ${account.lastError ? `<div class="fleet-row-error">${escapeHtml(account.lastError)}</div>` : ''}
-                        </div>
-                    `).join('')
-
-                })
-                .catch(() => {})
-
-        }
-
-        function fleetAction(id, action) {
-
-            fetch(`/api/fleet/${id}/${action}`, { method: 'POST' })
-                .then(() => setTimeout(renderFleet, 300))
-                .catch(() => {})
-
-        }
-
-        function removeFleetAccount(id) {
-
-            fetch(`/api/fleet/${id}`, { method: 'DELETE' })
-                .then(() => renderFleet())
-                .catch(() => {})
-
-        }
-
-        function fleetBulkAction(action) {
-
-            fetch(`/api/fleet/${action}`, { method: 'POST' })
-                .then(() => setTimeout(renderFleet, 300))
-                .catch(() => {})
-
-        }
-
-        socket.on('fleetUpdate', data => {
-
-            if (data?.online) {
-                closeMsaModalIfShowing(data.id)
-            }
-
-            renderFleet()
-
-        })
-
-        renderFleet()
         loadPermRanks()
 
         // ==================================================

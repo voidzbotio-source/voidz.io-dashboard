@@ -3190,8 +3190,8 @@ class BotSession {
     }
 
     // Runs every dashboard tick (~1s) while connected. Any Auto-Invite
-    // tracked player whose tab-list HP drops below 2.5 hearts (5 HP)
-    // gets kicked off the team and immediately reinvited - kicking
+    // tracked player whose tab-list HP drops to 5 hearts (10 HP) or
+    // below gets kicked off the team and immediately reinvited - kicking
     // drops them from `/t info` shared-location tracking before an
     // enemy can use it against them at low HP, and the reinvite
     // brings them straight back in once they're safe. `lowHpHandled`
@@ -3212,9 +3212,9 @@ class BotSession {
     // slot 2, the number shown under each player's nametag in-world -
     // exposed here via RawScoreboardTracker since mineflayer's own
     // bot.scoreboard never populates on this server's protocol
-    // version - see the class comment above BotSession). This 5 HP
-    // threshold is the one confirmed working in production - leave
-    // it alone unless there's real data backing a change.
+    // version - see the class comment above BotSession). 5 HP was the
+    // threshold confirmed working in production; raised to 10 HP per
+    // request.
     checkAutoInviteLowHealth() {
 
         if (!this.bot || !this.bot.players) return
@@ -3251,7 +3251,7 @@ class BotSession {
 
             if (hp === null) continue
 
-            if (hp >= 5) {
+            if (hp > 10) {
                 this.lowHpHandled.delete(key)
                 continue
             }
@@ -3266,7 +3266,7 @@ class BotSession {
 
             setTimeout(() => this.sendMinecraftChat(`/t invite ${actualName}`), 350)
 
-            io.to(this.username).emit('notice', { type: 'info', text: `${actualName} dropped below 2.5 hearts - kicked and reinvited` })
+            io.to(this.username).emit('notice', { type: 'info', text: `${actualName} dropped to 5 hearts (10 HP) - kicked and reinvited` })
 
         }
 

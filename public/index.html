@@ -1060,7 +1060,6 @@
         .card[data-card-id="leaderboard"] { --card-accent: var(--yellow); }
         .card[data-card-id="nemesis"] { --card-accent: var(--red); }
         .card[data-card-id="serveractivity"] { --card-accent: var(--blue); }
-        .card[data-card-id="badges"] { --card-accent: var(--purple); }
         .card[data-card-id="inventory"] { --card-accent: var(--orange); }
         .card[data-card-id="threats"] { --card-accent: var(--red); }
         .card[data-card-id="allies"] { --card-accent: var(--green); }
@@ -2850,60 +2849,6 @@
 
         .impersonation-banner.show {
             display: flex;
-        }
-
-        /* ================================================= */
-        /* BADGES */
-        /* ================================================= */
-
-        .badges-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-        }
-
-        .badge-tile {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-
-            padding: 12px 6px;
-
-            background: var(--panel-2);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-
-            text-align: center;
-        }
-
-        .badge-tile.locked {
-            opacity: 0.35;
-            filter: grayscale(1);
-        }
-
-        .badge-tile.unlocked {
-            border-color: var(--purple);
-        }
-
-        .badge-tile-icon {
-            font-size: 22px;
-            line-height: 1;
-        }
-
-        .badge-tile-name {
-            color: var(--muted);
-            font-size: 10px;
-            font-weight: 700;
-
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            max-width: 100%;
-        }
-
-        .badge-tile.unlocked .badge-tile-name {
-            color: var(--text);
         }
 
         /* ================================================= */
@@ -5133,21 +5078,6 @@
                 <div id="serverActivityBody" class="koth-history-list scroll">
                     <div class="empty-state">No KOTH activity seen yet.</div>
                 </div>
-
-            </section>
-
-            <!-- ========================================== -->
-            <!-- ACHIEVEMENTS -->
-            <!-- ========================================== -->
-
-            <section class="card col-1" data-card-id="badges" draggable="true" style="animation-delay: 0.196s;">
-
-                <div class="card-title">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.5 13.5 17 22l-5-3-5 3 1.5-8.5"/></svg>
-                    Achievements
-                </div>
-
-                <div id="badgesBody" class="badges-grid"></div>
 
             </section>
 
@@ -7998,7 +7928,6 @@
             lastServerActivity = Array.isArray(data.serverActivity) ? data.serverActivity : []
             renderServerActivity(lastServerActivity)
             lastBadgeProgress = data.badgeProgress || null
-            renderBadges(data.badgeProgress || null)
             renderActionBar(data.actionBar || null)
             renderKothCapture(data.kothCapture || null)
             lastNemesisHistory = Array.isArray(data.nemesisHistory) ? data.nemesisHistory : []
@@ -9520,48 +9449,6 @@
                         <span class="koth-history-date">${formatKothDate(entry.timestamp)}</span>
                     </div>
                 `)
-                .join('')
-
-        }
-
-        // Client-side mirror of the server's BADGE_DEFINITIONS - just
-        // the display metadata, since the actual unlock conditions are
-        // evaluated server-side against lifetime counters.
-        const BADGE_DEFINITIONS = [
-            { id: 'first-blood', name: 'First Blood', icon: '🏆', description: 'Capture your first KOTH' },
-            { id: 'hat-trick', name: 'Hat Trick', icon: '🎩', description: 'Capture 3 KOTHs' },
-            { id: 'dominator', name: 'Dominator', icon: '👑', description: 'Capture 10 KOTHs' },
-            { id: 'century-club', name: 'Century Club', icon: '💯', description: 'Capture 100 KOTHs' },
-            { id: 'point-leader', name: 'Point Leader', icon: '💰', description: 'Reach 500 team points' },
-            { id: 'high-roller', name: 'High Roller', icon: '💎', description: 'Reach 1000 team points' }
-        ]
-
-        function renderBadges(progress) {
-
-            const container = $('badgesBody')
-
-            if (!container) return
-
-            const unlocked = (progress && progress.unlockedBadges) || {}
-
-            container.innerHTML = BADGE_DEFINITIONS
-                .map(badge => {
-
-                    const unlockedAt = unlocked[badge.id]
-                    const isUnlocked = !!unlockedAt
-
-                    const title = isUnlocked
-                        ? `${badge.description} - Unlocked ${formatKothDate(unlockedAt)}`
-                        : badge.description
-
-                    return `
-                        <div class="badge-tile ${isUnlocked ? 'unlocked' : 'locked'}" title="${escapeHtml(title)}">
-                            <div class="badge-tile-icon">${badge.icon}</div>
-                            <div class="badge-tile-name">${escapeHtml(badge.name)}</div>
-                        </div>
-                    `
-
-                })
                 .join('')
 
         }

@@ -737,6 +737,29 @@
             display: block;
         }
 
+        .page-header {
+            margin: 0 0 18px;
+        }
+
+        .page-header h2 {
+            margin: 0 0 4px;
+
+            font-family: var(--font-display);
+            font-size: 24px;
+            font-weight: 800;
+
+            background: linear-gradient(135deg, var(--blue), var(--purple));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .page-header p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
         .theme-swatches {
             display: flex;
             flex-wrap: wrap;
@@ -4663,6 +4686,12 @@
         <div class="pages">
 
             <div class="page active" data-page="overview">
+
+            <div class="page-header">
+                <h2>Overview</h2>
+                <p>Bot status, quick actions, and recent activity at a glance.</p>
+            </div>
+
             <main class="grid page-grid">
 
             <!-- ========================================== -->
@@ -5047,6 +5076,12 @@
             </div>
 
             <div class="page" data-page="team">
+
+            <div class="page-header">
+                <h2>Team</h2>
+                <p>Roster, points, leaderboards, and server-wide activity.</p>
+            </div>
+
             <main class="grid page-grid">
 
             <!-- ========================================== -->
@@ -5153,7 +5188,7 @@
             <!-- INVENTORY -->
             <!-- ========================================== -->
 
-            <section class="card col-2" data-card-id="inventory" draggable="true" style="animation-delay: 0.195s;">
+            <section class="card col-4" data-card-id="inventory" draggable="true" style="animation-delay: 0.195s;">
 
                 <div class="card-title">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 8L12 4 4 8m16 0-8 4m8-4v8l-8 4m0-8L4 8m8 4v8M4 8v8l8 4"/></svg>
@@ -5173,6 +5208,12 @@
             </div>
 
             <div class="page" data-page="threats">
+
+            <div class="page-header">
+                <h2>Threats &amp; Allies</h2>
+                <p>Players you're tracking, plus who gets auto-reinvited to the team.</p>
+            </div>
+
             <main class="grid page-grid">
 
             <!-- ========================================== -->
@@ -5280,6 +5321,12 @@
             </div>
 
             <div class="page" data-page="chat">
+
+            <div class="page-header">
+                <h2>Chat</h2>
+                <p>Live server chat, the action bar, and any KOTH capture in progress.</p>
+            </div>
+
             <main class="grid page-grid">
 
             <!-- ========================================== -->
@@ -5422,7 +5469,7 @@
             <!-- POINT OF VIEW -->
             <!-- ========================================== -->
 
-            <section class="card col-2" data-card-id="pov" draggable="true" style="animation-delay: 0s;">
+            <section class="card col-4" data-card-id="pov" draggable="true" style="animation-delay: 0s;">
 
                 <div class="card-title">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -5431,9 +5478,21 @@
 
                 <p class="settings-section-desc">A live 3D render of what the main bot sees, reconstructed in real time from its own world data - not a screen capture, just a view of the world and nearby players around it.</p>
 
-                <div id="povPageStatus" class="status-value" style="max-width: 100%; text-align: left; display: block; margin-bottom: 14px;">Start the bot to view its POV.</div>
+                <div class="hero-grid">
 
-                <a id="povPageLink" href="#" target="_blank" rel="noopener" class="modal-ok" style="display: none; width: 100%; text-align: center;">Open POV Viewer &#8599;</a>
+                    <div class="hero-stat">
+                        <div class="hero-stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Status</div>
+                        <div id="povPageStatus" class="hero-stat-value">Offline</div>
+                    </div>
+
+                    <div class="hero-stat">
+                        <div class="hero-stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4"/><path d="M2 8h20"/></svg>Port</div>
+                        <div id="povPagePort" class="hero-stat-value">-</div>
+                    </div>
+
+                </div>
+
+                <a id="povPageLink" href="#" target="_blank" rel="noopener" class="modal-ok" style="display: none; width: 100%; text-align: center; margin-top: 16px;">Open POV Viewer &#8599;</a>
 
             </section>
 
@@ -9566,21 +9625,22 @@
 
             const link = $('povPageLink')
             const status = $('povPageStatus')
+            const port = $('povPagePort')
 
-            if (!link || !status) return
+            if (!link || !status || !port) return
 
             if (data.online && data.povViewerPort) {
 
                 link.href = `http://${window.location.hostname}:${data.povViewerPort}/`
                 link.style.display = ''
-                status.textContent = 'Live - opens in a new tab.'
+                status.textContent = 'Live'
+                port.textContent = data.povViewerPort
 
             } else {
 
                 link.style.display = 'none'
-                status.textContent = data.online
-                    ? 'Starting up - try again in a moment.'
-                    : 'Start the bot to view its POV.'
+                status.textContent = data.online ? 'Starting up' : 'Offline'
+                port.textContent = '-'
 
             }
 

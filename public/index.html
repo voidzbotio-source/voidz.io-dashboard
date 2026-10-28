@@ -4732,6 +4732,19 @@
                 <span id="botToggleLabel">Start</span>
             </button>
 
+            <a
+                id="povViewerLink"
+                class="sidebar-nav-item"
+                href="#"
+                target="_blank"
+                rel="noopener"
+                style="display: none;"
+                title="Opens a live 3D view of what the bot sees in a new tab"
+            >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span>Bot POV</span>
+            </a>
+
             <div class="sidebar-divider"></div>
 
             <button class="sidebar-nav-item" onclick="openSettingsModal()">
@@ -7981,6 +7994,19 @@
 
             if (data.online) {
                 closeMsaModalIfShowing(null)
+            }
+
+            const povLink = $('povViewerLink')
+
+            if (povLink) {
+
+                if (data.online && data.povViewerPort) {
+                    povLink.href = `http://${window.location.hostname}:${data.povViewerPort}/`
+                    povLink.style.display = 'flex'
+                } else {
+                    povLink.style.display = 'none'
+                }
+
             }
 
             // ----------------------------------------------

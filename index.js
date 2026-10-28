@@ -9,6 +9,21 @@
 // ============================================================
 
 const mineflayer = require('mineflayer')
+
+// prismarine-viewer pulls in `canvas`, a native module - if its
+// prebuilt binary doesn't match whatever machine this runs on, this
+// require throws. That's a real risk on a different OS/arch than
+// this was developed on, and since this is a top-level require, an
+// uncaught failure here would take the ENTIRE dashboard down with
+// it, not just the POV feature. Caught and logged instead - see
+// startPovViewer(), which just no-ops if this came back null.
+let prismarineViewer = null
+try {
+    prismarineViewer = require('prismarine-viewer').mineflayer
+} catch (error) {
+    console.error(`[STARTUP] POV viewer (prismarine-viewer) failed to load - the "Bot POV" feature will be unavailable, everything else is unaffected: ${error.message}`)
+}
+
 const bedrock = require('bedrock-protocol')
 const { SocksClient } = require('socks')
 const express = require('express')
@@ -104,6 +119,14 @@ const DEFAULT_MICROSOFT_EMAIL = process.env.MICROSOFT_EMAIL || ''
 
 const RECONNECT_DELAY = 15000
 const MAX_RECONNECT_DELAY = 120000
+
+// Bot's-eye-view 3D viewer (prismarine-viewer) - only ever started for
+// a primary BotSession's own bot (never FleetAccount), one dedicated
+// port per instance so multiple logged-in users' main bots don't
+// collide. Each needs its own firewall/security-list rule opened to
+// be reachable from outside this machine.
+const POV_VIEWER_BASE_PORT = 3100
+let nextPovViewerPort = POV_VIEWER_BASE_PORT
 
 const FIRST_JQ_DELAY = 15000
 const JQ_RETRY_DELAY = 3000
@@ -1478,6 +1501,14 @@ class BotSession {
         // every single tick while they stay critical.
         this.lowHpHandled = new Set()
 
+        // POV viewer (see startPovViewer()) - the port is assigned
+        // once and kept for the life of this session so the dashboard
+        // link doesn't change across reconnects; povViewerCloseFn
+        // tears down the PREVIOUS bot's viewer server before a new one
+        // starts on the same port after a reconnect.
+        this.povViewerPort = null
+        this.povViewerCloseFn = null
+
         // Bedrock-platform accounts (config.platform === 'bedrock')
         // connect via bedrock-protocol instead of mineflayer - a
         // different client object with none of mineflayer's bot.players/
@@ -1805,6 +1836,8 @@ class BotSession {
             recoveryTimer: !!this.recoveryTimer,
             proxyProblem: this.proxySessionProblem,
 
+            povViewerPort: online ? this.povViewerPort : null,
+
             health: online ? this.bot.health : null,
             maxHealth: online ? this.getMaxHealth() : null,
             food: online ? this.bot.food : null,
@@ -2022,6 +2055,61 @@ class BotSession {
 
     }
 
+    // Starts (or restarts) prismarine-viewer's live 3D view of what
+    // this bot sees, bound to this specific mineflayer bot instance.
+    // A reconnect replaces this.bot with a brand new object, so the
+    // old viewer (still listening on the old, now-dead bot) has to be
+    // torn down and a fresh one started against the new bot - on the
+    // SAME port each time, so the dashboard's link to it never
+    // changes across reconnects. The short delay on a restart gives
+    // the previous http server's close() (async) time to actually
+    // release the port before rebinding it.
+    startPovViewer() {
+
+        if (!this.bot || !prismarineViewer) return
+
+        const hadPrevious = !!this.povViewerCloseFn
+
+        if (this.povViewerCloseFn) {
+            try { this.povViewerCloseFn() } catch {}
+            this.povViewerCloseFn = null
+        }
+
+        if (!this.povViewerPort) {
+            this.povViewerPort = nextPovViewerPort++
+        }
+
+        setTimeout(() => {
+
+            if (!this.bot) return
+
+            try {
+
+                prismarineViewer(this.bot, { port: this.povViewerPort, firstPerson: true, viewDistance: 6 })
+
+                this.povViewerCloseFn = () => { try { this.bot?.viewer?.close?.() } catch {} }
+
+                this.log(`POV viewer running on port ${this.povViewerPort}.`)
+
+            } catch (error) {
+
+                this.log(`POV viewer failed to start: ${error.message}`)
+
+            }
+
+        }, hadPrevious ? 500 : 0)
+
+    }
+
+    stopPovViewer() {
+
+        if (this.povViewerCloseFn) {
+            try { this.povViewerCloseFn() } catch {}
+            this.povViewerCloseFn = null
+        }
+
+    }
+
     handleSpawnState() {
 
         if (!this.bot || !this.bot.entity) return
@@ -2220,6 +2308,7 @@ class BotSession {
         this.stopJqRetry()
         this.stopHomeTimer()
         this.stopRecoveryTimer()
+        this.stopPovViewer()
 
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer)
@@ -3898,6 +3987,7 @@ class BotSession {
             }
 
             this.handleSpawnState()
+            this.startPovViewer()
 
             this.log(`Spawned. State: ${this.botState}`)
 
@@ -4261,6 +4351,7 @@ class BotSession {
         this.stopRecoveryTimer()
         this.stopKeyallTimer()
         this.stopJqSafetyTimer()
+        this.stopPovViewer()
 
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer)

@@ -12,9 +12,11 @@
   "type": "commonjs",
   "dependencies": {
     "bedrock-protocol": "^3.60.1",
+    "canvas": "^3.2.3",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "mineflayer": "^4.37.1",
+    "prismarine-viewer": "^1.33.0",
     "socket.io": "^4.8.3",
     "socks": "^2.8.10"
   }

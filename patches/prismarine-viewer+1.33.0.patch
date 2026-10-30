@@ -1,0 +1,64 @@
+diff --git a/node_modules/prismarine-viewer/lib/mineflayer.js b/node_modules/prismarine-viewer/lib/mineflayer.js
+index 06634bf..c625c4d 100644
+--- a/node_modules/prismarine-viewer/lib/mineflayer.js
++++ b/node_modules/prismarine-viewer/lib/mineflayer.js
+@@ -52,6 +52,8 @@ module.exports = (bot, { viewDistance = 6, firstPerson = false, port = 3000, pre
+     const worldView = new WorldView(bot.world, viewDistance, bot.entity.position, socket)
+     worldView.init(bot.entity.position)
+ 
++    const retryInterval = setInterval(() => worldView.retryMissingChunks(), 3000)
++
+     worldView.on('blockClicked', (block, face, button) => {
+       bot.viewer.emit('blockClicked', block, face, button)
+     })
+@@ -72,6 +74,7 @@ module.exports = (bot, { viewDistance = 6, firstPerson = false, port = 3000, pre
+     bot.on('move', botPosition)
+     worldView.listenToBot(bot)
+     socket.on('disconnect', () => {
++      clearInterval(retryInterval)
+       bot.removeListener('move', botPosition)
+       worldView.removeListenersFromBot(bot)
+       sockets.splice(sockets.indexOf(socket), 1)
+diff --git a/node_modules/prismarine-viewer/viewer/lib/worldView.js b/node_modules/prismarine-viewer/viewer/lib/worldView.js
+index ec2ccd9..dd437bb 100644
+--- a/node_modules/prismarine-viewer/viewer/lib/worldView.js
++++ b/node_modules/prismarine-viewer/viewer/lib/worldView.js
+@@ -90,10 +90,35 @@ class WorldView extends EventEmitter {
+     if (dx < this.viewDistance && dz < this.viewDistance) {
+       const column = await this.world.getColumnAt(pos)
+       if (column) {
+-        const chunk = column.toJson()
+-        this.emitter.emit('loadChunk', { x: pos.x, z: pos.z, chunk })
+-        this.loadedChunks[`${pos.x},${pos.z}`] = true
++        try {
++          const chunk = column.toJson()
++          this.emitter.emit('loadChunk', { x: pos.x, z: pos.z, chunk })
++          this.loadedChunks[`${pos.x},${pos.z}`] = true
++        } catch (err) {
++          console.error(`[prismarine-viewer] Failed to serialize chunk at ${pos.x},${pos.z}:`, err)
++        }
++      } else {
++        console.log(`[prismarine-viewer] Chunk at ${pos.x},${pos.z} not yet available in bot.world, will retry`)
++      }
++    }
++  }
++
++  // Not-yet-loaded chunks are normally only retried when the bot crosses a
++  // chunk boundary (see updatePosition). A bot that sits still near where a
++  // viewer connects can end up with chunks that were missing from bot.world
++  // at that exact moment (e.g. a timing race right after spawn) and never
++  // get retried. This re-requests anything still missing on a timer.
++  retryMissingChunks () {
++    const [botX, botZ] = chunkPos(this.lastPos)
++    const positions = []
++    spiral(this.viewDistance * 2, this.viewDistance * 2, (x, z) => {
++      const p = new Vec3((botX + x) * 16, 0, (botZ + z) * 16)
++      if (!this.loadedChunks[`${p.x},${p.z}`]) {
++        positions.push(p)
+       }
++    })
++    if (positions.length > 0) {
++      this._loadChunks(positions)
+     }
+   }
+ 

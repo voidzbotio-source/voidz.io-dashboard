@@ -1728,7 +1728,7 @@ class BotSession {
     getKeyAmounts() {
 
         if (!this.bot || !this.bot.inventory) {
-            return { vote: 0, exclusive: 0, insane: 0 }
+            return { vote: 0, exclusive: 0, insane: 0, lantern: 0 }
         }
 
         // Same settle-guard as getInventorySnapshot() - avoid counting
@@ -1737,7 +1737,7 @@ class BotSession {
             return this.cachedKeyAmounts
         }
 
-        const result = { vote: 0, exclusive: 0, insane: 0 }
+        const result = { vote: 0, exclusive: 0, insane: 0, lantern: 0 }
 
         for (const item of this.bot.inventory.items()) {
 
@@ -1746,6 +1746,15 @@ class BotSession {
             }
 
             const itemName = String(item.name || '').toLowerCase()
+
+            // Not a key - a separate Black Market item tallied under
+            // its own "Others" category on the Keys card, no mending
+            // check needed since it's not disambiguating from a
+            // decorative dye the way the key types below are.
+            if (itemName === 'lantern') {
+                result.lantern += Number(item.count) || 0
+                continue
+            }
 
             let keyType = null
 
@@ -1812,7 +1821,7 @@ class BotSession {
         const online = this.config.platform === 'bedrock'
             ? !!(this.bot && this.bedrockSpawned)
             : !!(this.bot && this.bot.entity)
-        const keys = online ? this.getKeyAmounts() : { vote: 0, exclusive: 0, insane: 0 }
+        const keys = online ? this.getKeyAmounts() : { vote: 0, exclusive: 0, insane: 0, lantern: 0 }
         const players = this.getVisiblePlayers()
 
         return {
@@ -2700,10 +2709,12 @@ class BotSession {
         originalLog(`║ Insane Keys:    ${String(keys.insane).padEnd(17)}║`)
         originalLog('╠══════════════════════════════════════╣')
         originalLog(`║ Total Keys:     ${String(total).padEnd(17)}║`)
+        originalLog('╠══════════════════════════════════════╣')
+        originalLog(`║ Lanterns:       ${String(keys.lantern).padEnd(17)}║`)
         originalLog('╚══════════════════════════════════════╝')
         originalLog('')
 
-        this.log(`Keys: Vote=${keys.vote}, Exclusive=${keys.exclusive}, Insane=${keys.insane}, Total=${total}`)
+        this.log(`Keys: Vote=${keys.vote}, Exclusive=${keys.exclusive}, Insane=${keys.insane}, Total=${total}, Lanterns=${keys.lantern}`)
 
     }
 
@@ -3384,12 +3395,12 @@ class BotSession {
 
     }
 
-    // Auto-clicks through the Black Market's buy flow for the Insane
-    // Key the instant a restock is announced, instead of just pinging
-    // and hoping a human reacts fast enough - limited stock usually
-    // doesn't survive a human reaction time. Off by default (this
-    // spends real in-game currency/keys), toggled per-account in
-    // Settings.
+    // Auto-clicks through the Black Market's buy flow for each
+    // tracked item the instant a restock is announced, instead of
+    // just pinging and hoping a human reacts fast enough - limited
+    // stock usually doesn't survive a human reaction time. Off by
+    // default (this spends real in-game currency/keys), toggled per-
+    // account in Settings.
     //
     // Matches items by NAME/LORE TEXT on both screens (the shop, then
     // the confirm dialog /bm opens after clicking an item) rather than
@@ -3397,12 +3408,23 @@ class BotSession {
     // which is the one that's actually been exercised against this
     // shop before. A fixed slot number is exactly how an auto-buyer
     // clicks the wrong thing the moment a GUI layout shifts; if no
-    // confirm-looking item is found, this aborts without clicking
-    // anything rather than guessing which slot to hit on a screen that
-    // spends real resources.
+    // confirm-looking item is found, this aborts that item without
+    // clicking anything rather than guessing which slot to hit on a
+    // screen that spends real resources.
+    //
+    // Each item is its own full /bm -> find -> click -> confirm cycle,
+    // run one after another (not concurrently) - whether the shop GUI
+    // even supports buying a second item without reopening /bm was
+    // never actually confirmed, so this doesn't assume it does.
     autoBuyBlackMarket() {
 
         if (!this.bot) return
+
+        const targets = [
+            { itemName: 'red_dye', pattern: /insane/i, label: 'Insane Key' },
+            { itemName: 'orange_dye', pattern: /exclusive/i, label: 'Exclusive Key' },
+            { itemName: 'lantern', pattern: /lantern/i, label: 'Lantern' }
+        ]
 
         const findMatch = (window, pattern, itemName) => {
 
@@ -3418,64 +3440,77 @@ class BotSession {
 
         }
 
-        this.log('Black Market auto-buy: opening /bm...')
+        const buyNext = index => {
 
-        const shopListener = shopWindow => {
+            if (index >= targets.length) return
+            if (!this.bot) return
 
-            // Confirmed: the Insane Key's underlying item is
-            // minecraft:red_dye - checked first as the most reliable
-            // signal, with the "insane" lore/name text match kept as a
-            // fallback/corroboration.
-            const target = findMatch(shopWindow, /insane/i, 'red_dye')
+            const { itemName, pattern, label } = targets[index]
 
-            if (!target) {
-                this.log('Black Market auto-buy: no Insane Key in the shop (likely 0 stock) - skipping.')
-                return
-            }
+            this.log(`Black Market auto-buy: opening /bm for ${label}...`)
 
-            const confirmTimeout = setTimeout(() => {
-                this.bot?.removeListener('windowOpen', confirmListener)
-                this.log('Black Market auto-buy: clicked the Insane Key but no confirm dialog appeared within 5s.')
-            }, 5000)
+            const shopListener = shopWindow => {
 
-            const confirmListener = confirmWindow => {
+                const target = findMatch(shopWindow, pattern, itemName)
 
-                clearTimeout(confirmTimeout)
-
-                // Confirmed: the confirm dialog's "yes" button is
-                // minecraft:lime_wool (a wall of green blocks vs. a
-                // wall of red cancel blocks) - checked first, with the
-                // text match kept as a fallback in case this screen
-                // ever uses a different confirm item elsewhere.
-                const confirmTarget = findMatch(confirmWindow, /confirm|purchase|buy|yes/i, 'lime_wool')
-
-                if (!confirmTarget) {
-
-                    this.log('Black Market auto-buy: confirm dialog opened but no obvious confirm button found in it - not guessing a slot, purchase NOT completed.')
-
-                    io.to(this.username).emit('notice', { type: 'error', text: 'Black Market: confirm dialog layout unrecognized - check it manually, nothing was clicked.' })
-
+                if (!target) {
+                    this.log(`Black Market auto-buy: no ${label} in the shop (likely 0 stock) - skipping.`)
+                    setTimeout(() => buyNext(index + 1), 700)
                     return
+                }
+
+                const confirmTimeout = setTimeout(() => {
+                    this.bot?.removeListener('windowOpen', confirmListener)
+                    this.log(`Black Market auto-buy: clicked ${label} but no confirm dialog appeared within 5s.`)
+                    buyNext(index + 1)
+                }, 5000)
+
+                const confirmListener = confirmWindow => {
+
+                    clearTimeout(confirmTimeout)
+
+                    // Confirmed: the confirm dialog's "yes" button is
+                    // minecraft:lime_wool (a wall of green blocks vs.
+                    // a wall of red cancel blocks) - checked first,
+                    // with the text match kept as a fallback in case
+                    // this screen ever uses a different confirm item.
+                    const confirmTarget = findMatch(confirmWindow, /confirm|purchase|buy|yes/i, 'lime_wool')
+
+                    if (!confirmTarget) {
+
+                        this.log(`Black Market auto-buy: confirm dialog opened for ${label} but no obvious confirm button found in it - not guessing a slot, purchase NOT completed.`)
+
+                        io.to(this.username).emit('notice', { type: 'error', text: `Black Market: confirm dialog layout unrecognized for ${label} - check it manually, nothing was clicked.` })
+
+                        setTimeout(() => buyNext(index + 1), 700)
+
+                        return
+
+                    }
+
+                    this.bot?.clickWindow(confirmTarget.index, 0, 0).catch(() => {})
+
+                    this.log(`Black Market auto-buy: ${label} purchase confirmed.`)
+
+                    io.to(this.username).emit('notice', { type: 'success', text: `🛒 Black Market: ${label} auto-purchased!` })
+
+                    setTimeout(() => buyNext(index + 1), 700)
 
                 }
 
-                this.bot?.clickWindow(confirmTarget.index, 0, 0).catch(() => {})
+                this.bot.once('windowOpen', confirmListener)
 
-                this.log('Black Market auto-buy: Insane Key purchase confirmed.')
-
-                io.to(this.username).emit('notice', { type: 'success', text: '🛒 Black Market: Insane Key auto-purchased!' })
+                this.bot.clickWindow(target.index, 0, 0).catch(() => {})
 
             }
 
-            this.bot.once('windowOpen', confirmListener)
+            this.bot.once('windowOpen', shopListener)
 
-            this.bot.clickWindow(target.index, 0, 0).catch(() => {})
+            this.sendMinecraftChat('/bm')
 
         }
 
-        this.bot.once('windowOpen', shopListener)
-
-        this.sendMinecraftChat('/bm')
+        buyNext(0)
 
     }
 
@@ -4867,7 +4902,7 @@ function getPlaceholderDashboardData() {
         ping: null,
         players: [],
         playerCount: 0,
-        keys: { vote: 0, exclusive: 0, insane: 0 },
+        keys: { vote: 0, exclusive: 0, insane: 0, lantern: 0 },
         totalKeys: 0,
         lastChat: 'None',
         lastChatTime: null,

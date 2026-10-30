@@ -1522,6 +1522,17 @@
         .key.vote .key-icon { color: var(--yellow); }
         .key.exclusive .key-icon { color: var(--orange); }
         .key.insane .key-icon { color: var(--red); }
+        .key.other .key-icon { color: var(--teal); }
+
+        .keys-category-label {
+            margin: 16px 0 10px;
+
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
 
         .key-name {
             position: relative;
@@ -1554,6 +1565,10 @@
 
         .key.insane .key-count {
             color: var(--red);
+        }
+
+        .key.other .key-count {
+            color: var(--teal);
         }
 
         /* ================================================= */
@@ -5124,6 +5139,27 @@
 
                 </div>
 
+                <div class="keys-category-label">Others</div>
+
+                <div class="keys-grid">
+
+                    <div class="key other">
+                        <svg class="key-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a6 6 0 0 0-6 6c0 4 3 5 3 9h6c0-4 3-5 3-9a6 6 0 0 0-6-6Z"/><path d="M9 17h6"/><path d="M10 21h4"/></svg>
+                        <div class="key-name">
+                            Lanterns
+                        </div>
+
+                        <div
+                            id="otherLanterns"
+                            class="key-count"
+                        >
+                            0
+                        </div>
+
+                    </div>
+
+                </div>
+
             </section>
 
             <!-- ========================================== -->
@@ -8185,6 +8221,11 @@
             animateNumber(
                 'insaneKeys',
                 keys.insane || 0
+            )
+
+            animateNumber(
+                'otherLanterns',
+                keys.lantern || 0
             )
 
             animateNumber(

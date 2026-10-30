@@ -2710,11 +2710,11 @@ class BotSession {
         originalLog('╠══════════════════════════════════════╣')
         originalLog(`║ Total Keys:     ${String(total).padEnd(17)}║`)
         originalLog('╠══════════════════════════════════════╣')
-        originalLog(`║ Lanterns:       ${String(keys.lantern).padEnd(17)}║`)
+        originalLog(`║ KOTH Starters:  ${String(keys.lantern).padEnd(17)}║`)
         originalLog('╚══════════════════════════════════════╝')
         originalLog('')
 
-        this.log(`Keys: Vote=${keys.vote}, Exclusive=${keys.exclusive}, Insane=${keys.insane}, Total=${total}, Lanterns=${keys.lantern}`)
+        this.log(`Keys: Vote=${keys.vote}, Exclusive=${keys.exclusive}, Insane=${keys.insane}, Total=${total}, KOTH Starters=${keys.lantern}`)
 
     }
 

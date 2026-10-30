@@ -1910,7 +1910,7 @@ class BotSession {
 
     broadcastChat(username, message) {
 
-        const time = new Date().toLocaleTimeString()
+        const time = new Date().toISOString()
 
         this.lastChatMessage = `<${username}> ${message}`
         this.lastChatTime = time
@@ -2422,7 +2422,7 @@ class BotSession {
             io.to(this.username).emit('chat', {
                 username: 'DEBUG',
                 message: `${name}: ${JSON.stringify(raw)}`,
-                time: new Date().toLocaleTimeString()
+                time: new Date().toISOString()
             })
 
         }
@@ -2464,7 +2464,7 @@ class BotSession {
             io.to(this.username).emit('chat', {
                 username: 'DEBUG',
                 message: line,
-                time: new Date().toLocaleTimeString()
+                time: new Date().toISOString()
             })
 
         }
@@ -2493,7 +2493,7 @@ class BotSession {
 
         const emitLine = (line) => {
             originalLog(`[SIDEBAR-RAW:${this.username}] ${line}`)
-            io.to(this.username).emit('chat', { username: 'DEBUG', message: line, time: new Date().toLocaleTimeString() })
+            io.to(this.username).emit('chat', { username: 'DEBUG', message: line, time: new Date().toISOString() })
         }
 
         emitLine('Capturing raw scoreboard packets for 8 seconds - keep the KOTH capture going...')
@@ -2550,7 +2550,7 @@ class BotSession {
 
         const emitLine = (line) => {
             originalLog(`[HP-DEBUG:${this.username}] ${line}`)
-            io.to(this.username).emit('chat', { username: 'DEBUG', message: line, time: new Date().toLocaleTimeString() })
+            io.to(this.username).emit('chat', { username: 'DEBUG', message: line, time: new Date().toISOString() })
         }
 
         emitLine(`Watching for 30 seconds - take damage or heal the bot's account now if you can. bot.health right now: ${this.bot.health}`)
@@ -2607,7 +2607,7 @@ class BotSession {
             io.to(this.username).emit('chat', {
                 username: 'DEBUG',
                 message: `${label} - Window: "${window.title || window.type}" (${window.slots.length} slots)`,
-                time: new Date().toLocaleTimeString()
+                time: new Date().toISOString()
             })
 
             const entries = window.slots
@@ -2623,7 +2623,7 @@ class BotSession {
                 io.to(this.username).emit('chat', {
                     username: 'DEBUG',
                     message: `${label} #${index}: ${item.name} x${item.count} - "${item.displayName}" - ${lore}`,
-                    time: new Date().toLocaleTimeString()
+                    time: new Date().toISOString()
                 })
 
             }
@@ -2679,7 +2679,7 @@ class BotSession {
 
         originalLog('')
         originalLog(`Last chat: ${this.lastChatMessage}`)
-        originalLog(`Time: ${this.lastChatTime || 'None'}`)
+        originalLog(`Time: ${this.lastChatTime ? new Date(this.lastChatTime).toLocaleString() : 'None'}`)
         originalLog('')
 
     }
@@ -3954,7 +3954,7 @@ class BotSession {
                     const username = 'SERVER'
 
                     this.lastChatMessage = text
-                    this.lastChatTime = new Date().toLocaleTimeString()
+                    this.lastChatTime = new Date().toISOString()
 
                     io.to(this.username).emit('chat', { username, message: text, time: this.lastChatTime })
 
@@ -4303,7 +4303,7 @@ class BotSession {
                     this.lastServerMessageKey = dedupeKey
 
                     this.lastChatMessage = text
-                    this.lastChatTime = new Date().toLocaleTimeString()
+                    this.lastChatTime = new Date().toISOString()
 
                     io.to(this.username).emit('chat', { username: 'SERVER', message: text, time: this.lastChatTime })
 

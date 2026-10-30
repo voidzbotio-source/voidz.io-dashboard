@@ -8341,7 +8341,7 @@
 
             setText(
                 'lastChatTime',
-                data.lastChatTime || 'None'
+                data.lastChatTime ? formatLocalTime(data.lastChatTime) : 'None'
             )
 
             setText(
@@ -10298,6 +10298,26 @@
 
         }
 
+        // Server sends chat/activity timestamps as ISO strings so they
+        // render in whichever timezone/DST offset the viewer's own
+        // browser is in, instead of being baked into the server's own
+        // timezone (the Oracle VM doesn't necessarily match the viewer's).
+        function formatLocalTime(isoString) {
+
+            if (!isoString) {
+                return ''
+            }
+
+            const date = new Date(isoString)
+
+            if (isNaN(date.getTime())) {
+                return isoString
+            }
+
+            return date.toLocaleTimeString()
+
+        }
+
         function timeAgo(timestamp) {
 
             if (!timestamp) {
@@ -10633,7 +10653,7 @@
 
             const time =
                 escapeHtml(
-                    data.time || ''
+                    formatLocalTime(data.time)
                 )
 
             const username =

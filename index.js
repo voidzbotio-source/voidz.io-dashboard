@@ -3555,10 +3555,12 @@ class BotSession {
     // clicking anything rather than guessing which slot to hit on a
     // screen that spends real resources.
     //
-    // Each item is its own full /bm -> find -> click -> confirm cycle,
-    // run one after another (not concurrently) - whether the shop GUI
-    // even supports buying a second item without reopening /bm was
-    // never actually confirmed, so this doesn't assume it does.
+    // The Black Market only lets you buy ONE item per restock window, so
+    // this opens /bm once, sees which of the tracked items are actually
+    // in stock, and - if more than one is - picks a single one at random
+    // (an even gamble between them) to buy. It does NOT try to buy every
+    // tracked item; a second purchase in the same window isn't possible
+    // anyway, and attempting it just wastes the one pick.
     autoBuyBlackMarket() {
 
         if (!this.bot) return
@@ -3576,6 +3578,8 @@ class BotSession {
                 label: blackMarketItemLabel(itemName)
             }))
 
+        if (targets.length === 0) return
+
         const findMatch = (window, pattern, itemName) => {
 
             const entries = window.slots
@@ -3590,94 +3594,88 @@ class BotSession {
 
         }
 
-        const buyNext = index => {
+        this.log('Black Market auto-buy: opening /bm...')
 
-            if (index >= targets.length) return
-            if (!this.bot) return
+        // /bm not opening any window at all (market currently closed -
+        // e.g. this is a post-reboot resync check that caught it between
+        // restocks) would otherwise leave this listener dangling forever.
+        const shopTimeout = setTimeout(() => {
+            this.bot?.removeListener('windowOpen', shopListener)
+            this.log('Black Market auto-buy: no shop window opened within 5s (market likely closed) - skipping.')
+        }, 5000)
 
-            const { itemName, pattern, label } = targets[index]
+        const shopListener = shopWindow => {
 
-            this.log(`Black Market auto-buy: opening /bm for ${label}...`)
+            clearTimeout(shopTimeout)
 
-            // /bm not opening any window at all (market currently
-            // closed - e.g. this is a post-reboot resync check that
-            // caught it between restocks) would otherwise leave this
-            // listener dangling forever with the whole buy chain stuck
-            // on this item.
-            const shopTimeout = setTimeout(() => {
-                this.bot?.removeListener('windowOpen', shopListener)
-                this.log(`Black Market auto-buy: no shop window opened for ${label} within 5s (market likely closed) - skipping.`)
-                buyNext(index + 1)
+            // Which of the tracked items are actually in stock right now.
+            const inStock = targets
+                .map(target => ({ ...target, match: findMatch(shopWindow, target.pattern, target.itemName) }))
+                .filter(entry => entry.match)
+
+            if (inStock.length === 0) {
+                this.log('Black Market auto-buy: none of the tracked items are in stock - nothing to buy.')
+                return
+            }
+
+            // Only one purchase is allowed per restock, so if several
+            // tracked items are up, gamble evenly between them.
+            const chosen = inStock[Math.floor(Math.random() * inStock.length)]
+            const { itemName, label, match: target } = chosen
+
+            if (inStock.length > 1) {
+                this.log(`Black Market auto-buy: ${inStock.length} tracked items in stock (${inStock.map(e => e.label).join(', ')}) - gambled and picked ${label}.`)
+            } else {
+                this.log(`Black Market auto-buy: ${label} in stock - buying it.`)
+            }
+
+            const confirmTimeout = setTimeout(() => {
+                this.bot?.removeListener('windowOpen', confirmListener)
+                this.log(`Black Market auto-buy: clicked ${label} but no confirm dialog appeared within 5s.`)
             }, 5000)
 
-            const shopListener = shopWindow => {
+            const confirmListener = confirmWindow => {
 
-                clearTimeout(shopTimeout)
+                clearTimeout(confirmTimeout)
 
-                const target = findMatch(shopWindow, pattern, itemName)
+                // Confirmed: the confirm dialog's "yes" button is
+                // minecraft:lime_wool (a wall of green blocks vs.
+                // a wall of red cancel blocks) - checked first,
+                // with the text match kept as a fallback in case
+                // this screen ever uses a different confirm item.
+                const confirmTarget = findMatch(confirmWindow, /confirm|purchase|buy|yes/i, 'lime_wool')
 
-                if (!target) {
-                    this.log(`Black Market auto-buy: no ${label} in the shop (likely 0 stock) - skipping.`)
-                    setTimeout(() => buyNext(index + 1), 700)
+                if (!confirmTarget) {
+
+                    this.log(`Black Market auto-buy: confirm dialog opened for ${label} but no obvious confirm button found in it - not guessing a slot, purchase NOT completed.`)
+
+                    io.to(this.username).emit('notice', { type: 'error', text: `Black Market: confirm dialog layout unrecognized for ${label} - check it manually, nothing was clicked.` })
+
                     return
-                }
-
-                const confirmTimeout = setTimeout(() => {
-                    this.bot?.removeListener('windowOpen', confirmListener)
-                    this.log(`Black Market auto-buy: clicked ${label} but no confirm dialog appeared within 5s.`)
-                    buyNext(index + 1)
-                }, 5000)
-
-                const confirmListener = confirmWindow => {
-
-                    clearTimeout(confirmTimeout)
-
-                    // Confirmed: the confirm dialog's "yes" button is
-                    // minecraft:lime_wool (a wall of green blocks vs.
-                    // a wall of red cancel blocks) - checked first,
-                    // with the text match kept as a fallback in case
-                    // this screen ever uses a different confirm item.
-                    const confirmTarget = findMatch(confirmWindow, /confirm|purchase|buy|yes/i, 'lime_wool')
-
-                    if (!confirmTarget) {
-
-                        this.log(`Black Market auto-buy: confirm dialog opened for ${label} but no obvious confirm button found in it - not guessing a slot, purchase NOT completed.`)
-
-                        io.to(this.username).emit('notice', { type: 'error', text: `Black Market: confirm dialog layout unrecognized for ${label} - check it manually, nothing was clicked.` })
-
-                        setTimeout(() => buyNext(index + 1), 700)
-
-                        return
-
-                    }
-
-                    this.bot?.clickWindow(confirmTarget.index, 0, 0).catch(() => {})
-
-                    this.log(`Black Market auto-buy: ${label} purchase confirmed.`)
-
-                    io.to(this.username).emit('notice', { type: 'success', text: `🛒 Black Market: ${label} auto-purchased!` })
-
-                    this.blackMarketPurchaseHistory.push({ itemId: `minecraft:${itemName}`, label, timestamp: Date.now() })
-                    this.blackMarketPurchaseHistory = this.blackMarketPurchaseHistory.slice(-25)
-                    saveBlackMarketPurchaseHistory(this.username, this.blackMarketPurchaseHistory)
-
-                    setTimeout(() => buyNext(index + 1), 700)
 
                 }
 
-                this.bot.once('windowOpen', confirmListener)
+                this.bot?.clickWindow(confirmTarget.index, 0, 0).catch(() => {})
 
-                this.bot.clickWindow(target.index, 0, 0).catch(() => {})
+                this.log(`Black Market auto-buy: ${label} purchase confirmed.`)
+
+                io.to(this.username).emit('notice', { type: 'success', text: `🛒 Black Market: ${label} auto-purchased!` })
+
+                this.blackMarketPurchaseHistory.push({ itemId: `minecraft:${itemName}`, label, timestamp: Date.now() })
+                this.blackMarketPurchaseHistory = this.blackMarketPurchaseHistory.slice(-25)
+                saveBlackMarketPurchaseHistory(this.username, this.blackMarketPurchaseHistory)
 
             }
 
-            this.bot.once('windowOpen', shopListener)
+            this.bot.once('windowOpen', confirmListener)
 
-            this.sendMinecraftChat('/bm')
+            this.bot.clickWindow(target.index, 0, 0).catch(() => {})
 
         }
 
-        buyNext(0)
+        this.bot.once('windowOpen', shopListener)
+
+        this.sendMinecraftChat('/bm')
 
     }
 

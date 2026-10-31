@@ -652,6 +652,28 @@ function saveTeamHistory(username, history) {
     saveBotConfigs(configs)
 }
 
+// Lowercased player name -> last time the bot actually saw them in its
+// own tab list (ms epoch), updated every second by the global dashboard
+// tick in checkAutoInviteLowHealth()'s sibling loop below - REGARDLESS
+// of whether any browser has the dashboard open. Threats/Allies/Auto-
+// Invite previously computed "last seen" purely in browser JS off the
+// online/offline transition it happened to witness live, so a name that
+// went offline while nobody had the dashboard open just stayed frozen
+// at whatever the last-open tab last recorded (reported as "still shows
+// 67 days ago" even though they were online 5 minutes ago). This is the
+// single server-side source of truth those lists now read from instead.
+function getPlayerLastSeen(username) {
+    const configs = loadBotConfigs()
+    const map = configs[username]?.playerLastSeen
+    return (map && typeof map === 'object') ? map : {}
+}
+
+function savePlayerLastSeen(username, map) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], playerLastSeen: map }
+    saveBotConfigs(configs)
+}
+
 function getKothHistory(username) {
     const configs = loadBotConfigs()
     const history = configs[username]?.kothHistory
@@ -1453,6 +1475,10 @@ class BotSession {
         this.teamHistory = getTeamHistory(username)
         this.lastTeamRefreshRequestAt = 0
 
+        // See getPlayerLastSeen() above - lowercased name -> ms epoch,
+        // kept fresh every second regardless of dashboard/browser state.
+        this.playerLastSeen = getPlayerLastSeen(username)
+
         // Who captured each KOTH, how many team points it was worth,
         // and when - shown as a log alongside the Points detail chart.
         // Persisted the same way as teamHistory.
@@ -1863,6 +1889,7 @@ class BotSession {
             players,
             playerCount: players.length,
             uuidToUsername: online ? this.getUuidToUsername() : {},
+            playerLastSeen: this.playerLastSeen,
 
             keys,
             totalKeys: keys.vote + keys.exclusive + keys.insane,
@@ -3294,6 +3321,38 @@ class BotSession {
         saveNemesisHistory(this.username, this.nemesisHistory)
 
         this.log(`Died to ${killer}.`)
+
+    }
+
+    // Runs every dashboard tick (~1s) while connected - see
+    // getPlayerLastSeen() for why this exists. Refreshes at most once
+    // per 30s per name (not every single tick) to keep the debounced
+    // disk write cheap while still being vastly more current than the
+    // old "only while a browser tab happens to be open" behavior.
+    touchOnlinePlayers() {
+
+        const now = Date.now()
+        let changed = false
+
+        const names = this.config.platform === 'bedrock'
+            ? Array.from(this.bedrockPlayers.values())
+            : (this.bot && this.bot.players ? Object.keys(this.bot.players) : [])
+
+        for (const name of names) {
+
+            const key = name.toLowerCase()
+            const last = this.playerLastSeen[key] || 0
+
+            if (now - last > 30000) {
+                this.playerLastSeen[key] = now
+                changed = true
+            }
+
+        }
+
+        if (changed) {
+            savePlayerLastSeen(this.username, this.playerLastSeen)
+        }
 
     }
 
@@ -4936,6 +4995,7 @@ function getPlaceholderDashboardData() {
         ping: null,
         players: [],
         playerCount: 0,
+        playerLastSeen: {},
         keys: { vote: 0, exclusive: 0, insane: 0, lantern: 0 },
         totalKeys: 0,
         lastChat: 'None',
@@ -5784,6 +5844,7 @@ setInterval(() => {
     for (const botSession of sessions.values()) {
         botSession.updateDashboard()
         botSession.checkAutoInviteLowHealth()
+        botSession.touchOnlinePlayers()
     }
 }, 1000)
 

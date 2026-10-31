@@ -8026,6 +8026,10 @@
                 return
             }
 
+            if (data.playerLastSeen && typeof data.playerLastSeen === 'object') {
+                serverLastSeenMap = data.playerLastSeen
+            }
+
             showCatchUpDigestIfNeeded(data.team)
 
             if (data.online) {
@@ -10298,6 +10302,20 @@
 
         }
 
+        // Lowercased player name -> last time the BOT ITSELF saw them
+        // online (ms epoch), refreshed from every status tick. Unlike
+        // the per-list lastSeen fields below (which only ever update
+        // while this exact browser tab is open to witness an online ->
+        // offline transition live), this comes from the server, which
+        // keeps watching 24/7 regardless of the dashboard being open -
+        // see getPlayerLastSeen() in index.js. Threats/Allies/Auto-
+        // Invite all prefer this over their own stored lastSeen now.
+        let serverLastSeenMap = {}
+
+        function getServerLastSeen(name) {
+            return serverLastSeenMap[(name || '').toLowerCase()] || null
+        }
+
         // Server sends chat/activity timestamps as ISO strings so they
         // render in whichever timezone/DST offset the viewer's own
         // browser is in, instead of being baked into the server's own
@@ -10990,7 +11008,7 @@
 
                             const dotState = online ? (afk ? 'afk' : 'online') : 'offline'
                             const statusClass = online ? (afk ? 'afk' : 'online') : ''
-                            const statusText = online ? (afk ? 'AFK' : 'Online') : escapeHtml(timeAgo(threat.lastSeen))
+                            const statusText = online ? (afk ? 'AFK' : 'Online') : escapeHtml(timeAgo(getServerLastSeen(threat.name) || threat.lastSeen))
                             const usualHours = getUsualOnlineHours(threat)
                             const danger = computeThreatDangerScore(threat.name)
 
@@ -11311,7 +11329,7 @@
 
                             const dotState = online ? (afk ? 'afk' : 'online') : 'offline'
                             const statusClass = online ? (afk ? 'afk' : 'online') : ''
-                            const statusText = online ? (afk ? 'AFK' : 'Online') : escapeHtml(timeAgo(ally.lastSeen))
+                            const statusText = online ? (afk ? 'AFK' : 'Online') : escapeHtml(timeAgo(getServerLastSeen(ally.name) || ally.lastSeen))
 
                             return `
                                 <div class="ally-row ${online && !afk ? 'online' : ''}">
@@ -11588,7 +11606,7 @@
                                 <div class="autoinvite-row">
                                     <span class="member-dot ${online ? 'online' : 'offline'}"></span>
                                     <span class="autoinvite-name">${escapeHtml(entry.name)}</span>
-                                    <span class="autoinvite-status ${online ? 'online' : ''}">${online ? 'Online' : escapeHtml(timeAgo(entry.lastSeen))}</span>
+                                    <span class="autoinvite-status ${online ? 'online' : ''}">${online ? 'Online' : escapeHtml(timeAgo(getServerLastSeen(entry.name) || entry.lastSeen))}</span>
                                     <button class="autoinvite-remove" onclick="removeAutoInvite(${index})" title="Stop tracking">&times;</button>
                                 </div>
                             `

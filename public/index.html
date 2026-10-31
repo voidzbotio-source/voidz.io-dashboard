@@ -1055,6 +1055,7 @@
         .card[data-card-id="flags"] { --card-accent: var(--teal); }
         .card[data-card-id="danger"] { --card-accent: var(--red); }
         .card[data-card-id="keys"] { --card-accent: var(--yellow); }
+        .card[data-card-id="autobuy"] { --card-accent: var(--teal); }
         .card[data-card-id="players"] { --card-accent: var(--blue); }
         .card[data-card-id="team"] { --card-accent: var(--purple); }
         .card[data-card-id="leaderboard"] { --card-accent: var(--yellow); }
@@ -5163,6 +5164,51 @@
             </section>
 
             <!-- ========================================== -->
+            <!-- AUTO-BUY -->
+            <!-- ========================================== -->
+
+            <section class="card col-2" data-card-id="autobuy" draggable="true" style="animation-delay: 0.155s; display: none;" id="autoBuyCard">
+
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                    Auto-Buy
+                    <button class="title-action" id="autoBuyAddToggle" title="Add an item to auto-buy" onclick="toggleAutoBuyAdder()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </button>
+                </div>
+
+                <p class="settings-section-desc" style="margin-bottom: 10px;">Items the bot buys off the Black Market the instant it's open. Matched by real Minecraft item ID, not slot position.</p>
+
+                <div id="autoBuyAdder" class="quick-action-editor">
+                    <div class="qa-editor-row">
+                        <input id="autoBuyItemInput" type="text" placeholder="minecraft:item_id" class="qa-input" autocomplete="off">
+                        <button class="qa-add-btn" onclick="addAutoBuyItem()">
+                            Add
+                        </button>
+                    </div>
+                </div>
+
+                <div
+                    id="autoBuyItemList"
+                    class="team-body scroll"
+                    style="max-height: 150px;"
+                >
+                    <div class="empty-state">No items tracked. Click + to add one.</div>
+                </div>
+
+                <div class="keys-category-label">Purchase History</div>
+
+                <div
+                    id="autoBuyHistory"
+                    class="team-body scroll"
+                    style="max-height: 160px;"
+                >
+                    <div class="empty-state">No purchases yet.</div>
+                </div>
+
+            </section>
+
+            <!-- ========================================== -->
             <!-- PLAYERS -->
             <!-- ========================================== -->
 
@@ -8034,6 +8080,23 @@
 
             if (data.online) {
                 closeMsaModalIfShowing(null)
+            }
+
+            const autoBuyCard = $('autoBuyCard')
+
+            if (autoBuyCard) {
+                autoBuyCard.style.display = data.blackMarketAutoBuy ? '' : 'none'
+            }
+
+            if (data.blackMarketAutoBuy) {
+
+                const historyKey = JSON.stringify(data.blackMarketPurchaseHistory || [])
+
+                if (historyKey !== lastAutoBuyHistoryKey) {
+                    lastAutoBuyHistoryKey = historyKey
+                    renderAutoBuyHistory(data.blackMarketPurchaseHistory)
+                }
+
             }
 
             const povLink = $('povViewerLink')
@@ -11627,6 +11690,200 @@
         })
 
         loadAutoInvite()
+
+        // ==================================================
+        // AUTO-BUY (Black Market)
+        // ==================================================
+
+        let autoBuyItems = []
+        let autoBuyHistory = []
+        let lastAutoBuyHistoryKey = ''
+
+        function loadAutoBuyItems() {
+
+            fetch('/api/black-market-items')
+                .then(response => response.json())
+                .then(data => {
+                    autoBuyItems = Array.isArray(data.list) ? data.list : []
+                    renderAutoBuyItems()
+                })
+                .catch(() => {})
+
+        }
+
+        function saveAutoBuyItemsList() {
+
+            fetch('/api/black-market-items', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ list: autoBuyItems })
+            }).catch(() => {})
+
+        }
+
+        function toggleAutoBuyAdder() {
+
+            const adder = $('autoBuyAdder')
+            const btn = $('autoBuyAddToggle')
+
+            const showing = adder.classList.toggle('show')
+
+            btn.classList.toggle('active', showing)
+
+            if (showing) {
+                $('autoBuyItemInput')?.focus()
+            }
+
+        }
+
+        function addAutoBuyItem() {
+
+            const input = $('autoBuyItemInput')
+            let id = (input?.value || '').trim().toLowerCase()
+
+            if (!id) {
+                showToast('Enter an item ID first.', 'error')
+                return
+            }
+
+            if (!id.includes(':')) {
+                id = `minecraft:${id}`
+            }
+
+            if (!/^[a-z0-9_.]+:[a-z0-9_.]+$/.test(id)) {
+                showToast('That doesn\'t look like a valid item ID.', 'error')
+                return
+            }
+
+            if (autoBuyItems.includes(id)) {
+                showToast('Already tracking that item.', 'error')
+                return
+            }
+
+            if (autoBuyItems.length >= 12) {
+                showToast('Auto-Buy is capped at 12 items.', 'error')
+                return
+            }
+
+            autoBuyItems.push(id)
+
+            saveAutoBuyItemsList()
+            renderAutoBuyItems()
+
+            input.value = ''
+
+            showToast(`Now auto-buying: ${id}`, 'success')
+
+        }
+
+        function removeAutoBuyItem(index) {
+
+            const removed = autoBuyItems[index]
+
+            if (!removed) {
+                return
+            }
+
+            autoBuyItems.splice(index, 1)
+
+            saveAutoBuyItemsList()
+            renderAutoBuyItems()
+
+            showToast(`No longer auto-buying: ${removed}`)
+
+        }
+
+        function autoBuyItemLabel(id) {
+
+            const bare = String(id || '').replace(/^minecraft:/, '')
+
+            const known = { red_dye: 'Insane Key', orange_dye: 'Exclusive Key', lantern: 'KOTH Starters' }
+
+            if (known[bare]) {
+                return known[bare]
+            }
+
+            return bare.split('_').filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(' ') || bare
+
+        }
+
+        function renderAutoBuyItems() {
+
+            const container = $('autoBuyItemList')
+
+            if (!container) {
+                return
+            }
+
+            if (autoBuyItems.length === 0) {
+
+                container.innerHTML =
+                    '<div class="empty-state">No items tracked. Click + to add one.</div>'
+
+                return
+
+            }
+
+            container.innerHTML =
+                autoBuyItems
+                    .map(
+                        (id, index) => `
+                            <div class="autoinvite-row">
+                                <span class="autoinvite-name">${escapeHtml(autoBuyItemLabel(id))}</span>
+                                <span class="autoinvite-status">${escapeHtml(id)}</span>
+                                <button class="autoinvite-remove" onclick="removeAutoBuyItem(${index})" title="Stop auto-buying">&times;</button>
+                            </div>
+                        `
+                    )
+                    .join('')
+
+        }
+
+        function renderAutoBuyHistory(history) {
+
+            const container = $('autoBuyHistory')
+
+            if (!container) {
+                return
+            }
+
+            const entries = Array.isArray(history) ? history : []
+
+            if (entries.length === 0) {
+
+                container.innerHTML =
+                    '<div class="empty-state">No purchases yet.</div>'
+
+                return
+
+            }
+
+            container.innerHTML =
+                entries
+                    .slice()
+                    .reverse()
+                    .map(
+                        entry => `
+                            <div class="autoinvite-row">
+                                <span class="autoinvite-name">${escapeHtml(entry.label || autoBuyItemLabel(entry.itemId))}</span>
+                                <span class="autoinvite-status">${escapeHtml(timeAgo(entry.timestamp))}</span>
+                            </div>
+                        `
+                    )
+                    .join('')
+
+        }
+
+        $('autoBuyItemInput')?.addEventListener('keydown', event => {
+
+            if (event.key === 'Enter') {
+                event.preventDefault()
+                addAutoBuyItem()
+            }
+
+        })
+
+        loadAutoBuyItems()
 
         // ==================================================
         // ACCOUNT FLEET (extra Java/Bedrock connect-and-AFK accounts)

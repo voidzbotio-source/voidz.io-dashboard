@@ -139,6 +139,43 @@ const JQ_RETRY_DELAY = 3000
 // connection one shot at catching an already-open market too.
 const BLACK_MARKET_RESYNC_DELAY = 8000
 
+// The 3 items auto-buy has always tracked, kept as the default list for
+// any account that hasn't customized it via the Auto-Buy card yet - raw
+// Minecraft item IDs, same format the card's add input takes.
+const DEFAULT_BLACK_MARKET_ITEMS = ['minecraft:red_dye', 'minecraft:orange_dye', 'minecraft:lantern']
+
+// Nicer display labels for the known defaults (what the Black Market's
+// own shop lore actually calls them) - anything else typed into the
+// Auto-Buy card falls back to a title-cased version of its item ID.
+const BLACK_MARKET_ITEM_LABELS = {
+    red_dye: 'Insane Key',
+    orange_dye: 'Exclusive Key',
+    lantern: 'KOTH Starters'
+}
+
+// Confirmed-working lore-text fallback patterns for the defaults (the
+// shop's displayName for these doesn't match their item ID - "Insane
+// Key" for red_dye, etc.). A custom item typed into the Auto-Buy card
+// gets a best-effort pattern built from its own ID's words instead,
+// since there's no way to know its shop lore in advance.
+const BLACK_MARKET_ITEM_PATTERNS = {
+    red_dye: /insane/i,
+    orange_dye: /exclusive/i,
+    lantern: /lantern/i
+}
+
+function blackMarketItemLabel(itemName) {
+    if (BLACK_MARKET_ITEM_LABELS[itemName]) return BLACK_MARKET_ITEM_LABELS[itemName]
+    const words = itemName.split('_').filter(Boolean)
+    return words.length ? words.map(w => w[0].toUpperCase() + w.slice(1)).join(' ') : itemName
+}
+
+function blackMarketItemPattern(itemName) {
+    if (BLACK_MARKET_ITEM_PATTERNS[itemName]) return BLACK_MARKET_ITEM_PATTERNS[itemName]
+    const words = itemName.split('_').filter(Boolean)
+    return words.length ? new RegExp(words.join('.*'), 'i') : /(?!)/
+}
+
 const HOME_DELAY = 10000
 
 const HUB_RECOVERY_DELAY = 90000
@@ -568,6 +605,35 @@ function getBotConfig(username) {
 function saveBotConfig(username, config) {
     const configs = loadBotConfigs()
     configs[username] = { ...configs[username], ...config }
+    saveBotConfigs(configs)
+}
+
+// Raw "minecraft:item_id" strings the Auto-Buy card is tracking - see
+// autoBuyBlackMarket() in BotSession, which falls back to
+// DEFAULT_BLACK_MARKET_ITEMS when this is empty/unset.
+function getBlackMarketAutoBuyItems(username) {
+    const configs = loadBotConfigs()
+    const list = configs[username]?.blackMarketAutoBuyItems
+    return Array.isArray(list) ? list : []
+}
+
+function saveBlackMarketAutoBuyItems(username, list) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], blackMarketAutoBuyItems: list }
+    saveBotConfigs(configs)
+}
+
+// Last 25 successful Auto-Buy purchases, newest last - shown in the
+// Auto-Buy card's Purchase History.
+function getBlackMarketPurchaseHistory(username) {
+    const configs = loadBotConfigs()
+    const history = configs[username]?.blackMarketPurchaseHistory
+    return Array.isArray(history) ? history : []
+}
+
+function saveBlackMarketPurchaseHistory(username, history) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], blackMarketPurchaseHistory: history }
     saveBotConfigs(configs)
 }
 
@@ -1479,6 +1545,10 @@ class BotSession {
         // kept fresh every second regardless of dashboard/browser state.
         this.playerLastSeen = getPlayerLastSeen(username)
 
+        // Last 25 successful Auto-Buy purchases - see
+        // getBlackMarketPurchaseHistory() and autoBuyBlackMarket().
+        this.blackMarketPurchaseHistory = getBlackMarketPurchaseHistory(username)
+
         // Who captured each KOTH, how many team points it was worth,
         // and when - shown as a log alongside the Points detail chart.
         // Persisted the same way as teamHistory.
@@ -1890,6 +1960,12 @@ class BotSession {
             playerCount: players.length,
             uuidToUsername: online ? this.getUuidToUsername() : {},
             playerLastSeen: this.playerLastSeen,
+
+            blackMarketAutoBuy: !!this.config.blackMarketAutoBuy,
+            blackMarketAutoBuyItems: (Array.isArray(this.config.blackMarketAutoBuyItems) && this.config.blackMarketAutoBuyItems.length > 0)
+                ? this.config.blackMarketAutoBuyItems
+                : DEFAULT_BLACK_MARKET_ITEMS,
+            blackMarketPurchaseHistory: this.blackMarketPurchaseHistory,
 
             keys,
             totalKeys: keys.vote + keys.exclusive + keys.insane,
@@ -3487,11 +3563,18 @@ class BotSession {
 
         if (!this.bot) return
 
-        const targets = [
-            { itemName: 'red_dye', pattern: /insane/i, label: 'Insane Key' },
-            { itemName: 'orange_dye', pattern: /exclusive/i, label: 'Exclusive Key' },
-            { itemName: 'lantern', pattern: /lantern/i, label: 'Lantern' }
-        ]
+        const configuredItems = Array.isArray(this.config.blackMarketAutoBuyItems) && this.config.blackMarketAutoBuyItems.length > 0
+            ? this.config.blackMarketAutoBuyItems
+            : DEFAULT_BLACK_MARKET_ITEMS
+
+        const targets = configuredItems
+            .map(raw => String(raw || '').replace(/^minecraft:/i, '').trim().toLowerCase())
+            .filter(Boolean)
+            .map(itemName => ({
+                itemName,
+                pattern: blackMarketItemPattern(itemName),
+                label: blackMarketItemLabel(itemName)
+            }))
 
         const findMatch = (window, pattern, itemName) => {
 
@@ -3573,6 +3656,10 @@ class BotSession {
                     this.log(`Black Market auto-buy: ${label} purchase confirmed.`)
 
                     io.to(this.username).emit('notice', { type: 'success', text: `🛒 Black Market: ${label} auto-purchased!` })
+
+                    this.blackMarketPurchaseHistory.push({ itemId: `minecraft:${itemName}`, label, timestamp: Date.now() })
+                    this.blackMarketPurchaseHistory = this.blackMarketPurchaseHistory.slice(-25)
+                    saveBlackMarketPurchaseHistory(this.username, this.blackMarketPurchaseHistory)
 
                     setTimeout(() => buyNext(index + 1), 700)
 
@@ -4996,6 +5083,9 @@ function getPlaceholderDashboardData() {
         players: [],
         playerCount: 0,
         playerLastSeen: {},
+        blackMarketAutoBuy: false,
+        blackMarketAutoBuyItems: DEFAULT_BLACK_MARKET_ITEMS,
+        blackMarketPurchaseHistory: [],
         keys: { vote: 0, exclusive: 0, insane: 0, lantern: 0 },
         totalKeys: 0,
         lastChat: 'None',
@@ -5284,6 +5374,58 @@ app.post('/api/auto-reinvite', (req, res) => {
     }
 
     res.json({ ok: true, list })
+
+})
+
+// ============================================================
+// BLACK MARKET AUTO-BUY ITEMS (see autoBuyBlackMarket above)
+// ============================================================
+
+app.get('/api/black-market-items', (req, res) => {
+
+    const list = getBlackMarketAutoBuyItems(req.session.username)
+
+    res.json({
+        list: list.length > 0 ? list : DEFAULT_BLACK_MARKET_ITEMS,
+        isDefault: list.length === 0
+    })
+
+})
+
+app.post('/api/black-market-items', (req, res) => {
+
+    const raw = Array.isArray(req.body?.list) ? req.body.list : []
+
+    const seen = new Set()
+    const list = []
+
+    for (const entry of raw) {
+
+        let id = String(entry || '').trim().toLowerCase()
+
+        if (!id) continue
+
+        if (!id.includes(':')) id = `minecraft:${id}`
+
+        if (!/^[a-z0-9_.]+:[a-z0-9_.]+$/.test(id)) continue
+        if (seen.has(id)) continue
+
+        seen.add(id)
+        list.push(id)
+
+        if (list.length >= 12) break
+
+    }
+
+    saveBlackMarketAutoBuyItems(req.session.username, list)
+
+    const existing = sessions.get(req.session.username)
+
+    if (existing) {
+        existing.config.blackMarketAutoBuyItems = list
+    }
+
+    res.json({ ok: true, list: list.length > 0 ? list : DEFAULT_BLACK_MARKET_ITEMS })
 
 })
 

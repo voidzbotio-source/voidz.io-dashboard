@@ -131,6 +131,14 @@ let nextPovViewerPort = POV_VIEWER_BASE_PORT
 const FIRST_JQ_DELAY = 15000
 const JQ_RETRY_DELAY = 3000
 
+// How long after spawning to check the Black Market on a fresh
+// connection. checkBlackMarket() only reacts to the server's "has now
+// opened" broadcast - if a reboot/reconnect happens while the market
+// is already open, that broadcast already fired in the past and the
+// bot would silently miss the whole window. This gives every fresh
+// connection one shot at catching an already-open market too.
+const BLACK_MARKET_RESYNC_DELAY = 8000
+
 const HOME_DELAY = 10000
 
 const HUB_RECOVERY_DELAY = 90000
@@ -3449,7 +3457,20 @@ class BotSession {
 
             this.log(`Black Market auto-buy: opening /bm for ${label}...`)
 
+            // /bm not opening any window at all (market currently
+            // closed - e.g. this is a post-reboot resync check that
+            // caught it between restocks) would otherwise leave this
+            // listener dangling forever with the whole buy chain stuck
+            // on this item.
+            const shopTimeout = setTimeout(() => {
+                this.bot?.removeListener('windowOpen', shopListener)
+                this.log(`Black Market auto-buy: no shop window opened for ${label} within 5s (market likely closed) - skipping.`)
+                buyNext(index + 1)
+            }, 5000)
+
             const shopListener = shopWindow => {
+
+                clearTimeout(shopTimeout)
 
                 const target = findMatch(shopWindow, pattern, itemName)
 
@@ -4039,6 +4060,19 @@ class BotSession {
                     this.startHubRecovery()
 
                 }, FIRST_JQ_DELAY)
+
+            }
+
+            if (this.config.blackMarketAutoBuy) {
+
+                setTimeout(() => {
+
+                    if (!this.bot || !this.bot.entity || this.shuttingDown) return
+
+                    this.log('Checking Black Market after reconnect (in case it was already open).')
+                    this.autoBuyBlackMarket()
+
+                }, BLACK_MARKET_RESYNC_DELAY)
 
             }
 

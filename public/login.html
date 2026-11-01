@@ -559,7 +559,13 @@
 
             <p style="margin: 0 0 10px; font-weight: 700; font-size: 13.5px;">Locked out of 2FA?</p>
 
-            <p class="hint" style="margin: 0 0 10px;">For security there's no way to skip the code from this screen. Since you run the dashboard, you recover it from the server:</p>
+            <button id="emailCodeBtn" type="button" style="margin: 0 0 6px;">
+                Email me a login code
+            </button>
+
+            <p id="emailCodeMsg" class="hint" style="margin: 0 0 14px;">If you set up a recovery email, we'll send a login code there &mdash; then type it in the box above.</p>
+
+            <p class="hint" style="margin: 0 0 10px;">No recovery email? Since you run the dashboard, you can get back in from the server:</p>
 
             <p class="hint" style="margin: 0 0 8px;">1. In the dashboard's <strong>.env</strong> file, add <code style="background: var(--panel); padding: 1px 5px; border-radius: 5px;">DISABLE_2FA=true</code> and restart it. You'll then log in with just your password.</p>
 
@@ -765,6 +771,8 @@
         const backToLoginBtn = document.getElementById('backToLoginBtn')
         const recoveryToggle = document.getElementById('recoveryToggle')
         const recoveryHelp = document.getElementById('recoveryHelp')
+        const emailCodeBtn = document.getElementById('emailCodeBtn')
+        const emailCodeMsg = document.getElementById('emailCodeMsg')
 
         const stayStep = document.getElementById('stayLoggedInStep')
         const stayYesBtn = document.getElementById('stayYesBtn')
@@ -889,11 +897,43 @@
             submitBtn.textContent = 'Log In'
         })
 
-        // Purely informational - reveals how to recover from the server
-        // side. There is deliberately no way to skip the code here.
+        // Reveals the recovery options (email a code, or the server-side
+        // escape hatch). There is deliberately no way to skip the code.
         recoveryToggle.addEventListener('click', () => {
             const showing = recoveryHelp.style.display === 'block'
             recoveryHelp.style.display = showing ? 'none' : 'block'
+        })
+
+        // Sends a login code to the recovery email (if one is set up).
+        // The server answers the same either way, so this never reveals
+        // whether recovery is configured.
+        emailCodeBtn.addEventListener('click', () => {
+
+            emailCodeBtn.disabled = true
+            emailCodeBtn.textContent = 'Sending...'
+
+            fetch('/login/2fa/email-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+                .then(response => response.json().then(data => ({ status: response.status, data })))
+                .then(({ status, data }) => {
+
+                    emailCodeBtn.disabled = false
+                    emailCodeBtn.textContent = 'Email me a login code'
+
+                    if (status === 429) {
+                        emailCodeMsg.textContent = data.error || 'Please wait before requesting another code.'
+                        return
+                    }
+
+                    emailCodeMsg.textContent = data.message || 'If a recovery email is set up, a code has been sent. Type it in the box above.'
+                    codeInput.focus()
+
+                })
+                .catch(() => {
+                    emailCodeBtn.disabled = false
+                    emailCodeBtn.textContent = 'Email me a login code'
+                    emailCodeMsg.textContent = 'Could not reach the server. Try again.'
+                })
+
         })
 
         // Stage 3: "stay logged in?" box. Either answer finishes the

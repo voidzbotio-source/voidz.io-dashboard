@@ -36,6 +36,7 @@ const net = require('net')
 const session = require('express-session')
 const crypto = require('crypto')
 const QRCode = require('qrcode')
+const nodemailer = require('nodemailer')
 
 // ============================================================
 // .ENV LOADER
@@ -122,6 +123,44 @@ if (process.env.ALLOW_INSECURE_DEFAULTS !== 'true') {
         process.exit(1)
     }
 
+}
+
+// ============================================================
+// OUTGOING EMAIL (for 2FA recovery codes)
+// ============================================================
+// Optional - only needed for the "email me a login code" recovery path.
+// Defaults target Gmail; the user supplies a Gmail address + an app
+// password (NOT their normal password) in .env. With nothing configured,
+// email recovery is simply unavailable and the UI says so.
+const SMTP_USER = process.env.SMTP_USER || ''
+const SMTP_PASS = process.env.SMTP_PASS || ''
+const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com'
+const SMTP_PORT = Number(process.env.SMTP_PORT) || 465
+const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER
+
+let mailTransport = null
+
+function mailConfigured() {
+    return !!(SMTP_USER && SMTP_PASS)
+}
+
+function getMailTransport() {
+    if (!mailConfigured()) return null
+    if (!mailTransport) {
+        mailTransport = nodemailer.createTransport({
+            host: SMTP_HOST,
+            port: SMTP_PORT,
+            secure: SMTP_PORT === 465,
+            auth: { user: SMTP_USER, pass: SMTP_PASS }
+        })
+    }
+    return mailTransport
+}
+
+async function sendMail(to, subject, text) {
+    const transport = getMailTransport()
+    if (!transport) throw new Error('Email is not configured on this server.')
+    await transport.sendMail({ from: SMTP_FROM, to, subject, text })
 }
 
 // ============================================================
@@ -702,6 +741,111 @@ function hasValidTrustedDevice(username, token) {
     record.trustedDevices = record.trustedDevices.filter(d => d.expiresAt > now)
     if (record.trustedDevices.length !== before) saveTwoFactor(store)
     return record.trustedDevices.some(d => d.tokenHash === wanted)
+}
+
+// --- Email recovery (optional second recovery path for 2FA) ---
+
+const RECOVERY_CODE_TTL_MS = 10 * 60 * 1000       // codes valid 10 minutes
+const RECOVERY_SEND_INTERVAL_MS = 60 * 1000       // at most one email per minute
+const RECOVERY_MAX_ATTEMPTS = 5
+
+// Partially hides an address for display: john@gmail.com -> j••@gmail.com
+function maskEmail(email) {
+    const at = String(email || '').indexOf('@')
+    if (at <= 0) return ''
+    const name = email.slice(0, at)
+    const domain = email.slice(at)
+    const shown = name.length <= 2 ? name[0] : name.slice(0, 2)
+    return `${shown}${'•'.repeat(Math.max(2, name.length - shown.length))}${domain}`
+}
+
+function isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim())
+}
+
+function getRecoveryEmail(username) {
+    const record = getTwoFactorRecord(username)
+    return record && record.recoveryEmail ? record.recoveryEmail : null
+}
+
+// Starts recovery-email setup: stores the address as pending with a
+// 6-digit verification code (hashed). Returns the plain code to email.
+function startRecoveryEmailVerification(username, email) {
+    const store = loadTwoFactor()
+    const record = store[username]
+    if (!record) return null
+    const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0')
+    const { salt, hash } = hashPassword(code)
+    record.pendingEmail = { email, salt, hash, expiresAt: Date.now() + RECOVERY_CODE_TTL_MS }
+    saveTwoFactor(store)
+    return code
+}
+
+function verifyRecoveryEmail(username, code) {
+    const store = loadTwoFactor()
+    const record = store[username]
+    if (!record || !record.pendingEmail) return false
+    if (record.pendingEmail.expiresAt < Date.now()) {
+        delete record.pendingEmail
+        saveTwoFactor(store)
+        return false
+    }
+    if (!verifyPassword(String(code || '').trim(), record.pendingEmail.salt, record.pendingEmail.hash)) {
+        return false
+    }
+    record.recoveryEmail = record.pendingEmail.email
+    delete record.pendingEmail
+    saveTwoFactor(store)
+    return true
+}
+
+function removeRecoveryEmail(username) {
+    const store = loadTwoFactor()
+    const record = store[username]
+    if (!record) return
+    delete record.recoveryEmail
+    delete record.pendingEmail
+    delete record.recoveryLoginCode
+    saveTwoFactor(store)
+}
+
+// Issues a short-lived login recovery code to be emailed. Enforces a
+// minimum interval between sends so the inbox (and our outbound mail)
+// can't be spammed. Returns { code } on success, or { error } otherwise.
+function createRecoveryLoginCode(username) {
+    const store = loadTwoFactor()
+    const record = store[username]
+    if (!record || !record.recoveryEmail) return { error: 'no-email' }
+    const now = Date.now()
+    if (record.recoveryLoginCode && now - (record.recoveryLoginCode.sentAt || 0) < RECOVERY_SEND_INTERVAL_MS) {
+        return { error: 'too-soon' }
+    }
+    const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0')
+    const { salt, hash } = hashPassword(code)
+    record.recoveryLoginCode = { salt, hash, expiresAt: now + RECOVERY_CODE_TTL_MS, sentAt: now, attempts: 0 }
+    saveTwoFactor(store)
+    return { code, email: record.recoveryEmail }
+}
+
+function verifyRecoveryLoginCode(username, code) {
+    const store = loadTwoFactor()
+    const record = store[username]
+    if (!record || !record.recoveryLoginCode) return false
+    const entry = record.recoveryLoginCode
+    if (entry.expiresAt < Date.now() || entry.attempts >= RECOVERY_MAX_ATTEMPTS) {
+        delete record.recoveryLoginCode
+        saveTwoFactor(store)
+        return false
+    }
+    if (!verifyPassword(String(code || '').trim(), entry.salt, entry.hash)) {
+        entry.attempts++
+        saveTwoFactor(store)
+        return false
+    }
+    // Consumed on success so it can't be replayed.
+    delete record.recoveryLoginCode
+    saveTwoFactor(store)
+    return true
 }
 
 // Saves a partial update onto one user's record (by username) and
@@ -5617,7 +5761,9 @@ app.post('/login/2fa', rateLimitPreAuth, (req, res) => {
     }
 
     const code = String(req.body?.code || '').trim()
-    const codeOk = verifyTotp(record.secret, code) || consumeBackupCode(pendingUser, code)
+    const codeOk = verifyTotp(record.secret, code) ||
+        verifyRecoveryLoginCode(pendingUser, code) ||
+        consumeBackupCode(pendingUser, code)
 
     if (!codeOk) {
 
@@ -5637,6 +5783,50 @@ app.post('/login/2fa', rateLimitPreAuth, (req, res) => {
     }
 
     finishLogin()
+
+})
+
+// "I don't have my phone - email me a login code." Only works during the
+// pending-2FA stage, and only if a verified recovery email is on file.
+// Always answers the same way whether or not mail actually went out, so
+// it never reveals whether recovery is set up to someone guessing.
+app.post('/login/2fa/email-code', rateLimitPreAuth, async (req, res) => {
+
+    const pendingUser = req.session?.twoFactorPendingUser
+
+    if (!pendingUser || !req.session.twoFactorPendingAt || Date.now() - req.session.twoFactorPendingAt > 5 * 60 * 1000) {
+        return res.status(400).json({ error: 'No login in progress. Please start over.' })
+    }
+
+    const generic = { ok: true, message: 'If a recovery email is set up, a code has been sent to it.' }
+
+    if (!mailConfigured() || !getRecoveryEmail(pendingUser)) {
+        return res.json(generic)
+    }
+
+    const result = createRecoveryLoginCode(pendingUser)
+
+    if (result.error === 'too-soon') {
+        return res.status(429).json({ error: 'A code was just sent. Wait a minute before requesting another.' })
+    }
+
+    if (result.error || !result.code) {
+        return res.json(generic)
+    }
+
+    try {
+        await sendMail(
+            result.email,
+            'Voidz.IO login recovery code',
+            `Your Voidz.IO login recovery code is: ${result.code}\n\nIt expires in 10 minutes. If you didn't try to log in, you can ignore this email.`
+        )
+    } catch (error) {
+        appLog(`Recovery email send failed for ${pendingUser}: ${error.message}`)
+        return res.status(500).json({ error: 'Could not send the email. Try again shortly.' })
+    }
+
+    appLog(`Recovery login code emailed for ${pendingUser}`)
+    res.json(generic)
 
 })
 
@@ -6390,11 +6580,88 @@ app.post('/api/account/password', (req, res) => {
 // ============================================================
 
 app.get('/api/2fa/status', (req, res) => {
+    const email = getRecoveryEmail(req.session.username)
     res.json({
         isAdmin: req.session.username === DASHBOARD_USERNAME,
         enabled: isTwoFactorEnabled(req.session.username),
-        disabledByEnv: TWO_FACTOR_DISABLED
+        disabledByEnv: TWO_FACTOR_DISABLED,
+        emailConfigured: mailConfigured(),
+        recoveryEmail: email ? maskEmail(email) : null
     })
+})
+
+// Recovery email: start verification by emailing a 6-digit code to the
+// address. Only once 2FA is on (there's nothing to recover otherwise).
+app.post('/api/2fa/recovery-email/start', async (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can manage 2FA.' })
+    }
+
+    if (!isTwoFactorEnabled(req.session.username)) {
+        return res.status(400).json({ error: 'Enable 2FA first.' })
+    }
+
+    if (!mailConfigured()) {
+        return res.status(400).json({ error: 'Email sending is not set up on this server (SMTP_USER / SMTP_PASS).' })
+    }
+
+    const email = String(req.body?.email || '').trim()
+
+    if (!isValidEmail(email)) {
+        return res.status(400).json({ error: 'Enter a valid email address.' })
+    }
+
+    const code = startRecoveryEmailVerification(req.session.username, email)
+
+    if (!code) {
+        return res.status(400).json({ error: 'Could not start verification.' })
+    }
+
+    try {
+        await sendMail(
+            email,
+            'Voidz.IO recovery email verification',
+            `Your Voidz.IO recovery-email verification code is: ${code}\n\nIt expires in 10 minutes.`
+        )
+    } catch (error) {
+        appLog(`Recovery email verification send failed: ${error.message}`)
+        return res.status(500).json({ error: 'Could not send the verification email. Check the address and try again.' })
+    }
+
+    res.json({ ok: true })
+
+})
+
+// Recovery email: confirm the code, which saves the address.
+app.post('/api/2fa/recovery-email/verify', (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can manage 2FA.' })
+    }
+
+    const code = String(req.body?.code || '').trim()
+
+    if (!verifyRecoveryEmail(req.session.username, code)) {
+        return res.status(401).json({ error: 'That code is incorrect or expired.' })
+    }
+
+    appLog(`Recovery email verified for ${req.session.username}`)
+    res.json({ ok: true, recoveryEmail: maskEmail(getRecoveryEmail(req.session.username)) })
+
+})
+
+// Recovery email: remove it.
+app.post('/api/2fa/recovery-email/remove', (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can manage 2FA.' })
+    }
+
+    removeRecoveryEmail(req.session.username)
+    appLog(`Recovery email removed for ${req.session.username}`)
+    res.json({ ok: true })
+
 })
 
 // Begins setup: generates a fresh (pending, not-yet-enabled) secret and

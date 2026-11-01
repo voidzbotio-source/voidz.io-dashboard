@@ -137,6 +137,7 @@ const SMTP_PASS = process.env.SMTP_PASS || ''
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com'
 const SMTP_PORT = Number(process.env.SMTP_PORT) || 465
 const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER
+const SMTP_FROM_NAME = process.env.SMTP_FROM_NAME || 'Voidz.IO'
 
 let mailTransport = null
 
@@ -157,10 +158,48 @@ function getMailTransport() {
     return mailTransport
 }
 
-async function sendMail(to, subject, text) {
+async function sendMail(to, subject, text, html) {
     const transport = getMailTransport()
     if (!transport) throw new Error('Email is not configured on this server.')
-    await transport.sendMail({ from: SMTP_FROM, to, subject, text })
+    // A display-name "From", a real subject, and a text + HTML pair all
+    // help these land in the inbox rather than spam (a bare code-only
+    // plain-text message from an unnamed sender is a classic spam signal).
+    const message = { from: `"${SMTP_FROM_NAME}" <${SMTP_FROM}>`, to, subject, text }
+    if (html) message.html = html
+    await transport.sendMail(message)
+}
+
+// Clean, email-client-safe HTML for the one-code messages (verification
+// and login recovery). Table layout + inline styles for compatibility;
+// light theme so it reads fine everywhere. `code` is always server-made
+// digits and the rest is static copy, so no untrusted interpolation.
+function buildCodeEmailHtml({ heading, intro, code, note }) {
+    return `<!doctype html>
+<html>
+<body style="margin:0;padding:0;background:#f4f4f7;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:32px 16px;font-family:Arial,Helvetica,sans-serif;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:460px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e6eb;">
+        <tr><td style="background:#6366f1;padding:20px 28px;">
+          <span style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:-0.3px;">Voidz.IO</span>
+        </td></tr>
+        <tr><td style="padding:28px;">
+          <h1 style="margin:0 0 10px;font-size:18px;color:#14151a;">${heading}</h1>
+          <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#55566a;">${intro}</p>
+          <div style="text-align:center;background:#f4f4f7;border:1px solid #e5e6eb;border-radius:12px;padding:18px;margin:0 0 18px;">
+            <span style="font-family:'Courier New',monospace;font-size:30px;font-weight:bold;letter-spacing:8px;color:#14151a;">${code}</span>
+          </div>
+          <p style="margin:0;font-size:13px;line-height:1.5;color:#8b8d98;">${note}</p>
+        </td></tr>
+        <tr><td style="padding:16px 28px;border-top:1px solid #eeeef2;">
+          <p style="margin:0;font-size:12px;line-height:1.5;color:#9a9ca8;">If you didn't try to sign in, you can safely ignore this email &mdash; nothing happens without this code.</p>
+        </td></tr>
+      </table>
+      <p style="max-width:460px;margin:16px auto 0;font-size:11px;color:#b0b2bd;text-align:center;">Voidz.IO Dashboard &middot; automated security email</p>
+    </td></tr>
+  </table>
+</body>
+</html>`
 }
 
 // ============================================================
@@ -5817,8 +5856,14 @@ app.post('/login/2fa/email-code', rateLimitPreAuth, async (req, res) => {
     try {
         await sendMail(
             result.email,
-            'Voidz.IO login recovery code',
-            `Your Voidz.IO login recovery code is: ${result.code}\n\nIt expires in 10 minutes. If you didn't try to log in, you can ignore this email.`
+            'Your Voidz.IO login code',
+            `Your Voidz.IO login recovery code is: ${result.code}\n\nIt expires in 10 minutes. If you didn't try to log in, you can ignore this email.`,
+            buildCodeEmailHtml({
+                heading: 'Your login code',
+                intro: "Use this code to finish signing in to your Voidz.IO dashboard. It's valid for 10 minutes.",
+                code: result.code,
+                note: 'Enter it on the login screen where you requested it.'
+            })
         )
     } catch (error) {
         appLog(`Recovery email send failed for ${pendingUser}: ${error.message}`)
@@ -6621,8 +6666,14 @@ app.post('/api/2fa/recovery-email/start', async (req, res) => {
     try {
         await sendMail(
             email,
-            'Voidz.IO recovery email verification',
-            `Your Voidz.IO recovery-email verification code is: ${code}\n\nIt expires in 10 minutes.`
+            'Confirm your Voidz.IO recovery email',
+            `Your Voidz.IO recovery-email verification code is: ${code}\n\nIt expires in 10 minutes.`,
+            buildCodeEmailHtml({
+                heading: 'Confirm your recovery email',
+                intro: 'Enter this code in your Voidz.IO dashboard to set this address as your 2FA recovery email.',
+                code,
+                note: 'This code expires in 10 minutes.'
+            })
         )
     } catch (error) {
         appLog(`Recovery email verification send failed: ${error.message}`)

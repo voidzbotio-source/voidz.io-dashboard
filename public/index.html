@@ -6088,8 +6088,46 @@
 
             <div class="settings-tab-panel" data-panel="account">
 
-                <div id="accountAdminNote" class="settings-hint" style="display: none;">
-                    Signed in as the admin account &mdash; password changes aren't available here. Edit DASHBOARD_PASSWORD in your .env file instead.
+                <div id="adminPasswordSection" class="settings-section" style="display: none;">
+
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        <span>Admin password</span>
+                    </div>
+
+                    <p class="settings-section-desc">Changing the admin password needs all three: your current password, a code emailed to your recovery address, and an authenticator code. So you'll need 2FA on and a recovery email set up first.</p>
+
+                    <div id="adminPwError" class="settings-error"></div>
+
+                    <div id="adminPwStart">
+                        <div class="field">
+                            <label for="adminNewPassword">New password</label>
+                            <input id="adminNewPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters">
+                        </div>
+                        <div class="field">
+                            <label for="adminNewPasswordConfirm">Confirm new password</label>
+                            <input id="adminNewPasswordConfirm" type="password" autocomplete="new-password">
+                        </div>
+                        <div class="field">
+                            <label for="adminCurrentPassword">Current password</label>
+                            <input id="adminCurrentPassword" type="password" autocomplete="current-password">
+                        </div>
+                        <button class="modal-ok" id="adminPwStartBtn" onclick="startAdminPasswordChange()" style="width: 100%;">Send email code</button>
+                    </div>
+
+                    <div id="adminPwConfirm" style="display: none;">
+                        <p class="settings-section-desc">Enter the code we emailed to your recovery address, plus a code from your authenticator app.</p>
+                        <div class="field">
+                            <label for="adminPwEmailCode">Email code</label>
+                            <input id="adminPwEmailCode" type="text" inputmode="numeric" autocomplete="off" placeholder="000000">
+                        </div>
+                        <div class="field">
+                            <label for="adminPwAuthCode">Authenticator code</label>
+                            <input id="adminPwAuthCode" type="text" inputmode="numeric" autocomplete="off" placeholder="000000">
+                        </div>
+                        <button class="modal-ok" id="adminPwConfirmBtn" onclick="confirmAdminPasswordChange()" style="width: 100%;">Change password</button>
+                    </div>
+
                 </div>
 
                 <div class="settings-section">
@@ -7051,7 +7089,7 @@
 
                     const isAdmin = !!account.isAdmin
 
-                    $('accountAdminNote').style.display = isAdmin ? 'block' : 'none'
+                    $('adminPasswordSection').style.display = isAdmin ? 'block' : 'none'
                     $('accountSections').style.display = isAdmin ? 'none' : 'block'
                     $('twoFactorSection').style.display = isAdmin ? 'block' : 'none'
                     $('createAccountSection').style.display = isAdmin ? 'block' : 'none'
@@ -7060,6 +7098,7 @@
                     if (isAdmin) {
                         renderManageAccounts()
                         loadTwoFactorStatus()
+                        resetAdminPasswordForm()
                     }
 
                     applyImpersonationBanner(account)
@@ -7476,6 +7515,113 @@
             if (!box) return
             box.textContent = message || ''
             box.classList.toggle('show', !!message)
+        }
+
+        // ---- Admin password change (password + email code + authenticator) ----
+
+        function adminPwError(message) {
+            const box = $('adminPwError')
+            if (!box) return
+            box.textContent = message || ''
+            box.classList.toggle('show', !!message)
+        }
+
+        function resetAdminPasswordForm() {
+            adminPwError('')
+            $('adminPwStart').style.display = 'block'
+            $('adminPwConfirm').style.display = 'none'
+            for (const id of ['adminNewPassword', 'adminNewPasswordConfirm', 'adminCurrentPassword', 'adminPwEmailCode', 'adminPwAuthCode']) {
+                if ($(id)) $(id).value = ''
+            }
+        }
+
+        function startAdminPasswordChange() {
+
+            adminPwError('')
+
+            const newPassword = $('adminNewPassword').value
+            const confirm = $('adminNewPasswordConfirm').value
+            const currentPassword = $('adminCurrentPassword').value
+
+            if (newPassword.length < 8) {
+                adminPwError('New password must be at least 8 characters.')
+                return
+            }
+            if (newPassword !== confirm) {
+                adminPwError('New passwords do not match.')
+                return
+            }
+
+            const btn = $('adminPwStartBtn')
+            btn.disabled = true
+            btn.textContent = 'Sending...'
+
+            fetch('/api/admin/password/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ currentPassword, newPassword })
+            })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+
+                    btn.disabled = false
+                    btn.textContent = 'Send email code'
+
+                    if (!ok) {
+                        adminPwError(data.error || 'Could not start the change.')
+                        return
+                    }
+
+                    $('adminPwStart').style.display = 'none'
+                    $('adminPwConfirm').style.display = 'block'
+                    showToast('Code emailed to your recovery address.', 'info')
+
+                })
+                .catch(() => {
+                    btn.disabled = false
+                    btn.textContent = 'Send email code'
+                    adminPwError('Could not reach the server.')
+                })
+
+        }
+
+        function confirmAdminPasswordChange() {
+
+            adminPwError('')
+
+            const emailCode = $('adminPwEmailCode').value.trim()
+            const authenticatorCode = $('adminPwAuthCode').value.trim()
+
+            const btn = $('adminPwConfirmBtn')
+            btn.disabled = true
+            btn.textContent = 'Changing...'
+
+            fetch('/api/admin/password/confirm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ emailCode, authenticatorCode })
+            })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+
+                    btn.disabled = false
+                    btn.textContent = 'Change password'
+
+                    if (!ok) {
+                        adminPwError(data.error || 'Could not change the password.')
+                        return
+                    }
+
+                    showToast('Admin password changed.', 'success')
+                    resetAdminPasswordForm()
+
+                })
+                .catch(() => {
+                    btn.disabled = false
+                    btn.textContent = 'Change password'
+                    adminPwError('Could not reach the server.')
+                })
+
         }
 
         function loadTwoFactorStatus() {

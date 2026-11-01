@@ -231,6 +231,32 @@ function buildAlertEmailHtml(when, ip) {
 </html>`
 }
 
+// Generic security-change alert (2FA off, recovery email changed, password
+// changed, failed-login burst). `heading`/`detail` are server-generated.
+function buildSecurityAlertHtml(heading, detail, when) {
+    return `<!doctype html>
+<html>
+<body style="margin:0;padding:0;background:#f4f4f7;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:32px 16px;font-family:Arial,Helvetica,sans-serif;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:460px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e6eb;">
+        <tr><td style="background:#e11d48;padding:20px 28px;">
+          <span style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:-0.3px;">Voidz.IO security</span>
+        </td></tr>
+        <tr><td style="padding:28px;">
+          <h1 style="margin:0 0 10px;font-size:18px;color:#14151a;">${heading}</h1>
+          <p style="margin:0 0 14px;font-size:13px;color:#8b8d98;">${when}</p>
+          <p style="margin:0 0 18px;font-size:14px;line-height:1.5;color:#55566a;">${detail}</p>
+          <p style="margin:0;font-size:13px;line-height:1.5;color:#8b8d98;">If this was you, no action is needed. If <strong>not</strong>, your account may be compromised &mdash; change your password and hit the <strong style="color:#e11d48;">Panic</strong> button in Settings &rarr; Account right away.</p>
+        </td></tr>
+      </table>
+      <p style="max-width:460px;margin:16px auto 0;font-size:11px;color:#b0b2bd;text-align:center;">Voidz.IO Dashboard &middot; automated security email</p>
+    </td></tr>
+  </table>
+</body>
+</html>`
+}
+
 // ============================================================
 // LEGACY DEFAULT BOT
 // ============================================================
@@ -340,6 +366,7 @@ const USERS_FILE = path.join(__dirname, 'users.json')
 const BOT_CONFIGS_FILE = path.join(__dirname, 'bot-configs.json')
 const TWO_FACTOR_FILE = path.join(__dirname, 'two-factor.json')
 const LOGIN_LOG_FILE = path.join(__dirname, 'login-log.json')
+const ADMIN_CRED_FILE = path.join(__dirname, 'admin-cred.json')
 const LOGS_DIR = path.join(__dirname, 'logs')
 const AUTH_CACHE_DIR = path.join(__dirname, 'auth_cache')
 const PUBLIC_DIR = path.join(__dirname, 'public')
@@ -395,8 +422,38 @@ app.use(sessionMiddleware)
 // search engines. The header covers every response (defense in
 // depth for crawlers that ignore robots.txt); robots.txt below is
 // the first thing well-behaved ones check.
+// Security headers on every response (defense in depth).
+// - CSP: the app's own markup uses inline <script>/<style> and onclick
+//   handlers, so script/style need 'unsafe-inline'; but everything else
+//   is locked to same-origin (plus Google Fonts), there's no 'unsafe-eval',
+//   framing is blocked, and object/embed is off - so an injected external
+//   script, an <iframe> clickjack, or a data: script still can't run.
+// - Socket.IO's websocket is same-origin, covered by connect-src 'self'.
+const CSP = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'"
+].join('; ')
+
 app.use((req, res, next) => {
     res.setHeader('X-Robots-Tag', 'noindex, nofollow')
+    res.setHeader('Content-Security-Policy', CSP)
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('X-Frame-Options', 'DENY')
+    res.setHeader('Referrer-Policy', 'no-referrer')
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()')
+    // Only meaningful over HTTPS; sent when the deployment is behind TLS
+    // (COOKIE_SECURE) so browsers refuse to ever downgrade to plain HTTP.
+    if (COOKIE_SECURE) {
+        res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains')
+    }
     next()
 })
 
@@ -620,6 +677,34 @@ function verifyPassword(password, salt, hash) {
 
     return crypto.timingSafeEqual(candidate, expected)
 
+}
+
+// --- Admin password override ---
+// The admin password normally lives in DASHBOARD_PASSWORD (.env). Once the
+// admin changes it in-app (which requires password + email code + an
+// authenticator code), a scrypt hash is stored here and used INSTEAD of
+// the env value. Kept in its own file so toggling 2FA can't wipe it.
+function getAdminPasswordOverride() {
+    try {
+        const parsed = JSON.parse(fs.readFileSync(ADMIN_CRED_FILE, 'utf8'))
+        return (parsed && parsed.salt && parsed.hash) ? parsed : null
+    } catch {
+        return null
+    }
+}
+
+function setAdminPasswordOverride(salt, hash) {
+    fs.writeFileSync(ADMIN_CRED_FILE, JSON.stringify({ salt, hash, updatedAt: new Date().toISOString() }, null, 2))
+}
+
+// True if the given password is the admin's current one - the in-app
+// override if set, otherwise the .env value.
+function verifyAdminPassword(password) {
+    const override = getAdminPasswordOverride()
+    if (override) {
+        return verifyPassword(String(password || ''), override.salt, override.hash)
+    }
+    return String(password || '') === DASHBOARD_PASSWORD
 }
 
 // ============================================================
@@ -872,6 +957,52 @@ function maybeSendLoginAlert(username, ip) {
         `A login to your Voidz.IO dashboard just completed from a device that wasn't already trusted.\n\nTime: ${when}\nIP: ${ip}\n\nIf this was you, nothing to do. If not, open the dashboard, hit the Panic button in Settings, and change your password.`,
         buildAlertEmailHtml(when, ip)
     ).catch(error => appLog(`Login alert email failed for ${username}: ${error.message}`))
+}
+
+// Fire-and-forget email about a sensitive account change (2FA turned off,
+// recovery email changed/removed, password changed) - the moves an
+// attacker makes after getting in. `to` is passed explicitly because some
+// of these (disable 2FA, change recovery email) alter or remove the very
+// record the address would otherwise be read from.
+function sendSecurityAlert(to, heading, detail) {
+    if (!mailConfigured() || !to) return
+    const when = new Date().toUTCString()
+    sendMail(
+        to,
+        `Voidz.IO security alert: ${heading}`,
+        `${heading}\n\nTime: ${when}\n${detail}\n\nIf this was you, no action is needed. If NOT, your account may be compromised - change your password and use the Panic button in Settings immediately.`,
+        buildSecurityAlertHtml(heading, detail, when)
+    ).catch(error => appLog(`Security alert email failed: ${error.message}`))
+}
+
+// --- Failed-login burst alerting (per account) ---
+// Someone actively guessing a real account's password. Emails once per
+// burst (then a cooldown) so it warns without spamming.
+const FAILED_BURST_WINDOW_MS = 10 * 60 * 1000
+const FAILED_BURST_THRESHOLD = 5
+const FAILED_BURST_COOLDOWN_MS = 15 * 60 * 1000
+const failedLoginBursts = new Map() // username -> { count, windowStart, lastAlertAt }
+
+function noteFailedLoginBurst(username, ip) {
+    const record = getTwoFactorRecord(username)
+    if (!mailConfigured() || !record || !record.recoveryEmail) return
+
+    const now = Date.now()
+    let state = failedLoginBursts.get(username)
+    if (!state || now - state.windowStart > FAILED_BURST_WINDOW_MS) {
+        state = { count: 0, windowStart: now, lastAlertAt: 0 }
+        failedLoginBursts.set(username, state)
+    }
+    state.count++
+
+    if (state.count >= FAILED_BURST_THRESHOLD && now - state.lastAlertAt > FAILED_BURST_COOLDOWN_MS) {
+        state.lastAlertAt = now
+        sendSecurityAlert(
+            record.recoveryEmail,
+            'Repeated failed login attempts',
+            `There have been ${state.count} failed password attempts on your account in the last few minutes (most recent from ${ip}). Your password has NOT been given out - but someone may be trying to guess it.`
+        )
+    }
 }
 
 // --- Email recovery (optional second recovery path for 2FA) ---
@@ -5921,7 +6052,7 @@ app.post('/login', rateLimitPreAuth, (req, res) => {
 
     }
 
-    if (username === DASHBOARD_USERNAME && password === DASHBOARD_PASSWORD) {
+    if (username === DASHBOARD_USERNAME && verifyAdminPassword(password)) {
         return afterPassword(username)
     }
 
@@ -5941,6 +6072,7 @@ app.post('/login', rateLimitPreAuth, (req, res) => {
 
     if (knownName) {
         recordLoginEvent(knownName, { outcome: 'bad-password', ip })
+        noteFailedLoginBurst(knownName, ip)
     }
 
     recordFailedLogin(ip)
@@ -6836,6 +6968,118 @@ app.post('/api/account/password', (req, res) => {
 })
 
 // ============================================================
+// ADMIN PASSWORD CHANGE (triple-verified: password + email + authenticator)
+// ============================================================
+// The admin password can be changed in-app, but only with all three
+// factors, since it's the most powerful credential: the CURRENT password,
+// a code emailed to the recovery address, AND a live authenticator code.
+// That requires 2FA to be on and a recovery email set up first.
+
+app.post('/api/admin/password/start', async (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can do this.' })
+    }
+
+    if (!isTwoFactorEnabled(req.session.username) || !getRecoveryEmail(req.session.username) || !mailConfigured()) {
+        return res.status(400).json({ error: 'To change the admin password you first need 2FA enabled AND a recovery email set up (those are the email + authenticator factors).' })
+    }
+
+    const { currentPassword, newPassword } = req.body || {}
+
+    if (!verifyAdminPassword(currentPassword)) {
+        return res.status(401).json({ error: 'Current password is incorrect.' })
+    }
+
+    if (!newPassword || newPassword.length < MIN_PASSWORD_LENGTH) {
+        return res.status(400).json({ error: `New password must be at least ${MIN_PASSWORD_LENGTH} characters.` })
+    }
+
+    if (verifyAdminPassword(newPassword)) {
+        return res.status(400).json({ error: 'That is already your current password.' })
+    }
+
+    // Stash the pending change in the session: the already-hashed new
+    // password and a hashed email code, both short-lived.
+    const emailCode = String(crypto.randomInt(0, 1000000)).padStart(6, '0')
+    const newCred = hashPassword(newPassword)
+    const codeCred = hashPassword(emailCode)
+
+    req.session.pendingAdminPwChange = {
+        newSalt: newCred.salt,
+        newHash: newCred.hash,
+        codeSalt: codeCred.salt,
+        codeHash: codeCred.hash,
+        expiresAt: Date.now() + RECOVERY_CODE_TTL_MS,
+        attempts: 0
+    }
+
+    const recoveryEmail = getRecoveryEmail(req.session.username)
+
+    try {
+        await sendMail(
+            recoveryEmail,
+            'Voidz.IO password change code',
+            `Your Voidz.IO admin password-change code is: ${emailCode}\n\nEnter it along with your authenticator code to finish changing your password. It expires in 10 minutes. If you didn't request this, ignore this email and your password stays the same.`,
+            buildCodeEmailHtml({
+                heading: 'Confirm your password change',
+                intro: 'Enter this code, plus a code from your authenticator app, to finish changing your Voidz.IO admin password.',
+                code: emailCode,
+                note: "If you didn't request this, ignore this email - nothing changes."
+            })
+        )
+    } catch (error) {
+        delete req.session.pendingAdminPwChange
+        appLog(`Admin password change email failed: ${error.message}`)
+        return res.status(500).json({ error: 'Could not send the email code. Try again shortly.' })
+    }
+
+    res.json({ ok: true })
+
+})
+
+app.post('/api/admin/password/confirm', (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can do this.' })
+    }
+
+    const pending = req.session.pendingAdminPwChange
+
+    if (!pending || pending.expiresAt < Date.now()) {
+        delete req.session.pendingAdminPwChange
+        return res.status(400).json({ error: 'No password change in progress (or it expired). Start over.' })
+    }
+
+    const emailCode = String(req.body?.emailCode || '').trim()
+    const authenticatorCode = String(req.body?.authenticatorCode || '').trim()
+
+    const record = getTwoFactorRecord(req.session.username)
+
+    const emailOk = verifyPassword(emailCode, pending.codeSalt, pending.codeHash)
+    const authOk = record && record.secret && verifyTotp(record.secret, authenticatorCode)
+
+    if (!emailOk || !authOk) {
+        pending.attempts = (pending.attempts || 0) + 1
+        if (pending.attempts >= 5) {
+            delete req.session.pendingAdminPwChange
+            return res.status(429).json({ error: 'Too many incorrect codes. Start over.' })
+        }
+        return res.status(401).json({ error: `Check both codes and try again (${emailOk ? 'authenticator' : authOk ? 'email' : 'both'} code wrong).` })
+    }
+
+    setAdminPasswordOverride(pending.newSalt, pending.newHash)
+    delete req.session.pendingAdminPwChange
+
+    appLog(`Admin password changed by ${req.session.username}`)
+
+    sendSecurityAlert(getRecoveryEmail(req.session.username), 'Admin password was changed', 'The password for your Voidz.IO admin account was just changed.')
+
+    res.json({ ok: true })
+
+})
+
+// ============================================================
 // TWO-FACTOR AUTH MANAGEMENT (admin-only, from Settings -> Account)
 // ============================================================
 
@@ -6936,12 +7180,22 @@ app.post('/api/2fa/recovery-email/verify', (req, res) => {
 
     const code = String(req.body?.code || '').trim()
 
+    // Remember the old address so, if this is a CHANGE, we can warn the
+    // previous one that recovery was pointed somewhere else.
+    const previousEmail = getRecoveryEmail(req.session.username)
+
     if (!verifyRecoveryEmail(req.session.username, code)) {
         return res.status(401).json({ error: 'That code is incorrect or expired.' })
     }
 
+    const newEmail = getRecoveryEmail(req.session.username)
+
+    if (previousEmail && previousEmail !== newEmail) {
+        sendSecurityAlert(previousEmail, 'Recovery email was changed', `Your Voidz.IO recovery email was changed to ${maskEmail(newEmail)}. Recovery codes will now go there instead of here.`)
+    }
+
     appLog(`Recovery email verified for ${req.session.username}`)
-    res.json({ ok: true, recoveryEmail: maskEmail(getRecoveryEmail(req.session.username)) })
+    res.json({ ok: true, recoveryEmail: maskEmail(newEmail) })
 
 })
 
@@ -6952,8 +7206,13 @@ app.post('/api/2fa/recovery-email/remove', (req, res) => {
         return res.status(403).json({ error: 'Only the admin account can manage 2FA.' })
     }
 
+    const removedEmail = getRecoveryEmail(req.session.username)
+
     removeRecoveryEmail(req.session.username)
     appLog(`Recovery email removed for ${req.session.username}`)
+
+    sendSecurityAlert(removedEmail, 'Recovery email was removed', 'Your Voidz.IO recovery email was removed. Email-based account recovery is now off.')
+
     res.json({ ok: true })
 
 })
@@ -7117,6 +7376,10 @@ app.post('/api/2fa/disable', (req, res) => {
         return res.status(401).json({ error: 'Enter a current code (or a backup code) to turn 2FA off.' })
     }
 
+    // Capture the recovery email before the record (and it) are deleted,
+    // so we can still warn that address that 2FA was just turned off.
+    const alertEmail = record.recoveryEmail || null
+
     const store = loadTwoFactor()
     delete store[req.session.username]
     saveTwoFactor(store)
@@ -7124,6 +7387,8 @@ app.post('/api/2fa/disable', (req, res) => {
     res.clearCookie(TRUSTED_DEVICE_COOKIE)
 
     appLog(`2FA disabled for ${req.session.username}`)
+
+    sendSecurityAlert(alertEmail, 'Two-factor authentication was turned OFF', 'Someone disabled 2FA on your Voidz.IO admin account. Logins no longer require an authenticator code.')
 
     res.json({ ok: true })
 

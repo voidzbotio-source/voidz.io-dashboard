@@ -10,6 +10,7 @@ users.json
 bot-configs.json
 two-factor.json
 login-log.json
+admin-cred.json
 
 # Logs
 logs/

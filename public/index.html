@@ -6160,6 +6160,7 @@
 
                         <div id="recoveryEmailCurrent" style="display: none;">
                             <p class="settings-hint" style="margin-bottom: 10px;">Current recovery email: <strong id="recoveryEmailMasked"></strong></p>
+                            <button class="modal-ok" id="recoveryEmailTestBtn" onclick="sendRecoveryTest()" style="width: 100%; margin-bottom: 8px;">Send test email</button>
                             <button class="modal-ok" onclick="removeRecoveryEmail()" style="width: 100%; background: transparent; color: var(--muted); border-color: var(--border);">Remove recovery email</button>
                         </div>
 
@@ -7310,6 +7311,37 @@
                 .catch(() => {
                     btn.disabled = false
                     btn.textContent = 'Verify & save'
+                    recoveryEmailError('Could not reach the server.')
+                })
+
+        }
+
+        function sendRecoveryTest() {
+
+            recoveryEmailError('')
+
+            const btn = $('recoveryEmailTestBtn')
+            btn.disabled = true
+            btn.textContent = 'Sending...'
+
+            fetch('/api/2fa/recovery-email/test', { method: 'POST' })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+
+                    btn.disabled = false
+                    btn.textContent = 'Send test email'
+
+                    if (!ok) {
+                        recoveryEmailError(data.error || 'Could not send the test email.')
+                        return
+                    }
+
+                    showToast(`Test email sent to ${data.recoveryEmail || 'your recovery email'}.`, 'success')
+
+                })
+                .catch(() => {
+                    btn.disabled = false
+                    btn.textContent = 'Send test email'
                     recoveryEmailError('Could not reach the server.')
                 })
 

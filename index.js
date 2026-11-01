@@ -6715,6 +6715,46 @@ app.post('/api/2fa/recovery-email/remove', (req, res) => {
 
 })
 
+// Sends a sample recovery email to the saved address, so the admin can
+// confirm it arrives (and check it's not in spam) without being locked
+// out. Not a real code - just shows what one looks like.
+app.post('/api/2fa/recovery-email/test', async (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can manage 2FA.' })
+    }
+
+    if (!mailConfigured()) {
+        return res.status(400).json({ error: 'Email sending is not set up on this server.' })
+    }
+
+    const email = getRecoveryEmail(req.session.username)
+
+    if (!email) {
+        return res.status(400).json({ error: 'Set and verify a recovery email first.' })
+    }
+
+    try {
+        await sendMail(
+            email,
+            'Voidz.IO test email',
+            'This is a test email from your Voidz.IO dashboard. If you can read this, email recovery is working.',
+            buildCodeEmailHtml({
+                heading: 'Test email',
+                intro: "This is a test from your Voidz.IO dashboard - email recovery is working. No action needed; the code below is just a sample.",
+                code: '123456',
+                note: 'Real login codes will look exactly like this.'
+            })
+        )
+    } catch (error) {
+        appLog(`Recovery test email failed for ${req.session.username}: ${error.message}`)
+        return res.status(500).json({ error: 'Could not send the test email. Try again shortly.' })
+    }
+
+    res.json({ ok: true, recoveryEmail: maskEmail(email) })
+
+})
+
 // Begins setup: generates a fresh (pending, not-yet-enabled) secret and
 // returns the QR + manual key to add to an authenticator app. Pending
 // until a code is verified via /enable.

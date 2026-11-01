@@ -154,12 +154,14 @@ let nextPovViewerPort = POV_VIEWER_BASE_PORT
 const FIRST_JQ_DELAY = 15000
 const JQ_RETRY_DELAY = 3000
 
-// How long after spawning to check the Black Market on a fresh
-// connection. checkBlackMarket() only reacts to the server's "has now
-// opened" broadcast - if a reboot/reconnect happens while the market
-// is already open, that broadcast already fired in the past and the
-// bot would silently miss the whole window. This gives every fresh
-// connection one shot at catching an already-open market too.
+// Extra settle time, AFTER the bot has reached LifeSteal and done its
+// AFK /home teleport, before checking whether the Black Market is
+// already open on a fresh connection (see the resync check in
+// reachedLifeSteal). checkBlackMarket() only reacts to the server's
+// "has now opened" broadcast - if a reboot/reconnect happens while the
+// market is already open, that broadcast already fired in the past and
+// the bot would otherwise silently miss the whole window. Crucially this
+// can't run until the bot is actually on LifeSteal, where /bm exists.
 const BLACK_MARKET_RESYNC_DELAY = 8000
 
 // The 3 items auto-buy has always tracked, kept as the default list for
@@ -2213,6 +2215,29 @@ class BotSession {
 
         }, HOME_DELAY)
 
+        // Catch a Black Market that's ALREADY open the moment the bot
+        // (re)connects - e.g. a reboot that lands mid-restock, where the
+        // "has now opened" broadcast already fired before this process
+        // existed, so checkBlackMarket() never sees it. This has to wait
+        // until the bot is actually ON LifeSteal (where /bm exists) -
+        // the earlier version fired a fixed few seconds after spawn,
+        // while the bot was still in the Hub, so /bm did nothing. Runs
+        // after the AFK /home teleport above has settled so the two
+        // don't collide.
+        if (this.config.blackMarketAutoBuy) {
+
+            setTimeout(() => {
+
+                if (!this.bot || !this.bot.entity || this.shuttingDown) return
+                if (!this.lifeStealReached) return
+
+                this.log('On LifeSteal - checking Black Market in case it was already open on connect.')
+                this.autoBuyBlackMarket()
+
+            }, HOME_DELAY + BLACK_MARKET_RESYNC_DELAY)
+
+        }
+
     }
 
     // Starts (or restarts) prismarine-viewer's live 3D view of what
@@ -4251,19 +4276,6 @@ class BotSession {
                     this.startHubRecovery()
 
                 }, FIRST_JQ_DELAY)
-
-            }
-
-            if (this.config.blackMarketAutoBuy) {
-
-                setTimeout(() => {
-
-                    if (!this.bot || !this.bot.entity || this.shuttingDown) return
-
-                    this.log('Checking Black Market after reconnect (in case it was already open).')
-                    this.autoBuyBlackMarket()
-
-                }, BLACK_MARKET_RESYNC_DELAY)
 
             }
 

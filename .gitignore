@@ -8,6 +8,7 @@ auth_cache/
 # Account data
 users.json
 bot-configs.json
+two-factor.json
 
 # Logs
 logs/

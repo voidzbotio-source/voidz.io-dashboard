@@ -18,6 +18,7 @@
     "express-session": "^1.19.0",
     "mineflayer": "^4.37.1",
     "prismarine-viewer": "^1.33.0",
+    "qrcode": "^1.5.4",
     "socket.io": "^4.8.3",
     "socks": "^2.8.10"
   },

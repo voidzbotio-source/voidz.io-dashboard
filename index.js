@@ -35,6 +35,7 @@ const path = require('path')
 const net = require('net')
 const session = require('express-session')
 const crypto = require('crypto')
+const QRCode = require('qrcode')
 
 // ============================================================
 // .ENV LOADER
@@ -230,6 +231,7 @@ const OFFLINE_NAME_COLORS = ['#dc3545', 'red', 'dark_red']
 const APP_LOG_FILE = path.join(__dirname, 'app.log')
 const USERS_FILE = path.join(__dirname, 'users.json')
 const BOT_CONFIGS_FILE = path.join(__dirname, 'bot-configs.json')
+const TWO_FACTOR_FILE = path.join(__dirname, 'two-factor.json')
 const LOGS_DIR = path.join(__dirname, 'logs')
 const AUTH_CACHE_DIR = path.join(__dirname, 'auth_cache')
 const PUBLIC_DIR = path.join(__dirname, 'public')
@@ -510,6 +512,196 @@ function verifyPassword(password, salt, hash) {
 
     return crypto.timingSafeEqual(candidate, expected)
 
+}
+
+// ============================================================
+// TWO-FACTOR AUTH (TOTP, authenticator app)
+// ============================================================
+// Opt-in per account (currently only offered to the admin in the UI).
+// Standard RFC 6238 TOTP so any authenticator app works, implemented
+// on Node's own crypto - no third-party TOTP library. A per-account
+// record lives in two-factor.json (gitignored - it holds the shared
+// secret). Set DISABLE_2FA=true to bypass the whole second factor from
+// the server side, the escape hatch against ever being locked out.
+// ============================================================
+
+const TWO_FACTOR_DISABLED = process.env.DISABLE_2FA === 'true'
+const TRUSTED_DEVICE_MS = 72 * 60 * 60 * 1000 // 72 hours
+const TRUSTED_DEVICE_COOKIE = 'voidz_2fa_trust'
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+
+function base32Encode(buf) {
+    let bits = 0, value = 0, out = ''
+    for (const byte of buf) {
+        value = (value << 8) | byte
+        bits += 8
+        while (bits >= 5) {
+            out += BASE32_ALPHABET[(value >>> (bits - 5)) & 31]
+            bits -= 5
+        }
+    }
+    if (bits > 0) out += BASE32_ALPHABET[(value << (5 - bits)) & 31]
+    return out
+}
+
+function base32Decode(str) {
+    const clean = String(str).toUpperCase().replace(/=+$/, '').replace(/\s/g, '')
+    let bits = 0, value = 0
+    const out = []
+    for (const ch of clean) {
+        const idx = BASE32_ALPHABET.indexOf(ch)
+        if (idx === -1) continue
+        value = (value << 5) | idx
+        bits += 5
+        if (bits >= 8) {
+            out.push((value >>> (bits - 8)) & 0xff)
+            bits -= 8
+        }
+    }
+    return Buffer.from(out)
+}
+
+function hotp(secretBuf, counter) {
+    const buf = Buffer.alloc(8)
+    buf.writeBigUInt64BE(BigInt(counter))
+    const hmac = crypto.createHmac('sha1', secretBuf).update(buf).digest()
+    const offset = hmac[hmac.length - 1] & 0x0f
+    const code = ((hmac[offset] & 0x7f) << 24) |
+        ((hmac[offset + 1] & 0xff) << 16) |
+        ((hmac[offset + 2] & 0xff) << 8) |
+        (hmac[offset + 3] & 0xff)
+    return (code % 1000000).toString().padStart(6, '0')
+}
+
+// Accepts the current 30s step plus one on either side, to tolerate a
+// little clock drift between the server and the phone.
+function verifyTotp(secretBase32, token) {
+    const clean = String(token || '').replace(/\s/g, '')
+    if (!/^\d{6}$/.test(clean)) return false
+    const secretBuf = base32Decode(secretBase32)
+    if (secretBuf.length === 0) return false
+    const counter = Math.floor(Date.now() / 30000)
+    const candidate = Buffer.from(clean)
+    for (let w = -1; w <= 1; w++) {
+        const expected = Buffer.from(hotp(secretBuf, counter + w))
+        if (expected.length === candidate.length && crypto.timingSafeEqual(expected, candidate)) {
+            return true
+        }
+    }
+    return false
+}
+
+function loadTwoFactor() {
+    try {
+        const parsed = JSON.parse(fs.readFileSync(TWO_FACTOR_FILE, 'utf8'))
+        return (parsed && typeof parsed === 'object') ? parsed : {}
+    } catch {
+        return {}
+    }
+}
+
+function saveTwoFactor(store) {
+    fs.writeFileSync(TWO_FACTOR_FILE, JSON.stringify(store, null, 2))
+}
+
+function getTwoFactorRecord(username) {
+    const store = loadTwoFactor()
+    return store[username] || null
+}
+
+function isTwoFactorEnabled(username) {
+    if (TWO_FACTOR_DISABLED) return false
+    const record = getTwoFactorRecord(username)
+    return !!(record && record.enabled && record.secret)
+}
+
+// 10 single-use recovery codes (shown once at setup). Stored only as
+// scrypt hashes, same as passwords, so the file never holds a usable
+// code. Format xxxx-xxxx using unambiguous characters.
+function generateBackupCodes() {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    const plain = []
+    const stored = []
+    for (let i = 0; i < 10; i++) {
+        let code = ''
+        for (let c = 0; c < 8; c++) {
+            if (c === 4) code += '-'
+            code += alphabet[crypto.randomInt(alphabet.length)]
+        }
+        plain.push(code)
+        const { salt, hash } = hashPassword(code)
+        stored.push({ salt, hash, used: false })
+    }
+    return { plain, stored }
+}
+
+// Verifies a backup code against an account's stored hashes and, on a
+// match, marks that one used so it can't be replayed. Returns true if
+// a fresh code matched.
+function consumeBackupCode(username, code) {
+    const normalized = String(code || '').trim().toUpperCase()
+    if (!normalized) return false
+    const store = loadTwoFactor()
+    const record = store[username]
+    if (!record || !Array.isArray(record.backupCodes)) return false
+    for (const entry of record.backupCodes) {
+        if (entry.used) continue
+        if (verifyPassword(normalized, entry.salt, entry.hash)) {
+            entry.used = true
+            saveTwoFactor(store)
+            return true
+        }
+    }
+    return false
+}
+
+function readCookies(req) {
+    const header = req.headers?.cookie
+    const out = {}
+    if (!header) return out
+    for (const part of header.split(';')) {
+        const idx = part.indexOf('=')
+        if (idx === -1) continue
+        const key = part.slice(0, idx).trim()
+        const value = part.slice(idx + 1).trim()
+        if (key) out[key] = decodeURIComponent(value)
+    }
+    return out
+}
+
+// A "trust this device for 72h" token: a random value handed to the
+// browser as a cookie, stored server-side only as its SHA-256 hash with
+// an expiry. While valid, that browser skips the TOTP code at login
+// (password is still required). Expired/used-up entries are pruned on
+// every read so the list can't grow without bound.
+function hashTrustToken(token) {
+    return crypto.createHash('sha256').update(token).digest('hex')
+}
+
+function issueTrustedDevice(username) {
+    const token = crypto.randomBytes(32).toString('hex')
+    const store = loadTwoFactor()
+    const record = store[username]
+    if (!record) return null
+    if (!Array.isArray(record.trustedDevices)) record.trustedDevices = []
+    const now = Date.now()
+    record.trustedDevices = record.trustedDevices.filter(d => d.expiresAt > now)
+    record.trustedDevices.push({ tokenHash: hashTrustToken(token), expiresAt: now + TRUSTED_DEVICE_MS })
+    saveTwoFactor(store)
+    return token
+}
+
+function hasValidTrustedDevice(username, token) {
+    if (!token) return false
+    const store = loadTwoFactor()
+    const record = store[username]
+    if (!record || !Array.isArray(record.trustedDevices)) return false
+    const now = Date.now()
+    const wanted = hashTrustToken(token)
+    const before = record.trustedDevices.length
+    record.trustedDevices = record.trustedDevices.filter(d => d.expiresAt > now)
+    if (record.trustedDevices.length !== before) saveTwoFactor(store)
+    return record.trustedDevices.some(d => d.tokenHash === wanted)
 }
 
 // Saves a partial update onto one user's record (by username) and
@@ -5312,15 +5504,53 @@ app.post('/login', rateLimitPreAuth, (req, res) => {
 
     }
 
+    // Password checked out. If this account has 2FA on and this browser
+    // isn't a still-valid trusted device, hold in a pending stage (fresh
+    // session, marked half-authenticated but NOT logged in) until the
+    // TOTP code is verified by POST /login/2fa. Otherwise log straight in.
+    const afterPassword = resolvedUsername => {
+
+        const trustToken = readCookies(req)[TRUSTED_DEVICE_COOKIE]
+
+        if (isTwoFactorEnabled(resolvedUsername) && !hasValidTrustedDevice(resolvedUsername, trustToken)) {
+
+            req.session.regenerate(regenError => {
+
+                if (regenError) {
+                    appLog(`Session regenerate failed (pre-2FA) for ${resolvedUsername}: ${regenError.message}`)
+                    return res.status(500).json({ error: 'Login failed, please try again.' })
+                }
+
+                req.session.twoFactorPendingUser = resolvedUsername
+                req.session.twoFactorPendingAt = Date.now()
+                req.session.twoFactorFails = 0
+
+                req.session.save(saveError => {
+                    if (saveError) {
+                        return res.status(500).json({ error: 'Login failed, please try again.' })
+                    }
+                    res.json({ twoFactorRequired: true })
+                })
+
+            })
+
+            return
+
+        }
+
+        establishLogin(resolvedUsername)
+
+    }
+
     if (username === DASHBOARD_USERNAME && password === DASHBOARD_PASSWORD) {
-        return establishLogin(username)
+        return afterPassword(username)
     }
 
     const users = loadUsers()
     const user = findUser(users, username)
 
     if (user && verifyPassword(password || '', user.salt, user.hash)) {
-        return establishLogin(user.username)
+        return afterPassword(user.username)
     }
 
     recordFailedLogin(ip)
@@ -5328,6 +5558,116 @@ app.post('/login', rateLimitPreAuth, (req, res) => {
     appLog(`Failed dashboard login attempt: ${username || '(empty)'} from ${ip}`)
 
     return res.status(401).json({ error: 'Invalid username or password' })
+
+})
+
+// Second step of a 2FA login: verify the authenticator code (or a backup
+// code) against the account held in the pending stage from POST /login.
+// On success the session is regenerated again and marked logged in.
+app.post('/login/2fa', rateLimitPreAuth, (req, res) => {
+
+    const ip = req.ip
+    const pendingUser = req.session?.twoFactorPendingUser
+
+    if (!pendingUser) {
+        return res.status(400).json({ error: 'No login in progress. Please start over.' })
+    }
+
+    // A half-finished login shouldn't linger - 5 minutes to enter a code.
+    if (!req.session.twoFactorPendingAt || Date.now() - req.session.twoFactorPendingAt > 5 * 60 * 1000) {
+        delete req.session.twoFactorPendingUser
+        delete req.session.twoFactorPendingAt
+        delete req.session.twoFactorFails
+        return res.status(400).json({ error: 'Login timed out. Please start over.' })
+    }
+
+    const record = getTwoFactorRecord(pendingUser)
+    const stillNeeds2fa = !TWO_FACTOR_DISABLED && record && record.enabled && record.secret
+
+    const finishLogin = () => {
+
+        req.session.regenerate(regenError => {
+
+            if (regenError) {
+                appLog(`Session regenerate failed (2FA) for ${pendingUser}: ${regenError.message}`)
+                return res.status(500).json({ error: 'Login failed, please try again.' })
+            }
+
+            clearLoginAttempts(ip)
+
+            req.session.loggedIn = true
+            req.session.username = pendingUser
+
+            req.session.save(saveError => {
+                if (saveError) {
+                    return res.status(500).json({ error: 'Login failed, please try again.' })
+                }
+                appLog(`Dashboard login (2FA): ${pendingUser}`)
+                res.json({ ok: true })
+            })
+
+        })
+
+    }
+
+    // 2FA was turned off (or DISABLE_2FA set) between password and code -
+    // nothing to verify, just finish.
+    if (!stillNeeds2fa) {
+        return finishLogin()
+    }
+
+    const code = String(req.body?.code || '').trim()
+    const codeOk = verifyTotp(record.secret, code) || consumeBackupCode(pendingUser, code)
+
+    if (!codeOk) {
+
+        req.session.twoFactorFails = (req.session.twoFactorFails || 0) + 1
+
+        if (req.session.twoFactorFails >= 5) {
+            delete req.session.twoFactorPendingUser
+            delete req.session.twoFactorPendingAt
+            delete req.session.twoFactorFails
+            appLog(`2FA locked out (too many codes) for ${pendingUser} from ${ip}`)
+            return res.status(429).json({ error: 'Too many incorrect codes. Please start over.' })
+        }
+
+        appLog(`Failed 2FA code for ${pendingUser} from ${ip}`)
+        return res.status(401).json({ error: 'Invalid code.' })
+
+    }
+
+    finishLogin()
+
+})
+
+// The "stay logged in? (re-authenticate in 72 hours)" answer shown after
+// a successful code. Yes -> trust this browser for 72h so future logins
+// skip the code (password is still required). Requires the just-completed
+// login session.
+app.post('/login/trust', (req, res) => {
+
+    if (!req.session?.loggedIn || !req.session.username) {
+        return res.status(401).json({ error: 'Not logged in.' })
+    }
+
+    const username = req.session.username
+
+    if (req.body?.trust && isTwoFactorEnabled(username)) {
+
+        const token = issueTrustedDevice(username)
+
+        if (token) {
+            res.cookie(TRUSTED_DEVICE_COOKIE, token, {
+                httpOnly: true,
+                sameSite: 'lax',
+                secure: COOKIE_SECURE,
+                maxAge: TRUSTED_DEVICE_MS
+            })
+        }
+
+    }
+
+    res.json({ ok: true })
 
 })
 
@@ -6040,6 +6380,126 @@ app.post('/api/account/password', (req, res) => {
     updateUser(req.session.username, { salt, hash })
 
     appLog(`Password changed: ${req.session.username}`)
+
+    res.json({ ok: true })
+
+})
+
+// ============================================================
+// TWO-FACTOR AUTH MANAGEMENT (admin-only, from Settings -> Account)
+// ============================================================
+
+app.get('/api/2fa/status', (req, res) => {
+    res.json({
+        isAdmin: req.session.username === DASHBOARD_USERNAME,
+        enabled: isTwoFactorEnabled(req.session.username),
+        disabledByEnv: TWO_FACTOR_DISABLED
+    })
+})
+
+// Begins setup: generates a fresh (pending, not-yet-enabled) secret and
+// returns the QR + manual key to add to an authenticator app. Pending
+// until a code is verified via /enable.
+app.post('/api/2fa/setup', async (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can set up 2FA.' })
+    }
+
+    if (TWO_FACTOR_DISABLED) {
+        return res.status(400).json({ error: '2FA is disabled on this server (DISABLE_2FA).' })
+    }
+
+    if (isTwoFactorEnabled(req.session.username)) {
+        return res.status(409).json({ error: '2FA is already enabled. Disable it first to re-set up.' })
+    }
+
+    const secret = base32Encode(crypto.randomBytes(20))
+    const label = encodeURIComponent(`Voidz.IO:${req.session.username}`)
+    const otpauthUri = `otpauth://totp/${label}?secret=${secret}&issuer=Voidz.IO&digits=6&period=30`
+
+    const store = loadTwoFactor()
+    store[req.session.username] = {
+        enabled: false,
+        secret,
+        backupCodes: [],
+        trustedDevices: []
+    }
+    saveTwoFactor(store)
+
+    let qrSvg = ''
+    try {
+        qrSvg = await QRCode.toString(otpauthUri, { type: 'svg', margin: 1, width: 200 })
+    } catch (error) {
+        appLog(`2FA QR generation failed: ${error.message}`)
+    }
+
+    res.json({ secret, otpauthUri, qrSvg })
+
+})
+
+// Confirms setup: a valid code proves the authenticator is configured.
+// Flips the record to enabled and returns 10 one-time backup codes
+// (shown to the user exactly once).
+app.post('/api/2fa/enable', (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can set up 2FA.' })
+    }
+
+    const store = loadTwoFactor()
+    const record = store[req.session.username]
+
+    if (!record || !record.secret || record.enabled) {
+        return res.status(400).json({ error: 'Start setup first.' })
+    }
+
+    const code = String(req.body?.code || '').trim()
+
+    if (!verifyTotp(record.secret, code)) {
+        return res.status(401).json({ error: 'That code is incorrect. Check your authenticator app and try again.' })
+    }
+
+    const { plain, stored } = generateBackupCodes()
+
+    record.enabled = true
+    record.backupCodes = stored
+    record.trustedDevices = []
+    saveTwoFactor(store)
+
+    appLog(`2FA enabled for ${req.session.username}`)
+
+    res.json({ ok: true, backupCodes: plain })
+
+})
+
+// Turns 2FA off. Requires a current code (or a backup code) so a merely
+// logged-in session (e.g. left open) can't silently strip the account's
+// second factor. Clears the secret and all trusted devices.
+app.post('/api/2fa/disable', (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can manage 2FA.' })
+    }
+
+    if (!isTwoFactorEnabled(req.session.username)) {
+        return res.status(400).json({ error: '2FA is not enabled.' })
+    }
+
+    const record = getTwoFactorRecord(req.session.username)
+    const code = String(req.body?.code || '').trim()
+
+    if (!verifyTotp(record.secret, code) && !consumeBackupCode(req.session.username, code)) {
+        return res.status(401).json({ error: 'Enter a current code (or a backup code) to turn 2FA off.' })
+    }
+
+    const store = loadTwoFactor()
+    delete store[req.session.username]
+    saveTwoFactor(store)
+
+    res.clearCookie(TRUSTED_DEVICE_COOKIE)
+
+    appLog(`2FA disabled for ${req.session.username}`)
 
     res.json({ ok: true })
 

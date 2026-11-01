@@ -6086,6 +6086,68 @@
                     Signed in as the admin account &mdash; password changes aren't available here. Edit DASHBOARD_PASSWORD in your .env file instead.
                 </div>
 
+                <div id="twoFactorSection" class="settings-section" style="display: none;">
+
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        <span>Two-Factor Authentication</span>
+                    </div>
+
+                    <p class="settings-section-desc">
+                        Add an authenticator app (Google Authenticator, Authy, etc.) as a second step at login, so the admin account is safe even if the password leaks.
+                    </p>
+
+                    <div id="twoFactorError" class="settings-error"></div>
+
+                    <div id="twoFactorStatus" class="settings-hint" style="margin-bottom: 12px;">Checking status&hellip;</div>
+
+                    <div id="twoFactorSetupStart" style="display: none;">
+                        <button class="modal-ok" id="twoFactorSetupBtn" onclick="startTwoFactorSetup()" style="width: 100%;">Set up 2FA</button>
+                    </div>
+
+                    <div id="twoFactorSetupPanel" style="display: none;">
+
+                        <p class="settings-section-desc">1. Scan this QR with your authenticator app (or type in the key below), then 2. enter the 6-digit code it shows to confirm.</p>
+
+                        <div id="twoFactorQr" style="display: flex; justify-content: center; background: #fff; padding: 12px; border-radius: 12px; width: fit-content; margin: 0 auto 12px;"></div>
+
+                        <div class="field">
+                            <label>Manual key</label>
+                            <input id="twoFactorSecret" type="text" readonly onclick="this.select()" style="font-family: monospace; letter-spacing: 1px;">
+                        </div>
+
+                        <div class="field">
+                            <label for="twoFactorSetupCode">6-digit code</label>
+                            <input id="twoFactorSetupCode" type="text" inputmode="numeric" autocomplete="off" placeholder="000000">
+                        </div>
+
+                        <button class="modal-ok" id="twoFactorEnableBtn" onclick="confirmTwoFactorEnable()" style="width: 100%;">Enable 2FA</button>
+
+                    </div>
+
+                    <div id="twoFactorBackupPanel" style="display: none;">
+
+                        <p class="settings-section-desc" style="color: var(--red);">Save these backup codes somewhere safe. Each one works once if you ever lose your authenticator. They won't be shown again.</p>
+
+                        <div id="twoFactorBackupCodes" style="font-family: monospace; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; line-height: 2; letter-spacing: 1px; text-align: center; margin-bottom: 12px;"></div>
+
+                        <button class="modal-ok" onclick="dismissBackupCodes()" style="width: 100%;">I've saved them</button>
+
+                    </div>
+
+                    <div id="twoFactorDisablePanel" style="display: none;">
+
+                        <div class="field">
+                            <label for="twoFactorDisableCode">Enter a current code to turn 2FA off</label>
+                            <input id="twoFactorDisableCode" type="text" inputmode="numeric" autocomplete="off" placeholder="6-digit or backup code">
+                        </div>
+
+                        <button class="modal-ok" id="twoFactorDisableBtn" onclick="disableTwoFactor()" style="width: 100%; background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, transparent);">Disable 2FA</button>
+
+                    </div>
+
+                </div>
+
                 <div id="createAccountSection" class="settings-section" style="display: none;">
 
                     <div class="settings-section-header">
@@ -6925,11 +6987,13 @@
 
                     $('accountAdminNote').style.display = isAdmin ? 'block' : 'none'
                     $('accountSections').style.display = isAdmin ? 'none' : 'block'
+                    $('twoFactorSection').style.display = isAdmin ? 'block' : 'none'
                     $('createAccountSection').style.display = isAdmin ? 'block' : 'none'
                     $('manageAccountsSection').style.display = isAdmin ? 'block' : 'none'
 
                     if (isAdmin) {
                         renderManageAccounts()
+                        loadTwoFactorStatus()
                     }
 
                     applyImpersonationBanner(account)
@@ -7084,6 +7148,173 @@
                     errorBox.textContent = 'Could not reach the server. Try again.'
                     errorBox.classList.add('show')
 
+                })
+
+        }
+
+        // ==================================================
+        // TWO-FACTOR AUTH (admin settings)
+        // ==================================================
+
+        function twoFactorShow(id) {
+            for (const panel of ['twoFactorSetupStart', 'twoFactorSetupPanel', 'twoFactorBackupPanel', 'twoFactorDisablePanel']) {
+                const el = $(panel)
+                if (el) el.style.display = panel === id ? 'block' : 'none'
+            }
+        }
+
+        function twoFactorError(message) {
+            const box = $('twoFactorError')
+            if (!box) return
+            box.textContent = message || ''
+            box.classList.toggle('show', !!message)
+        }
+
+        function loadTwoFactorStatus() {
+
+            twoFactorError('')
+
+            fetch('/api/2fa/status')
+                .then(response => response.json())
+                .then(data => {
+
+                    const status = $('twoFactorStatus')
+
+                    if (data.disabledByEnv) {
+                        status.textContent = '2FA is turned off server-side (DISABLE_2FA is set).'
+                        twoFactorShow(null)
+                        return
+                    }
+
+                    if (data.enabled) {
+                        status.innerHTML = '<span style="color: var(--teal); font-weight: 700;">2FA is ON</span> for the admin account.'
+                        twoFactorShow('twoFactorDisablePanel')
+                    } else {
+                        status.textContent = '2FA is off. Set it up to require an authenticator code at login.'
+                        twoFactorShow('twoFactorSetupStart')
+                    }
+
+                })
+                .catch(() => twoFactorError('Could not load 2FA status.'))
+
+        }
+
+        function startTwoFactorSetup() {
+
+            twoFactorError('')
+
+            const btn = $('twoFactorSetupBtn')
+            btn.disabled = true
+            btn.textContent = 'Generating...'
+
+            fetch('/api/2fa/setup', { method: 'POST' })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+
+                    btn.disabled = false
+                    btn.textContent = 'Set up 2FA'
+
+                    if (!ok) {
+                        twoFactorError(data.error || 'Could not start setup.')
+                        return
+                    }
+
+                    // qrSvg is server-generated from the otpauth URI - safe
+                    // static SVG markup, not user input.
+                    $('twoFactorQr').innerHTML = data.qrSvg || ''
+                    $('twoFactorSecret').value = data.secret || ''
+                    $('twoFactorSetupCode').value = ''
+                    twoFactorShow('twoFactorSetupPanel')
+
+                })
+                .catch(() => {
+                    btn.disabled = false
+                    btn.textContent = 'Set up 2FA'
+                    twoFactorError('Could not reach the server.')
+                })
+
+        }
+
+        function confirmTwoFactorEnable() {
+
+            twoFactorError('')
+
+            const code = $('twoFactorSetupCode').value.trim()
+            const btn = $('twoFactorEnableBtn')
+
+            btn.disabled = true
+            btn.textContent = 'Enabling...'
+
+            fetch('/api/2fa/enable', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code })
+            })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+
+                    btn.disabled = false
+                    btn.textContent = 'Enable 2FA'
+
+                    if (!ok) {
+                        twoFactorError(data.error || 'Could not enable 2FA.')
+                        return
+                    }
+
+                    const codes = Array.isArray(data.backupCodes) ? data.backupCodes : []
+                    $('twoFactorBackupCodes').innerHTML = codes.map(c => escapeHtml(c)).join('<br>')
+                    twoFactorShow('twoFactorBackupPanel')
+                    showToast('2FA enabled.', 'success')
+
+                })
+                .catch(() => {
+                    btn.disabled = false
+                    btn.textContent = 'Enable 2FA'
+                    twoFactorError('Could not reach the server.')
+                })
+
+        }
+
+        function dismissBackupCodes() {
+            $('twoFactorBackupCodes').textContent = ''
+            loadTwoFactorStatus()
+        }
+
+        function disableTwoFactor() {
+
+            twoFactorError('')
+
+            const code = $('twoFactorDisableCode').value.trim()
+            const btn = $('twoFactorDisableBtn')
+
+            btn.disabled = true
+            btn.textContent = 'Disabling...'
+
+            fetch('/api/2fa/disable', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code })
+            })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+
+                    btn.disabled = false
+                    btn.textContent = 'Disable 2FA'
+
+                    if (!ok) {
+                        twoFactorError(data.error || 'Could not disable 2FA.')
+                        return
+                    }
+
+                    $('twoFactorDisableCode').value = ''
+                    showToast('2FA disabled.', 'info')
+                    loadTwoFactorStatus()
+
+                })
+                .catch(() => {
+                    btn.disabled = false
+                    btn.textContent = 'Disable 2FA'
+                    twoFactorError('Could not reach the server.')
                 })
 
         }

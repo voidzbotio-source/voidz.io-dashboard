@@ -524,6 +524,49 @@
 
         </form>
 
+        <form id="twoFactorForm" style="display: none;">
+
+            <div class="field">
+                <label for="code">Authentication Code</label>
+                <input
+                    id="code"
+                    name="code"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                    placeholder="6-digit code or backup code"
+                    required
+                >
+            </div>
+
+            <p class="hint">Enter the code from your authenticator app, or one of your backup codes.</p>
+
+            <button id="verifyBtn" type="submit">
+                Verify
+            </button>
+
+            <button id="backToLoginBtn" type="button" style="background: transparent; color: var(--muted); border-color: var(--border);">
+                Back
+            </button>
+
+        </form>
+
+        <div id="stayLoggedInStep" style="display: none;">
+
+            <p style="margin: 0 0 8px; font-size: 15px; font-weight: 700;">Stay logged in?</p>
+
+            <p class="hint" style="margin: 0 0 18px;">On this device you won't be asked for your authenticator code again for 72 hours (you'll still enter your password). After that, you'll re-authenticate.</p>
+
+            <button id="stayYesBtn" type="button">
+                Yes, trust this device for 72h
+            </button>
+
+            <button id="stayNoBtn" type="button" style="background: transparent; color: var(--muted); border-color: var(--border);">
+                No, ask every time
+            </button>
+
+        </div>
+
     </div>
 
     <script>
@@ -698,12 +741,35 @@
         const errorBox = document.getElementById('error')
         const submitBtn = document.getElementById('submitBtn')
 
+        const twoFactorForm = document.getElementById('twoFactorForm')
+        const codeInput = document.getElementById('code')
+        const verifyBtn = document.getElementById('verifyBtn')
+        const backToLoginBtn = document.getElementById('backToLoginBtn')
+
+        const stayStep = document.getElementById('stayLoggedInStep')
+        const stayYesBtn = document.getElementById('stayYesBtn')
+        const stayNoBtn = document.getElementById('stayNoBtn')
+
+        function showError(message) {
+            errorBox.textContent = message
+            errorBox.classList.add('show')
+        }
+
+        function clearError() {
+            errorBox.classList.remove('show')
+            errorBox.textContent = ''
+        }
+
+        function goToDashboard() {
+            try { sessionStorage.setItem('voidz-show-welcome', '1') } catch {}
+            window.location.href = '/'
+        }
+
+        // Stage 1: username + password.
         form.addEventListener('submit', event => {
 
             event.preventDefault()
-
-            errorBox.classList.remove('show')
-            errorBox.textContent = ''
+            clearError()
 
             submitBtn.disabled = true
             submitBtn.textContent = 'Logging in...'
@@ -720,37 +786,107 @@
                 .then(({ ok, data }) => {
 
                     if (ok && data.ok) {
-
-                        try {
-
-                            sessionStorage.setItem('voidz-show-welcome', '1')
-
-                        } catch {}
-
-                        window.location.href = '/'
-
+                        goToDashboard()
                         return
-
                     }
 
-                    errorBox.textContent = data.error || 'Login failed.'
-                    errorBox.classList.add('show')
+                    if (ok && data.twoFactorRequired) {
+                        form.style.display = 'none'
+                        twoFactorForm.style.display = 'block'
+                        codeInput.value = ''
+                        codeInput.focus()
+                        return
+                    }
 
+                    showError(data.error || 'Login failed.')
                     submitBtn.disabled = false
                     submitBtn.textContent = 'Log In'
 
                 })
                 .catch(() => {
-
-                    errorBox.textContent = 'Could not reach the server. Try again.'
-                    errorBox.classList.add('show')
-
+                    showError('Could not reach the server. Try again.')
                     submitBtn.disabled = false
                     submitBtn.textContent = 'Log In'
-
                 })
 
         })
+
+        // Stage 2: the authenticator (or backup) code.
+        twoFactorForm.addEventListener('submit', event => {
+
+            event.preventDefault()
+            clearError()
+
+            verifyBtn.disabled = true
+            verifyBtn.textContent = 'Verifying...'
+
+            const code = codeInput.value.trim()
+
+            fetch('/login/2fa', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code })
+            })
+                .then(response => response.json().then(data => ({ ok: response.ok, status: response.status, data })))
+                .then(({ ok, status, data }) => {
+
+                    verifyBtn.disabled = false
+                    verifyBtn.textContent = 'Verify'
+
+                    if (ok && data.ok) {
+                        // Code approved - ask about trusting this device.
+                        twoFactorForm.style.display = 'none'
+                        stayStep.style.display = 'block'
+                        return
+                    }
+
+                    showError(data.error || 'Invalid code.')
+
+                    // Lockout / timeout: the pending login is gone, send
+                    // them back to the start.
+                    if (status === 429 || status === 400) {
+                        twoFactorForm.style.display = 'none'
+                        form.style.display = 'block'
+                        submitBtn.disabled = false
+                        submitBtn.textContent = 'Log In'
+                    }
+
+                })
+                .catch(() => {
+                    verifyBtn.disabled = false
+                    verifyBtn.textContent = 'Verify'
+                    showError('Could not reach the server. Try again.')
+                })
+
+        })
+
+        backToLoginBtn.addEventListener('click', () => {
+            clearError()
+            twoFactorForm.style.display = 'none'
+            form.style.display = 'block'
+            submitBtn.disabled = false
+            submitBtn.textContent = 'Log In'
+        })
+
+        // Stage 3: "stay logged in?" box. Either answer finishes the
+        // login and goes to the dashboard; "yes" also trusts this device.
+        function finishWithTrust(trust) {
+
+            stayYesBtn.disabled = true
+            stayNoBtn.disabled = true
+
+            fetch('/login/trust', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ trust })
+            })
+                .then(() => goToDashboard())
+                .catch(() => goToDashboard())
+
+        }
+
+        stayYesBtn.addEventListener('click', () => finishWithTrust(true))
+        stayNoBtn.addEventListener('click', () => finishWithTrust(false))
 
     </script>
 

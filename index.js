@@ -202,6 +202,35 @@ function buildCodeEmailHtml({ heading, intro, code, note }) {
 </html>`
 }
 
+// Security-alert email (new login from an untrusted device). `when` and
+// `ip` are server-generated; no untrusted interpolation.
+function buildAlertEmailHtml(when, ip) {
+    return `<!doctype html>
+<html>
+<body style="margin:0;padding:0;background:#f4f4f7;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:32px 16px;font-family:Arial,Helvetica,sans-serif;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:460px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e6eb;">
+        <tr><td style="background:#6366f1;padding:20px 28px;">
+          <span style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:-0.3px;">Voidz.IO</span>
+        </td></tr>
+        <tr><td style="padding:28px;">
+          <h1 style="margin:0 0 10px;font-size:18px;color:#14151a;">New login detected</h1>
+          <p style="margin:0 0 18px;font-size:14px;line-height:1.5;color:#55566a;">A login to your Voidz.IO dashboard just completed from a device that wasn't already trusted.</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;border:1px solid #e5e6eb;border-radius:12px;padding:4px 14px;margin:0 0 18px;">
+            <tr><td style="padding:8px 0;font-size:13px;color:#8b8d98;">Time</td><td style="padding:8px 0;font-size:13px;color:#14151a;text-align:right;font-weight:bold;">${when}</td></tr>
+            <tr><td style="padding:8px 0;font-size:13px;color:#8b8d98;border-top:1px solid #e5e6eb;">IP address</td><td style="padding:8px 0;font-size:13px;color:#14151a;text-align:right;font-weight:bold;border-top:1px solid #e5e6eb;">${ip}</td></tr>
+          </table>
+          <p style="margin:0;font-size:13px;line-height:1.5;color:#8b8d98;">If this was you, no action is needed. If not, open the dashboard, hit the <strong style="color:#e11d48;">Panic</strong> button in Settings &rarr; Account, and change your password.</p>
+        </td></tr>
+      </table>
+      <p style="max-width:460px;margin:16px auto 0;font-size:11px;color:#b0b2bd;text-align:center;">Voidz.IO Dashboard &middot; automated security email</p>
+    </td></tr>
+  </table>
+</body>
+</html>`
+}
+
 // ============================================================
 // LEGACY DEFAULT BOT
 // ============================================================
@@ -310,6 +339,7 @@ const APP_LOG_FILE = path.join(__dirname, 'app.log')
 const USERS_FILE = path.join(__dirname, 'users.json')
 const BOT_CONFIGS_FILE = path.join(__dirname, 'bot-configs.json')
 const TWO_FACTOR_FILE = path.join(__dirname, 'two-factor.json')
+const LOGIN_LOG_FILE = path.join(__dirname, 'login-log.json')
 const LOGS_DIR = path.join(__dirname, 'logs')
 const AUTH_CACHE_DIR = path.join(__dirname, 'auth_cache')
 const PUBLIC_DIR = path.join(__dirname, 'public')
@@ -793,6 +823,57 @@ function clearTrustedDevices(username) {
     saveTwoFactor(store)
 }
 
+// --- Login activity log + new-device email alerts ---
+
+const LOGIN_LOG_MAX = 50 // keep the last N events per account
+
+function loadLoginLog() {
+    try {
+        const parsed = JSON.parse(fs.readFileSync(LOGIN_LOG_FILE, 'utf8'))
+        return (parsed && typeof parsed === 'object') ? parsed : {}
+    } catch {
+        return {}
+    }
+}
+
+function saveLoginLog(log) {
+    try {
+        fs.writeFileSync(LOGIN_LOG_FILE, JSON.stringify(log, null, 2))
+    } catch (error) {
+        appLog(`[LOGIN-LOG] Failed to save: ${error.message}`)
+    }
+}
+
+// event: { outcome, method?, ip, newDevice? }. Newest kept first, capped.
+function recordLoginEvent(username, event) {
+    if (!username) return
+    const log = loadLoginLog()
+    if (!Array.isArray(log[username])) log[username] = []
+    log[username].unshift({ at: new Date().toISOString(), ...event })
+    log[username] = log[username].slice(0, LOGIN_LOG_MAX)
+    saveLoginLog(log)
+}
+
+function getLoginActivity(username) {
+    const log = loadLoginLog()
+    return Array.isArray(log[username]) ? log[username] : []
+}
+
+// Fire-and-forget email when a login completes from a device that wasn't
+// already trusted. Never throws (a mail hiccup must not break login).
+function maybeSendLoginAlert(username, ip) {
+    if (!mailConfigured()) return
+    const record = getTwoFactorRecord(username)
+    if (!record || !record.recoveryEmail || record.loginAlerts === false) return
+    const when = new Date().toUTCString()
+    sendMail(
+        record.recoveryEmail,
+        'New login to your Voidz.IO dashboard',
+        `A login to your Voidz.IO dashboard just completed from a device that wasn't already trusted.\n\nTime: ${when}\nIP: ${ip}\n\nIf this was you, nothing to do. If not, open the dashboard, hit the Panic button in Settings, and change your password.`,
+        buildAlertEmailHtml(when, ip)
+    ).catch(error => appLog(`Login alert email failed for ${username}: ${error.message}`))
+}
+
 // --- Email recovery (optional second recovery path for 2FA) ---
 
 const RECOVERY_CODE_TTL_MS = 10 * 60 * 1000       // codes valid 10 minutes
@@ -844,6 +925,9 @@ function verifyRecoveryEmail(username, code) {
         return false
     }
     record.recoveryEmail = record.pendingEmail.email
+    // New-device login alerts default ON once there's an address to send
+    // them to; the admin can turn them off from Settings.
+    if (record.loginAlerts === undefined) record.loginAlerts = true
     delete record.pendingEmail
     saveTwoFactor(store)
     return true
@@ -5668,7 +5752,7 @@ app.post('/login', rateLimitPreAuth, (req, res) => {
     // post-auth session ID is never one an attacker could have planted
     // beforehand (session-fixation protection). Only after the fresh
     // session exists do we mark it authenticated and persist it.
-    const establishLogin = resolvedUsername => {
+    const establishLogin = (resolvedUsername, meta = {}) => {
 
         req.session.regenerate(regenError => {
 
@@ -5689,6 +5773,7 @@ app.post('/login', rateLimitPreAuth, (req, res) => {
                     return res.status(500).json({ error: 'Login failed, please try again.' })
                 }
 
+                recordLoginEvent(resolvedUsername, { outcome: 'success', method: meta.method || 'password', ip, newDevice: !!meta.newDevice })
                 appLog(`Dashboard login: ${resolvedUsername}`)
                 res.json({ ok: true })
 
@@ -5705,8 +5790,9 @@ app.post('/login', rateLimitPreAuth, (req, res) => {
     const afterPassword = resolvedUsername => {
 
         const trustToken = readCookies(req)[TRUSTED_DEVICE_COOKIE]
+        const has2fa = isTwoFactorEnabled(resolvedUsername)
 
-        if (isTwoFactorEnabled(resolvedUsername) && !hasValidTrustedDevice(resolvedUsername, trustToken)) {
+        if (has2fa && !hasValidTrustedDevice(resolvedUsername, trustToken)) {
 
             req.session.regenerate(regenError => {
 
@@ -5732,7 +5818,10 @@ app.post('/login', rateLimitPreAuth, (req, res) => {
 
         }
 
-        establishLogin(resolvedUsername)
+        // Logging straight in: either no 2FA, or a trusted device skipped
+        // the code. A trusted-device skip is still a known device, so no
+        // new-login alert.
+        establishLogin(resolvedUsername, { method: has2fa ? 'trusted-device' : 'password', newDevice: false })
 
     }
 
@@ -5745,6 +5834,17 @@ app.post('/login', rateLimitPreAuth, (req, res) => {
 
     if (user && verifyPassword(password || '', user.salt, user.hash)) {
         return afterPassword(user.username)
+    }
+
+    // Wrong password on an account that actually exists is worth logging
+    // (someone guessing a real account's password); unknown usernames are
+    // skipped so a scanner can't flood the log with junk.
+    const knownName = (String(username || '').toLowerCase() === DASHBOARD_USERNAME.toLowerCase())
+        ? DASHBOARD_USERNAME
+        : (user ? user.username : null)
+
+    if (knownName) {
+        recordLoginEvent(knownName, { outcome: 'bad-password', ip })
     }
 
     recordFailedLogin(ip)
@@ -5778,7 +5878,7 @@ app.post('/login/2fa', rateLimitPreAuth, (req, res) => {
     const record = getTwoFactorRecord(pendingUser)
     const stillNeeds2fa = !TWO_FACTOR_DISABLED && record && record.enabled && record.secret
 
-    const finishLogin = () => {
+    const finishLogin = (meta = {}) => {
 
         req.session.regenerate(regenError => {
 
@@ -5796,6 +5896,10 @@ app.post('/login/2fa', rateLimitPreAuth, (req, res) => {
                 if (saveError) {
                     return res.status(500).json({ error: 'Login failed, please try again.' })
                 }
+                recordLoginEvent(pendingUser, { outcome: 'success', method: meta.method || 'authenticator', ip, newDevice: !!meta.newDevice })
+                // This login came through the 2FA step, i.e. NOT a trusted
+                // device - exactly the "new device signed in" case to alert on.
+                if (meta.alert) maybeSendLoginAlert(pendingUser, ip)
                 appLog(`Dashboard login (2FA): ${pendingUser}`)
                 res.json({ ok: true })
             })
@@ -5807,15 +5911,19 @@ app.post('/login/2fa', rateLimitPreAuth, (req, res) => {
     // 2FA was turned off (or DISABLE_2FA set) between password and code -
     // nothing to verify, just finish.
     if (!stillNeeds2fa) {
-        return finishLogin()
+        return finishLogin({ method: 'password', newDevice: false, alert: false })
     }
 
     const code = String(req.body?.code || '').trim()
-    const codeOk = verifyTotp(record.secret, code) ||
-        verifyRecoveryLoginCode(pendingUser, code) ||
-        consumeBackupCode(pendingUser, code)
 
-    if (!codeOk) {
+    let method = null
+    if (verifyTotp(record.secret, code)) method = 'authenticator'
+    else if (verifyRecoveryLoginCode(pendingUser, code)) method = 'recovery-email'
+    else if (consumeBackupCode(pendingUser, code)) method = 'backup-code'
+
+    if (!method) {
+
+        recordLoginEvent(pendingUser, { outcome: 'bad-2fa', ip })
 
         req.session.twoFactorFails = (req.session.twoFactorFails || 0) + 1
 
@@ -5832,7 +5940,7 @@ app.post('/login/2fa', rateLimitPreAuth, (req, res) => {
 
     }
 
-    finishLogin()
+    finishLogin({ method, newDevice: true, alert: true })
 
 })
 
@@ -6637,13 +6745,41 @@ app.post('/api/account/password', (req, res) => {
 
 app.get('/api/2fa/status', (req, res) => {
     const email = getRecoveryEmail(req.session.username)
+    const record = getTwoFactorRecord(req.session.username)
     res.json({
         isAdmin: req.session.username === DASHBOARD_USERNAME,
         enabled: isTwoFactorEnabled(req.session.username),
         disabledByEnv: TWO_FACTOR_DISABLED,
         emailConfigured: mailConfigured(),
-        recoveryEmail: email ? maskEmail(email) : null
+        recoveryEmail: email ? maskEmail(email) : null,
+        loginAlerts: record ? record.loginAlerts !== false : true
     })
+})
+
+// Toggle new-device login-alert emails.
+app.post('/api/2fa/login-alerts', (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can manage 2FA.' })
+    }
+
+    const store = loadTwoFactor()
+    const record = store[req.session.username]
+
+    if (!record) {
+        return res.status(400).json({ error: 'Enable 2FA first.' })
+    }
+
+    record.loginAlerts = !!req.body?.enabled
+    saveTwoFactor(store)
+
+    res.json({ ok: true, loginAlerts: record.loginAlerts })
+
+})
+
+// The signed-in account's own recent login activity (any user).
+app.get('/api/login-activity', (req, res) => {
+    res.json({ events: getLoginActivity(req.session.username) })
 })
 
 // Recovery email: start verification by emailing a 6-digit code to the

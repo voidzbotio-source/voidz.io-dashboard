@@ -6086,6 +6086,21 @@
                     Signed in as the admin account &mdash; password changes aren't available here. Edit DASHBOARD_PASSWORD in your .env file instead.
                 </div>
 
+                <div class="settings-section">
+
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                        <span>Recent login activity</span>
+                    </div>
+
+                    <p class="settings-section-desc">The last logins and failed attempts on your account. Spot anything you didn't do? Change your password (and use Panic if 2FA is on).</p>
+
+                    <div id="loginActivityList" class="team-body scroll" style="max-height: 220px;">
+                        <div class="empty-state">Loading&hellip;</div>
+                    </div>
+
+                </div>
+
                 <div id="twoFactorSection" class="settings-section" style="display: none;">
 
                     <div class="settings-section-header">
@@ -6164,6 +6179,10 @@
 
                         <div id="recoveryEmailCurrent" style="display: none;">
                             <p class="settings-hint" style="margin-bottom: 10px;">Current recovery email: <strong id="recoveryEmailMasked"></strong></p>
+                            <label style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; cursor: pointer; font-size: 13px; color: var(--text);">
+                                <input type="checkbox" id="loginAlertsToggle" onchange="toggleLoginAlerts(this.checked)">
+                                <span>Email me when a new device signs in</span>
+                            </label>
                             <button class="modal-ok" id="recoveryEmailTestBtn" onclick="sendRecoveryTest()" style="width: 100%; margin-bottom: 8px;">Send test email</button>
                             <button class="modal-ok" onclick="removeRecoveryEmail()" style="width: 100%; background: transparent; color: var(--muted); border-color: var(--border);">Remove recovery email</button>
                         </div>
@@ -7042,6 +7061,8 @@
                 })
                 .catch(() => {})
 
+            loadLoginActivity()
+
             $('settingsModalOverlay')?.classList.add('show')
 
         }
@@ -7236,11 +7257,71 @@
 
             if (status.recoveryEmail) {
                 $('recoveryEmailMasked').textContent = status.recoveryEmail
+                $('loginAlertsToggle').checked = status.loginAlerts !== false
                 recoveryEmailShow('recoveryEmailCurrent')
             } else {
                 $('recoveryEmailInput').value = ''
                 recoveryEmailShow('recoveryEmailAdd')
             }
+
+        }
+
+        function toggleLoginAlerts(enabled) {
+            fetch('/api/2fa/login-alerts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled })
+            })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok }) => {
+                    showToast(enabled ? 'New-device login alerts on.' : 'New-device login alerts off.', ok ? 'success' : 'error')
+                })
+                .catch(() => showToast('Could not update that setting.', 'error'))
+        }
+
+        const LOGIN_OUTCOME_LABELS = { 'success': 'Signed in', 'bad-password': 'Wrong password', 'bad-2fa': 'Wrong 2FA code' }
+        const LOGIN_METHOD_LABELS = { 'authenticator': 'authenticator', 'recovery-email': 'email code', 'backup-code': 'backup code', 'trusted-device': 'trusted device', 'password': 'password' }
+
+        function loadLoginActivity() {
+
+            const container = $('loginActivityList')
+            if (!container) return
+
+            fetch('/api/login-activity')
+                .then(response => response.json())
+                .then(data => {
+
+                    const events = Array.isArray(data.events) ? data.events : []
+
+                    if (!events.length) {
+                        container.innerHTML = '<div class="empty-state">No login activity yet.</div>'
+                        return
+                    }
+
+                    container.innerHTML = events.map(e => {
+
+                        const ok = e.outcome === 'success'
+                        const label = LOGIN_OUTCOME_LABELS[e.outcome] || e.outcome
+                        const method = ok ? (LOGIN_METHOD_LABELS[e.method] || '') : ''
+                        const when = e.at ? new Date(e.at).toLocaleString() : ''
+                        const color = ok ? 'var(--green)' : 'var(--red)'
+
+                        return `
+                            <div class="autoinvite-row">
+                                <span class="member-dot" style="background: ${color};"></span>
+                                <div style="flex: 1; min-width: 0;">
+                                    <div style="font-size: 13px; color: var(--text);">${escapeHtml(label)}${method ? ` <span style="color: var(--muted);">&middot; ${escapeHtml(method)}</span>` : ''}${e.newDevice ? ' <span style="color: var(--orange);">&middot; new device</span>' : ''}</div>
+                                    <div style="font-size: 11px; color: var(--muted);">${escapeHtml(when)} &middot; ${escapeHtml(e.ip || '?')}</div>
+                                </div>
+                            </div>
+                        `
+
+                    }).join('')
+
+                })
+                .catch(() => {
+                    container.innerHTML = '<div class="empty-state">Could not load activity.</div>'
+                })
 
         }
 

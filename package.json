@@ -12,10 +12,11 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "bedrock-protocol": "^3.60.1",
+    "bedrock-protocol": "^3.61.0",
     "canvas": "^3.2.3",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
+    "minecraft-data": "^3.119.0",
     "mineflayer": "^4.37.1",
     "nodemailer": "^10.3.1",
     "prismarine-viewer": "^1.33.0",

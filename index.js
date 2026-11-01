@@ -4897,17 +4897,51 @@ class BotSession {
         this.bedrockSpawned = false
         this.bedrockPlayers.clear()
 
-        this.log(`Connecting (Bedrock) to ${this.config.host}:${this.config.port}...`)
+        const host = this.config.host
+        const port = this.config.port || 19132
 
-        originalLog(`[${new Date().toLocaleString()}] [${this.username}] Connecting (Bedrock) to ${this.config.host}:${this.config.port}...`)
+        this.log(`Connecting (Bedrock) to ${host}:${port}...`)
+
+        originalLog(`[${new Date().toLocaleString()}] [${this.username}] Connecting (Bedrock) to ${host}:${port}...`)
+
+        // Ping first. A wrong host/port is by far the most common reason
+        // a Bedrock connect just silently hangs on "connecting" - the
+        // RakNet layer keeps re-sending open-connection requests forever
+        // with no error. A ping either confirms there's a real Bedrock
+        // server there (and tells us its version, for the matching
+        // protocol) or fails fast with a clear message.
+        try {
+            const info = await Promise.race([
+                bedrock.ping({ host, port }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timed out')), 8000))
+            ])
+            this.log(`Bedrock server found: "${info.motd}" (v${info.version}, ${info.playersOnline}/${info.playersMax} online).`)
+        } catch (pingError) {
+            this.log(`Could not reach a Bedrock server at ${host}:${port} (${pingError.message}). For FlareMC LifeSteal, use host bedrock.flaremc.org and port 19132 - java.flaremc.org:25565 is Java-only.`)
+            io.to(this.username).emit('notice', { type: 'error', text: `Bedrock: can't reach ${host}:${port}. FlareMC LifeSteal Bedrock = bedrock.flaremc.org : 19132 (not the Java address).` })
+            this.setState('OFFLINE')
+            this.currentWorld = 'Disconnected'
+            this.updateDashboard()
+            if (!this.shuttingDown && this.botEnabled && !this.reconnectTimer) {
+                this.reconnectTimer = setTimeout(() => { this.reconnectTimer = null; this.connect() }, RECONNECT_DELAY)
+            }
+            return
+        }
+
+        if (this.shuttingDown || !this.botEnabled) return
 
         const profilesFolder = path.join(AUTH_CACHE_DIR, `${this.username}-bedrock`)
         fs.mkdirSync(profilesFolder, { recursive: true })
 
+        // No explicit `version` - bedrock-protocol negotiates it from its
+        // own ping during connect, picking the server's protocol as long
+        // as the installed library supports it (FlareMC LifeSteal runs a
+        // recent one, which is why bedrock-protocol/minecraft-data are
+        // kept up to date).
         this.bot = bedrock.createClient({
 
-            host: this.config.host,
-            port: this.config.port || 19132,
+            host,
+            port,
             username: this.config.microsoftEmail,
             profilesFolder,
             raknetBackend: 'jsp-raknet',
@@ -4928,12 +4962,26 @@ class BotSession {
 
         })
 
+        // Watchdog: if we pinged fine and started a client but never reach
+        // 'spawn' within 45s (silent kick, version mismatch, auth stall),
+        // don't sit in CONNECTING forever - tear it down and let the
+        // normal reconnect loop retry.
+        if (this.bedrockSpawnWatchdog) clearTimeout(this.bedrockSpawnWatchdog)
+        this.bedrockSpawnWatchdog = setTimeout(() => {
+            if (this.bedrockSpawned || !this.bot) return
+            this.log('Bedrock: reached the server but never finished joining within 45s (possible version mismatch or sign-in not completed). Retrying.')
+            io.to(this.username).emit('notice', { type: 'error', text: 'Bedrock: reached the server but could not finish joining. Retrying.' })
+            try { this.bot.disconnect('join timeout') } catch {}
+        }, 45000)
+
         this.bot.on('join', () => {
             this.setState('LOGGED IN')
             this.log('Minecraft (Bedrock) login successful.')
         })
 
         this.bot.on('spawn', () => {
+
+            if (this.bedrockSpawnWatchdog) { clearTimeout(this.bedrockSpawnWatchdog); this.bedrockSpawnWatchdog = null }
 
             this.connectedAt = Date.now()
             this.reconnectDelay = RECONNECT_DELAY
@@ -5043,6 +5091,8 @@ class BotSession {
         })
 
         this.bot.on('close', () => {
+
+            if (this.bedrockSpawnWatchdog) { clearTimeout(this.bedrockSpawnWatchdog); this.bedrockSpawnWatchdog = null }
 
             this.stopJqRetry()
             this.stopHomeTimer()

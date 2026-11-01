@@ -6137,7 +6137,11 @@
 
                     <div id="twoFactorDisablePanel" style="display: none;">
 
-                        <div class="field">
+                        <p class="settings-section-desc">Panic: if you think someone may have access, this logs you out everywhere and forces the authenticator code on the next login &mdash; even on devices you'd trusted for 72 hours.</p>
+
+                        <button class="modal-ok" id="twoFactorPanicBtn" onclick="panicTwoFactor()" style="width: 100%; margin-bottom: 16px; background: var(--red); color: #fff; border-color: var(--red); font-weight: 800;">Panic &mdash; log out &amp; require 2FA</button>
+
+                        <div class="field" style="padding-top: 14px; border-top: 1px solid var(--border);">
                             <label for="twoFactorDisableCode">Enter a current code to turn 2FA off</label>
                             <input id="twoFactorDisableCode" type="text" inputmode="numeric" autocomplete="off" placeholder="6-digit or backup code">
                         </div>
@@ -7313,6 +7317,21 @@
                     btn.textContent = 'Verify & save'
                     recoveryEmailError('Could not reach the server.')
                 })
+
+        }
+
+        async function panicTwoFactor() {
+
+            const ok = await openConfirmModal(
+                'This logs you out now and requires your authenticator code the next time you log in, even on devices trusted for 72 hours. Continue?',
+                'Panic logout'
+            )
+
+            if (!ok) return
+
+            fetch('/api/2fa/panic', { method: 'POST' })
+                .then(() => { window.location.href = '/login' })
+                .catch(() => { window.location.href = '/login' })
 
         }
 

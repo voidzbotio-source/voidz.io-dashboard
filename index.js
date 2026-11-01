@@ -782,6 +782,17 @@ function hasValidTrustedDevice(username, token) {
     return record.trustedDevices.some(d => d.tokenHash === wanted)
 }
 
+// Revokes every trusted device at once (the panic button) - after this,
+// no browser can skip the authenticator code, even one still inside its
+// 72h window.
+function clearTrustedDevices(username) {
+    const store = loadTwoFactor()
+    const record = store[username]
+    if (!record) return
+    record.trustedDevices = []
+    saveTwoFactor(store)
+}
+
 // --- Email recovery (optional second recovery path for 2FA) ---
 
 const RECOVERY_CODE_TTL_MS = 10 * 60 * 1000       // codes valid 10 minutes
@@ -6752,6 +6763,29 @@ app.post('/api/2fa/recovery-email/test', async (req, res) => {
     }
 
     res.json({ ok: true, recoveryEmail: maskEmail(email) })
+
+})
+
+// Panic button: immediately end this session AND revoke every trusted
+// device, so the next login requires the full authenticator code even on
+// a browser that was inside its 72h trust window.
+app.post('/api/2fa/panic', (req, res) => {
+
+    if (!req.session?.loggedIn || !req.session.username) {
+        return res.status(401).json({ error: 'Not logged in.' })
+    }
+
+    const username = req.session.username
+
+    clearTrustedDevices(username)
+
+    appLog(`Panic triggered by ${username}: trusted devices revoked, session ended.`)
+
+    req.session.destroy(() => {
+        res.clearCookie('connect.sid')
+        res.clearCookie(TRUSTED_DEVICE_COOKIE)
+        res.json({ ok: true })
+    })
 
 })
 

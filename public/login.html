@@ -549,7 +549,25 @@
                 Back
             </button>
 
+            <button id="recoveryToggle" type="button" style="background: transparent; color: var(--muted); border: none; margin-top: 10px; padding: 4px; font-size: 12px; font-weight: 600; text-decoration: underline;">
+                I don't have my phone / backup code
+            </button>
+
         </form>
+
+        <div id="recoveryHelp" style="display: none; margin-top: 2px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-2);">
+
+            <p style="margin: 0 0 10px; font-weight: 700; font-size: 13.5px;">Locked out of 2FA?</p>
+
+            <p class="hint" style="margin: 0 0 10px;">For security there's no way to skip the code from this screen. Since you run the dashboard, you recover it from the server:</p>
+
+            <p class="hint" style="margin: 0 0 8px;">1. In the dashboard's <strong>.env</strong> file, add <code style="background: var(--panel); padding: 1px 5px; border-radius: 5px;">DISABLE_2FA=true</code> and restart it. You'll then log in with just your password.</p>
+
+            <p class="hint" style="margin: 0 0 10px;">2. Afterwards, open Settings &rarr; Account to set 2FA up again (scan a fresh QR), then remove that line and restart.</p>
+
+            <p class="hint" style="margin: 0;">Alternatively, delete <code style="background: var(--panel); padding: 1px 5px; border-radius: 5px;">two-factor.json</code> on the server and restart.</p>
+
+        </div>
 
         <div id="stayLoggedInStep" style="display: none;">
 
@@ -745,6 +763,8 @@
         const codeInput = document.getElementById('code')
         const verifyBtn = document.getElementById('verifyBtn')
         const backToLoginBtn = document.getElementById('backToLoginBtn')
+        const recoveryToggle = document.getElementById('recoveryToggle')
+        const recoveryHelp = document.getElementById('recoveryHelp')
 
         const stayStep = document.getElementById('stayLoggedInStep')
         const stayYesBtn = document.getElementById('stayYesBtn')
@@ -863,9 +883,17 @@
         backToLoginBtn.addEventListener('click', () => {
             clearError()
             twoFactorForm.style.display = 'none'
+            recoveryHelp.style.display = 'none'
             form.style.display = 'block'
             submitBtn.disabled = false
             submitBtn.textContent = 'Log In'
+        })
+
+        // Purely informational - reveals how to recover from the server
+        // side. There is deliberately no way to skip the code here.
+        recoveryToggle.addEventListener('click', () => {
+            const showing = recoveryHelp.style.display === 'block'
+            recoveryHelp.style.display = showing ? 'none' : 'block'
         })
 
         // Stage 3: "stay logged in?" box. Either answer finishes the

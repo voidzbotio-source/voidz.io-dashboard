@@ -4080,6 +4080,28 @@ class BotSession {
 
     }
 
+    // Manual "Check BM" (Quick Actions): opens /bm right now and buys a
+    // tracked item if one's in stock, regardless of the auto-buy toggle
+    // (that toggle only controls buying automatically on a restock). Uses
+    // the configured item list, or the defaults if none set.
+    checkBlackMarketNow() {
+
+        if (this.config.platform === 'bedrock') {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Black Market auto-buy is Java-only.' })
+            return
+        }
+
+        if (!this.bot || !this.bot.entity) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Start the bot and get it online first.' })
+            return
+        }
+
+        io.to(this.username).emit('notice', { type: 'info', text: '🛒 Checking the Black Market…' })
+        this.log('Manual Black Market check triggered from Quick Actions.')
+        this.autoBuyBlackMarket()
+
+    }
+
     // Auto-clicks through the Black Market's buy flow for each
     // tracked item the instant a restock is announced, instead of
     // just pinging and hoping a human reacts fast enough - limited
@@ -4136,6 +4158,11 @@ class BotSession {
 
         }
 
+        const countItem = name =>
+            (this.bot?.inventory?.items() || [])
+                .filter(i => i.name === name)
+                .reduce((sum, i) => sum + (i.count || 0), 0)
+
         this.log('Black Market auto-buy: opening /bm...')
 
         // /bm not opening any window at all (market currently closed -
@@ -4171,47 +4198,65 @@ class BotSession {
                 this.log(`Black Market auto-buy: ${label} in stock - buying it.`)
             }
 
-            const confirmTimeout = setTimeout(() => {
-                this.bot?.removeListener('windowOpen', confirmListener)
-                this.log(`Black Market auto-buy: clicked ${label} but no confirm dialog appeared within 5s.`)
-            }, 5000)
+            // How many of this item we hold BEFORE buying - the purchase is
+            // confirmed (and logged) by this going up, which is the only
+            // reliable signal here: this Black Market sends no "you bought
+            // X" chat, and the GUI confirm layout can't be assumed.
+            const beforeCount = countItem(itemName)
 
+            // If a confirm dialog opens after clicking the item, click its
+            // confirm button the instant it's there. The dialog's slots can
+            // arrive a tick after it opens, so retry briefly rather than
+            // giving up on the first empty read.
+            let confirmClicked = false
             const confirmListener = confirmWindow => {
 
-                clearTimeout(confirmTimeout)
-
-                // Confirmed: the confirm dialog's "yes" button is
-                // minecraft:lime_wool (a wall of green blocks vs.
-                // a wall of red cancel blocks) - checked first,
-                // with the text match kept as a fallback in case
-                // this screen ever uses a different confirm item.
-                const confirmTarget = findMatch(confirmWindow, /confirm|purchase|buy|yes/i, 'lime_wool')
-
-                if (!confirmTarget) {
-
-                    this.log(`Black Market auto-buy: confirm dialog opened for ${label} but no obvious confirm button found in it - not guessing a slot, purchase NOT completed.`)
-
-                    io.to(this.username).emit('notice', { type: 'error', text: `Black Market: confirm dialog layout unrecognized for ${label} - check it manually, nothing was clicked.` })
-
-                    return
-
+                let tries = 0
+                const tryConfirm = () => {
+                    if (confirmClicked || !this.bot) return
+                    const confirmTarget = findMatch(confirmWindow, /confirm|purchase|buy|yes/i, 'lime_wool')
+                    if (confirmTarget) {
+                        confirmClicked = true
+                        this.bot.clickWindow(confirmTarget.index, 0, 0).catch(() => {})
+                        this.log(`Black Market auto-buy: clicked confirm for ${label}.`)
+                        return
+                    }
+                    if (tries++ < 8) setTimeout(tryConfirm, 150)
+                    else this.log(`Black Market auto-buy: confirm dialog for ${label} had no recognizable confirm button.`)
                 }
-
-                this.bot?.clickWindow(confirmTarget.index, 0, 0).catch(() => {})
-
-                this.log(`Black Market auto-buy: ${label} purchase confirmed.`)
-
-                io.to(this.username).emit('notice', { type: 'success', text: `🛒 Black Market: ${label} auto-purchased!` })
-
-                this.blackMarketPurchaseHistory.push({ itemId: `minecraft:${itemName}`, label, timestamp: Date.now() })
-                this.blackMarketPurchaseHistory = this.blackMarketPurchaseHistory.slice(-25)
-                saveBlackMarketPurchaseHistory(this.username, this.blackMarketPurchaseHistory)
+                tryConfirm()
 
             }
 
             this.bot.once('windowOpen', confirmListener)
+            const confirmListenerCleanup = setTimeout(() => this.bot?.removeListener('windowOpen', confirmListener), 5000)
 
+            // Click the item. Some shops buy on this single click, others
+            // pop a confirm dialog (handled above) - either way, whether
+            // the purchase actually happened is decided by the inventory
+            // check below, not by which path the GUI took.
             this.bot.clickWindow(target.index, 0, 0).catch(() => {})
+
+            // Poll for the item to actually arrive (inventory packets come
+            // a beat after the purchase). Logs only on a real increase, so
+            // every genuine purchase is recorded and failed clicks aren't.
+            let checks = 0
+            const verify = () => {
+                if (!this.bot) return
+                const now = countItem(itemName)
+                if (now > beforeCount) {
+                    clearTimeout(confirmListenerCleanup)
+                    this.log(`Black Market auto-buy: ${label} purchased (inventory +${now - beforeCount}).`)
+                    io.to(this.username).emit('notice', { type: 'success', text: `🛒 Black Market: ${label} auto-purchased!` })
+                    this.blackMarketPurchaseHistory.push({ itemId: `minecraft:${itemName}`, label, timestamp: Date.now() })
+                    this.blackMarketPurchaseHistory = this.blackMarketPurchaseHistory.slice(-25)
+                    saveBlackMarketPurchaseHistory(this.username, this.blackMarketPurchaseHistory)
+                    return
+                }
+                if (checks++ < 12) setTimeout(verify, 400)
+                else this.log(`Black Market auto-buy: clicked ${label} but it never arrived in inventory - likely didn't go through.`)
+            }
+            setTimeout(verify, 300)
 
         }
 
@@ -5741,6 +5786,7 @@ function handleWebCommand(username, command) {
         case 'recover': botSession.manualRecovery(); break
         case 'rejoin': botSession.manualRejoin(); break
         case 'reset-team-history': botSession.resetTeamHistory(); break
+        case 'check-bm': botSession.checkBlackMarketNow(); break
         case 'stop-bot': botSession.stopBotRemote(); break
 
         default:

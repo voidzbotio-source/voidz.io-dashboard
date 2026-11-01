@@ -8926,6 +8926,42 @@
 
         }
 
+        // Delegated handlers for the per-member rank select and Kick
+        // button. Delegation on the persistent #teamBody container means
+        // these survive every innerHTML re-render of the roster, and the
+        // member name is read as a plain string from data-member instead
+        // of being baked into an inline handler - no way for a crafted
+        // name to break out into executable code.
+        (function wireTeamMemberControls() {
+
+            const body = $('teamBody')
+
+            if (!body) return
+
+            body.addEventListener('change', event => {
+
+                const select = event.target.closest('.team-member-rank-select')
+
+                if (!select || !body.contains(select)) return
+
+                setPermRank(select.dataset.member || '', select.value)
+
+            })
+
+            body.addEventListener('click', event => {
+
+                const btn = event.target.closest('.team-member-kick')
+
+                if (!btn || !body.contains(btn)) return
+
+                const name = btn.dataset.member || ''
+
+                sendCommand(`kick-player ${name}`, { confirm: `Kick ${name} from the team?` })
+
+            })
+
+        })()
+
         // Icon + color-key per role group, matched loosely against
         // FlareMC's usual labels (Leaders/Officers/Members) so an
         // unfamiliar label still falls back to something sane instead
@@ -9028,16 +9064,23 @@
 
                                                 const permRank = getPermRank(member.name)
 
+                                                // Name goes into data-member (a quote-safe
+                                                // attribute now that escapeHtml escapes
+                                                // quotes) and is read back as a plain string
+                                                // by the delegated handlers on #teamBody -
+                                                // never interpolated into an inline onclick/
+                                                // onchange JS string, which HTML-entity
+                                                // escaping can't safely protect.
                                                 return `
                                                     <div class="team-member">
                                                         <span class="member-dot ${statusClass}"></span>
                                                         <span class="team-member-name">${escapeHtml(member.name)}</span>
-                                                        <select class="team-member-rank-select" title="Permanent rank - re-promoted automatically if they rejoin" onchange="setPermRank('${escapeHtml(member.name)}', this.value)">
+                                                        <select class="team-member-rank-select" data-member="${escapeHtml(member.name)}" title="Permanent rank - re-promoted automatically if they rejoin">
                                                             <option value="" ${!permRank ? 'selected' : ''}>No perm rank</option>
                                                             <option value="officer" ${permRank === 'officer' ? 'selected' : ''}>Perm Officer</option>
                                                             <option value="captain" ${permRank === 'captain' ? 'selected' : ''}>Perm Captain</option>
                                                         </select>
-                                                        <button class="team-member-kick" onclick="sendCommand('kick-player ${escapeHtml(member.name)}', { confirm: 'Kick ${escapeHtml(member.name)} from the team?' })" title="Kick from team">Kick</button>
+                                                        <button class="team-member-kick" data-member="${escapeHtml(member.name)}" title="Kick from team">Kick</button>
                                                     </div>
                                                 `
 
@@ -10353,15 +10396,19 @@
             text
         ) {
 
-            const div =
-                document.createElement(
-                    'div'
-                )
-
-            div.textContent =
-                text
-
-            return div.innerHTML
+            // Escapes the quote characters too, not just < > &. Game-
+            // derived strings (player/team names, chat, KOTH text) get
+            // dropped into HTML *attribute* values in several places
+            // (title="...", data-...="..."); a textContent round-trip
+            // alone leaves " and ' intact, which would let a crafted
+            // value break out of an attribute. Explicit replacement
+            // closes that for every attribute-context use at once.
+            return String(text ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;')
 
         }
 

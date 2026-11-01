@@ -100,6 +100,29 @@ const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || 'changeme'
 const SESSION_SECRET = process.env.SESSION_SECRET || 'please-change-this-session-secret'
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes of inactivity
 
+// Refuse to start with the shipped placeholder credentials/secret. Left
+// at their defaults, anyone could log in as admin (changeme) and - with
+// the publicly-known SESSION_SECRET - forge their own valid session
+// cookies without logging in at all. A misdeployed-without-.env instance
+// must fail loudly, not silently run wide open. Set ALLOW_INSECURE_DEFAULTS=true
+// only for throwaway local testing.
+if (process.env.ALLOW_INSECURE_DEFAULTS !== 'true') {
+
+    const insecure = []
+
+    if (DASHBOARD_PASSWORD === 'changeme') insecure.push('DASHBOARD_PASSWORD is still "changeme"')
+    if (SESSION_SECRET === 'please-change-this-session-secret') insecure.push('SESSION_SECRET is still the shipped placeholder')
+
+    if (insecure.length > 0) {
+        console.error('\n[FATAL] Refusing to start with insecure default credentials:')
+        for (const problem of insecure) console.error(`  - ${problem}`)
+        console.error('\nSet real values in your .env file (see .env.example), or set')
+        console.error('ALLOW_INSECURE_DEFAULTS=true for throwaway local testing only.\n')
+        process.exit(1)
+    }
+
+}
+
 // ============================================================
 // LEGACY DEFAULT BOT
 // ============================================================
@@ -218,8 +241,24 @@ fs.mkdirSync(AUTH_CACHE_DIR, { recursive: true })
 
 const app = express()
 const server = http.createServer(app)
-const io = new Server(server, { cors: { origin: '*' } })
+
+// The dashboard page and its Socket.IO connection are served from this
+// same origin, so Socket.IO's default same-origin policy is exactly
+// what we want. The previous `cors: { origin: '*' }` let any website
+// open a cross-origin socket to this server - pointless for a single-
+// origin app and a needlessly wide surface, so it's removed.
+const io = new Server(server)
 const WEB_PORT = 3000
+
+// Set COOKIE_SECURE=true when serving this behind HTTPS (directly or via
+// a TLS-terminating reverse proxy) so the session cookie is never sent
+// over plaintext HTTP. Off by default so a plain-HTTP local/dev instance
+// still works; with a proxy, trust it so secure-cookie detection works.
+const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true'
+
+if (COOKIE_SECURE) {
+    app.set('trust proxy', 1)
+}
 
 const sessionMiddleware = session({
     secret: SESSION_SECRET,
@@ -232,6 +271,7 @@ const sessionMiddleware = session({
     cookie: {
         maxAge: SESSION_TIMEOUT_MS,
         httpOnly: true,
+        secure: COOKIE_SECURE,
         sameSite: 'lax'
     }
 })
@@ -3011,6 +3051,13 @@ class BotSession {
         if (!match) return
 
         const username = match[1].trim()
+
+        // The captured name goes into a /t promote command below, so
+        // only ever act on something that's actually a valid Minecraft
+        // username - never pass arbitrary parsed chat text into a
+        // command the bot runs.
+        if (!/^[a-zA-Z0-9_]{1,16}$/.test(username)) return
+
         const list = Array.isArray(this.config.permRanks) ? this.config.permRanks : []
 
         const entry = list.find(item => (item?.name || '').toLowerCase() === username.toLowerCase())
@@ -5219,33 +5266,49 @@ app.post('/login', rateLimitPreAuth, (req, res) => {
 
     const { username, password } = req.body || {}
 
+    // Regenerate the session on every successful login so the
+    // post-auth session ID is never one an attacker could have planted
+    // beforehand (session-fixation protection). Only after the fresh
+    // session exists do we mark it authenticated and persist it.
+    const establishLogin = resolvedUsername => {
+
+        req.session.regenerate(regenError => {
+
+            if (regenError) {
+                appLog(`Session regenerate failed for ${resolvedUsername}: ${regenError.message}`)
+                return res.status(500).json({ error: 'Login failed, please try again.' })
+            }
+
+            clearLoginAttempts(ip)
+
+            req.session.loggedIn = true
+            req.session.username = resolvedUsername
+
+            req.session.save(saveError => {
+
+                if (saveError) {
+                    appLog(`Session save failed for ${resolvedUsername}: ${saveError.message}`)
+                    return res.status(500).json({ error: 'Login failed, please try again.' })
+                }
+
+                appLog(`Dashboard login: ${resolvedUsername}`)
+                res.json({ ok: true })
+
+            })
+
+        })
+
+    }
+
     if (username === DASHBOARD_USERNAME && password === DASHBOARD_PASSWORD) {
-
-        clearLoginAttempts(ip)
-
-        req.session.loggedIn = true
-        req.session.username = username
-
-        appLog(`Dashboard login: ${username}`)
-
-        return res.json({ ok: true })
-
+        return establishLogin(username)
     }
 
     const users = loadUsers()
     const user = findUser(users, username)
 
     if (user && verifyPassword(password || '', user.salt, user.hash)) {
-
-        clearLoginAttempts(ip)
-
-        req.session.loggedIn = true
-        req.session.username = user.username
-
-        appLog(`Dashboard login: ${user.username}`)
-
-        return res.json({ ok: true })
-
+        return establishLogin(user.username)
     }
 
     recordFailedLogin(ip)

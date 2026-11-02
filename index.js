@@ -3884,11 +3884,117 @@ class BotSession {
 
     }
 
-    // Backup kick (Java): whispers arrive as a chat line like "X whispers
-    // to you: ...", so parse the sender/message out first.
-    checkBackupKick(text) {
+    // Java: whispers arrive as a chat line like "X whispers to you: ...",
+    // so parse the sender/message out first, then dispatch.
+    checkWhisperCommand(text) {
         const parsed = parseIncomingWhisper(text)
-        if (parsed) this.applyBackupKick(parsed.sender, parsed.message)
+        if (parsed) this.handleWhisperCommand(parsed.sender, parsed.message)
+    }
+
+    // Replies to a whisper via /msg, one line per message, staggered so the
+    // server's chat anti-spam doesn't mute the bot. Capped and truncated.
+    whisperReply(sender, lines) {
+        if (!this.bot) return
+        lines.slice(0, 6).forEach((line, i) => {
+            setTimeout(() => {
+                if (this.bot) this.sendMinecraftChat(`/msg ${sender} ${String(line).slice(0, 230)}`)
+            }, i * 450)
+        })
+    }
+
+    whisperStatusLines() {
+        const online = !!(this.bot && this.bot.entity)
+        const hp = online && this.bot.health != null ? `${Math.round(this.bot.health)}/${Math.round(this.getMaxHealth() || 20)}` : '-'
+        const food = online && this.bot.food != null ? this.bot.food : '-'
+        const ping = online && typeof this.bot.player?.ping === 'number' ? `${this.bot.player.ping}ms` : '-'
+        return [
+            `Voidz.IO — ${this.botState} | ${this.currentWorld}`,
+            `HP ${hp} | Food ${food} | Ping ${ping} | Up ${this.formatUptime()}`
+        ]
+    }
+
+    whisperTeamLines() {
+        const h = this.teamRoster && this.teamRoster.header
+        if (!h) return ['No team info captured yet — try again shortly.']
+        return [`Team ${h.name || '?'} | Size ${h.current ?? '?'}/${h.max ?? '?'} | ${h.points ?? '?'} pts`]
+    }
+
+    // Remote control by /msg. A trusted teammate whispers the bot a command
+    // and the bot replies (info commands) or acts (hub/afk/ls) - and still
+    // handles the backup-kick code word. Gated to trusted teammates + a
+    // short per-sender cooldown so it can't be spammed into a mute.
+    handleWhisperCommand(sender, message) {
+
+        sender = String(sender || '').trim()
+        message = String(message || '').trim()
+
+        if (!/^[A-Za-z0-9_]{1,16}$/.test(sender)) return
+        if (sender.toLowerCase() === (this.bot?.username || '').toLowerCase()) return
+        if (!this.isTrustedTeammate(sender)) return
+
+        const now = Date.now()
+        if (!this.whisperCmdCooldown) this.whisperCmdCooldown = new Map()
+        if (now - (this.whisperCmdCooldown.get(sender.toLowerCase()) || 0) < 1500) return
+        this.whisperCmdCooldown.set(sender.toLowerCase(), now)
+
+        const cmd = message.toLowerCase()
+        const word = cmd.split(/\s+/)[0]
+
+        switch (word) {
+
+            case 'cmdhelp':
+            case 'commands':
+            case 'help':
+                this.whisperReply(sender, ['Commands (whisper me): cmdhelp, status, players, where, keys, team, hub, afk, ls'])
+                return
+
+            case 'status':
+                this.whisperReply(sender, this.whisperStatusLines())
+                return
+
+            case 'players':
+                this.whisperReply(sender, [`Players visible: ${this.getVisiblePlayers().length}`])
+                return
+
+            case 'where':
+                this.whisperReply(sender, [`World: ${this.currentWorld} | State: ${this.botState}`])
+                return
+
+            case 'keys': {
+                const k = this.getKeyAmounts ? this.getKeyAmounts() : null
+                this.whisperReply(sender, k
+                    ? [`Keys — Vote ${k.vote}, Exclusive ${k.exclusive}, Insane ${k.insane} | KOTH Starters ${k.lantern}`]
+                    : ['Keys unavailable right now.'])
+                return
+            }
+
+            case 'team':
+                this.whisperReply(sender, this.whisperTeamLines())
+                return
+
+            case 'hub':
+                this.whisperReply(sender, ['On it — going to hub.'])
+                this.goHub()
+                return
+
+            case 'afk':
+                this.whisperReply(sender, ['On it — going AFK.'])
+                this.goAfk()
+                return
+
+            case 'ls':
+            case 'lifesteal':
+                this.whisperReply(sender, ['On it — heading to LifeSteal.'])
+                this.manualLifeSteal()
+                return
+
+        }
+
+        // Not a named command - fall through to the backup-kick code word.
+        if (cmd.includes(BACKUP_KICK_CODEWORD)) {
+            this.applyBackupKick(sender, message)
+        }
+
     }
 
     // Checks every badge definition against the current lifetime
@@ -4991,7 +5097,7 @@ class BotSession {
             this.checkTeamDeath(text)
             this.checkNemesisDeath(text)
             this.checkBlackMarket(text)
-            this.checkBackupKick(text)
+            this.checkWhisperCommand(text)
 
             // Action bar text ('game_info') refreshes far too often to
             // show in the chat feed, but is worth its own read-only
@@ -5389,9 +5495,9 @@ class BotSession {
             if (packet.type === 'chat' || packet.type === 'whisper' || packet.type === 'announcement') {
 
                 // On Bedrock a whisper arrives already split into sender +
-                // message, so the backup kick can check it directly.
+                // message, so the command handler can take it directly.
                 if (packet.type === 'whisper') {
-                    this.applyBackupKick(packet.source_name, text)
+                    this.handleWhisperCommand(packet.source_name, text)
                 }
 
                 this.broadcastChat(packet.source_name || 'Unknown', text)

@@ -5995,6 +5995,19 @@ app.get('/favicon.svg', (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'favicon.svg'))
 })
 
+// PWA files, served before the auth gate so the browser can fetch them
+// (and show the install prompt / home-screen icon) on the login page too.
+app.get('/manifest.json', (req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, 'manifest.json'))
+})
+
+app.get('/sw.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript')
+    res.sendFile(path.join(PUBLIC_DIR, 'sw.js'))
+})
+
+app.use('/icons', express.static(path.join(PUBLIC_DIR, 'icons')))
+
 app.post('/login', rateLimitPreAuth, (req, res) => {
 
     const ip = req.ip

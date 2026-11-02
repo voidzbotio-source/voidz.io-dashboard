@@ -16,11 +16,24 @@
 
     <!-- Installable as an app (Add to Home Screen) -->
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#0a0a12">
-    <link rel="apple-touch-icon" href="/favicon.svg">
+    <meta name="theme-color" content="#6366f1">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Voidz.IO">
+
+    <script>
+        // Registers the service worker so the dashboard is installable as
+        // an app. Service workers only run over HTTPS (or localhost), so
+        // this is a no-op on plain HTTP - it starts working once the site
+        // is behind TLS.
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(() => {})
+            })
+        }
+    </script>
 
     <!-- ================================================== -->
     <!-- FONT -->

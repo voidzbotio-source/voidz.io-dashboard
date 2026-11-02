@@ -4232,19 +4232,81 @@ class BotSession {
 
         if (!/black market has now opened/i.test(text)) return
 
-        this.log('Black Market opened - pinging Discord.')
-
-        sendDiscordWebhook(
-            this.config.discordWebhookUrl,
-            'The Black Market has reset',
-            this.config.discordRoleId
-        )
+        this.log('Black Market opened - reading stock & pinging Discord.')
 
         io.to(this.username).emit('notice', { type: 'info', text: '🛒 Black Market has opened - limited stock!' })
 
+        // Open /bm to read what's actually in stock, then ping Discord with
+        // the list. If auto-buy is on, it reopens /bm shortly after (the
+        // small delay lets this read window settle first).
+        this.pingBlackMarketStock()
+
         if (this.config.blackMarketAutoBuy) {
-            this.autoBuyBlackMarket()
+            setTimeout(() => { if (this.bot) this.autoBuyBlackMarket() }, 1500)
         }
+
+    }
+
+    // Reads every item in /bm (container slots only, not the bot's own
+    // inventory), skipping GUI filler. Returns [{ name, count }].
+    readBlackMarketStock(shopWindow) {
+
+        const end = typeof shopWindow.inventoryStart === 'number' ? shopWindow.inventoryStart : shopWindow.slots.length
+        const FILLER = /glass_pane|^barrier$|^air$/
+
+        const seen = new Set()
+        const out = []
+
+        for (let i = 0; i < end; i++) {
+            const item = shopWindow.slots[i]
+            if (!item) continue
+            if (FILLER.test(item.name)) continue
+            const name = String(item.displayName || item.name || '').replace(/§./g, '').trim()
+            if (!name) continue
+            const key = `${name.toLowerCase()}`
+            if (seen.has(key)) continue
+            seen.add(key)
+            out.push({ name, count: item.count || 1 })
+            if (out.length >= 40) break
+        }
+
+        return out
+
+    }
+
+    // Opens /bm, reads the stock, and sends the Discord ping with the item
+    // list. Falls back to a plain ping if the shop can't be opened/read.
+    pingBlackMarketStock() {
+
+        if (!this.bot) return
+
+        const webhook = this.config.discordWebhookUrl
+        const role = this.config.discordRoleId
+
+        const timeout = setTimeout(() => {
+            this.bot?.removeListener('windowOpen', shopListener)
+            this.log('Black Market: could not open /bm to read stock - pinging without the item list.')
+            sendDiscordWebhook(webhook, 'The Black Market has reset!', role)
+        }, 5000)
+
+        const shopListener = shopWindow => {
+
+            clearTimeout(timeout)
+
+            const stock = this.readBlackMarketStock(shopWindow)
+
+            const body = stock.length
+                ? `The Black Market has reset! In stock:\n${stock.map(i => `• ${i.name}${i.count > 1 ? ` x${i.count}` : ''}`).join('\n')}`
+                : 'The Black Market has reset!'
+
+            sendDiscordWebhook(webhook, body, role)
+
+            this.log(`Black Market stock: ${stock.map(i => i.name).join(', ') || '(none read)'}`)
+
+        }
+
+        this.bot.once('windowOpen', shopListener)
+        this.sendMinecraftChat('/bm')
 
     }
 

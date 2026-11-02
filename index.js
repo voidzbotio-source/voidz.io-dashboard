@@ -3876,10 +3876,11 @@ class BotSession {
         if (sender.toLowerCase() === (this.bot?.username || '').toLowerCase()) return
         if (!this.isTrustedTeammate(sender)) return
 
-        this.log(`Backup kick: ${sender} sent the code word via /msg - kicking from team.`)
-        io.to(this.username).emit('notice', { type: 'info', text: `🔒 Backup kick: ${sender} used the code word — kicking them from the team.` })
+        this.log(`Backup kick: ${sender} sent the code word via /msg - kicking and reinviting.`)
+        io.to(this.username).emit('notice', { type: 'info', text: `🔒 Backup kick: ${sender} used the code word — kicking and reinviting.` })
 
         this.sendMinecraftChat(`/t kick ${sender}`)
+        setTimeout(() => { if (this.bot) this.sendMinecraftChat(`/t invite ${sender}`) }, 350)
 
     }
 

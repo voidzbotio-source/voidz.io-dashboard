@@ -1774,6 +1774,10 @@ function cleanMessage(text) {
 // such as "see" - keep that in mind when choosing one.)
 const BACKUP_KICK_CODEWORD = 'ee'
 
+// Fixed passcode for the `sudo` whisper command. A sender whispers this to
+// unlock 3 sudo commands for 5 minutes. Override with SUDO_PASSCODE in .env.
+const SUDO_PASSCODE = String(process.env.SUDO_PASSCODE || '291226')
+
 // Detects an incoming private message TO the bot and returns
 // { sender, message }, or null. Covers the common /msg display formats;
 // the exact one varies per server, so several patterns are tried.
@@ -3954,14 +3958,15 @@ class BotSession {
             return
         }
 
-        // Locked - issue a challenge. Code is shown on the dashboard only.
+        // Locked - the sender needs the passcode. Queue the command so it
+        // runs the moment they send it. Nothing is shown anywhere: the
+        // passcode is a fixed secret they're expected to already know.
         if (!this.sudoPending) this.sudoPending = new Map()
-        const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0')
-        this.sudoPending.set(key, { code, payload, expiresAt: now + 5 * 60 * 1000 })
+        this.sudoPending.set(key, { payload, expiresAt: now + 5 * 60 * 1000 })
 
-        io.to(this.username).emit('notice', { type: 'info', text: `🔑 Sudo code for ${sender}: ${code} — valid 5 min (tell them to whisper it).`, logActivity: true })
-        this.whisperReply(sender, ['Sudo is locked. Whisper the 6-digit code shown on the owner\'s dashboard to unlock it (3 commands / 5 min).'])
-        this.log(`Sudo challenge issued for ${sender} (code on dashboard).`)
+        io.to(this.username).emit('notice', { type: 'info', text: `🔑 ${sender} is trying to sudo — awaiting passcode.` })
+        this.whisperReply(sender, ['Sudo is locked. Whisper the passcode to unlock it (3 commands / 5 min).'])
+        this.log(`Sudo challenge issued for ${sender} (awaiting passcode).`)
 
     }
 
@@ -3975,28 +3980,21 @@ class BotSession {
         this.whisperReply(sender, [`Done.${auth.usesLeft > 0 ? ` ${auth.usesLeft} sudo use${auth.usesLeft === 1 ? '' : 's'} left.` : ' That was your last use.'}`])
     }
 
-    // Answering a sudo passcode challenge: on the right code, unlock 3 uses
-    // for 5 minutes and run the command that triggered the challenge.
+    // Whispering the passcode unlocks 3 sudo uses for 5 minutes and runs any
+    // command that was queued by a locked sudo. A wrong passcode only gets a
+    // reply if a sudo was actually pending (so stray number whispers are
+    // ignored).
     trySudoUnlock(sender, code) {
 
-        if (!this.sudoPending) return
         const key = sender.toLowerCase()
-        const pending = this.sudoPending.get(key)
+        const pending = this.sudoPending && this.sudoPending.get(key)
 
-        if (!pending) return
-
-        if (pending.expiresAt < Date.now()) {
-            this.sudoPending.delete(key)
-            this.whisperReply(sender, ['That sudo code expired — send your sudo command again for a new one.'])
+        if (String(code) !== SUDO_PASSCODE) {
+            if (pending) this.whisperReply(sender, ['Wrong passcode.'])
             return
         }
 
-        if (String(code) !== pending.code) {
-            this.whisperReply(sender, ['Wrong code.'])
-            return
-        }
-
-        this.sudoPending.delete(key)
+        if (pending) this.sudoPending.delete(key)
 
         if (!this.sudoAuth) this.sudoAuth = new Map()
         const auth = { until: Date.now() + 5 * 60 * 1000, usesLeft: 3 }
@@ -4005,8 +4003,9 @@ class BotSession {
         this.log(`Sudo unlocked for ${sender}.`)
         this.whisperReply(sender, ['Sudo unlocked — 3 commands for 5 minutes.'])
 
-        // Run the command that triggered the challenge (uses one of the 3).
-        if (pending.payload) {
+        // Run the command that triggered the challenge, if one was queued and
+        // hasn't expired (uses one of the 3).
+        if (pending && pending.payload && pending.expiresAt >= Date.now()) {
             this.runSudo(sender, pending.payload, auth)
         }
 
@@ -4033,9 +4032,9 @@ class BotSession {
         const cmd = message.toLowerCase()
         const word = cmd.split(/\s+/)[0]
 
-        // Whispering just a 6-digit number (or "code 123456") is treated as
-        // answering a pending sudo passcode challenge.
-        const codeEntry = message.trim().match(/^(?:code\s+)?(\d{6})$/i)
+        // Whispering just the passcode (optionally "code <passcode>") is
+        // treated as unlocking sudo.
+        const codeEntry = message.trim().match(/^(?:code\s+)?(\d{4,12})$/i)
         if (codeEntry) {
             this.trySudoUnlock(sender, codeEntry[1])
             return

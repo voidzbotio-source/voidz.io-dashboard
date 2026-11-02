@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voidz.IO — Setup</title>
+<style>
+    * { box-sizing: border-box; }
+    body {
+        margin: 0; min-height: 100vh;
+        display: flex; align-items: center; justify-content: center;
+        background: #0b0c10; color: #eceef2;
+        font-family: 'Segoe UI', Arial, sans-serif;
+        padding: 24px;
+    }
+    .card {
+        width: 100%; max-width: 420px;
+        background: #17181e; border: 1px solid #262731;
+        border-top: 4px solid #6366f1; border-radius: 18px;
+        padding: 32px 28px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .logo {
+        width: 42px; height: 42px; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(135deg, #6366f1, #c084fc);
+        color: #fff; font-weight: 700; font-size: 18px;
+    }
+    h1 { margin: 0; font-size: 19px; }
+    p.sub { margin: 3px 0 0; color: #8b8d98; font-size: 13px; }
+    label { display: block; margin: 20px 0 6px; font-size: 11px; font-weight: 700; color: #8b8d98; text-transform: uppercase; letter-spacing: 0.06em; }
+    input {
+        width: 100%; padding: 12px 14px; font-size: 15px;
+        background: #1b1c23; color: #eceef2;
+        border: 1px solid #262731; border-radius: 12px; outline: none;
+    }
+    input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.2); }
+    .hint { margin: 8px 0 0; color: #8b8d98; font-size: 12px; }
+    button {
+        width: 100%; margin-top: 20px; padding: 13px;
+        background: #6366f1; color: #fff; font-size: 14px; font-weight: 700;
+        border: none; border-radius: 12px; cursor: pointer;
+    }
+    button:hover { opacity: 0.9; }
+    .err { display: none; margin-top: 12px; color: #f87171; font-size: 13px; }
+</style>
+</head>
+<body>
+    <div class="card">
+        <div class="brand">
+            <div class="logo">V</div>
+            <div>
+                <h1>Voidz.IO</h1>
+                <p class="sub">Connect to your dashboard</p>
+            </div>
+        </div>
+
+        <label for="url">Dashboard address</label>
+        <input id="url" type="text" placeholder="http://your-server-ip:3000" autocomplete="off" spellcheck="false">
+        <p class="hint">The address you normally open in your browser — your server's IP (or domain) and port, e.g. <b>http://193.123.59.142:3000</b>.</p>
+
+        <button id="connectBtn">Connect</button>
+        <div id="err" class="err"></div>
+    </div>
+
+    <script>
+        const input = document.getElementById('url')
+        const btn = document.getElementById('connectBtn')
+        const err = document.getElementById('err')
+
+        input.focus()
+
+        async function connect() {
+            err.style.display = 'none'
+            const value = input.value.trim()
+            if (!value) { err.textContent = 'Enter the dashboard address.'; err.style.display = 'block'; return }
+            btn.disabled = true; btn.textContent = 'Connecting…'
+            try {
+                const result = await window.voidz.saveUrl(value)
+                if (!result || !result.ok) {
+                    err.textContent = (result && result.error) || 'Could not connect.'
+                    err.style.display = 'block'
+                    btn.disabled = false; btn.textContent = 'Connect'
+                }
+            } catch {
+                err.textContent = 'Something went wrong.'
+                err.style.display = 'block'
+                btn.disabled = false; btn.textContent = 'Connect'
+            }
+        }
+
+        btn.addEventListener('click', connect)
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') connect() })
+    </script>
+</body>
+</html>

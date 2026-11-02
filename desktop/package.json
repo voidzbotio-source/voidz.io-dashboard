@@ -1,0 +1,17 @@
+{
+  "name": "voidz-desktop",
+  "productName": "Voidz.IO",
+  "version": "1.0.0",
+  "description": "Desktop window for the Voidz.IO dashboard",
+  "main": "main.js",
+  "author": "Voidz.IO",
+  "license": "ISC",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-packager . \"Voidz.IO\" --platform=win32 --arch=x64 --out=dist --overwrite --electron-version=33.2.1 --ignore=\"(node_modules|dist|\\.gitignore)\""
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "33.2.1"
+  }
+}

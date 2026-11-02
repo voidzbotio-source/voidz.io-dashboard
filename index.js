@@ -4266,7 +4266,7 @@ class BotSession {
 
         io.to(this.username).emit('notice', { type: 'info', text: '🛒 Checking the Black Market…' })
         this.log('Manual Black Market check triggered from Quick Actions.')
-        this.autoBuyBlackMarket()
+        this.autoBuyBlackMarket(true)
 
     }
 
@@ -4293,7 +4293,7 @@ class BotSession {
     // (an even gamble between them) to buy. It does NOT try to buy every
     // tracked item; a second purchase in the same window isn't possible
     // anyway, and attempting it just wastes the one pick.
-    autoBuyBlackMarket() {
+    autoBuyBlackMarket(manual = false) {
 
         if (!this.bot) return
 
@@ -4339,6 +4339,9 @@ class BotSession {
         const shopTimeout = setTimeout(() => {
             this.bot?.removeListener('windowOpen', shopListener)
             this.log('Black Market auto-buy: no shop window opened within 5s (market likely closed) - skipping.')
+            if (manual) {
+                io.to(this.username).emit('notice', { type: 'info', text: '🛒 The Black Market isn\'t open right now — nothing to buy.' })
+            }
         }, 5000)
 
         const shopListener = shopWindow => {
@@ -4352,6 +4355,9 @@ class BotSession {
 
             if (inStock.length === 0) {
                 this.log('Black Market auto-buy: none of the tracked items are in stock - nothing to buy.')
+                if (manual) {
+                    io.to(this.username).emit('notice', { type: 'info', text: '🛒 Black Market is open, but none of your tracked items are in stock.' })
+                }
                 return
             }
 

@@ -4936,7 +4936,7 @@ class BotSession {
                 if (!this.bot) return
                 this.sendMinecraftChat(`@${answer}`)
                 this.recordChatGame('Math', answer)
-            }, 25000)
+            }, 20000)
 
             return
 
@@ -4964,7 +4964,7 @@ class BotSession {
                 if (!this.bot) return
                 this.sendMinecraftChat(`@${stripped}`)
                 this.recordChatGame('Replication', stripped)
-            }, 25000)
+            }, 20000)
 
             return
 
@@ -4999,7 +4999,7 @@ class BotSession {
                 if (!this.bot) return
                 this.sendMinecraftChat(`@${answer}`)
                 this.recordChatGame('Blanks', answer)
-            }, 25000)
+            }, 20000)
 
             return
 

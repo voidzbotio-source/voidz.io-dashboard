@@ -4934,7 +4934,7 @@ class BotSession {
             this.triviaTimer = setTimeout(() => {
                 this.triviaTimer = null
                 if (!this.bot) return
-                this.sendMinecraftChat(`@${answer}`)
+                this.sendMinecraftChat(`@ ${answer}`)
                 this.recordChatGame('Math', answer)
             }, 20000)
 
@@ -4962,7 +4962,7 @@ class BotSession {
             this.triviaTimer = setTimeout(() => {
                 this.triviaTimer = null
                 if (!this.bot) return
-                this.sendMinecraftChat(`@${stripped}`)
+                this.sendMinecraftChat(`@ ${stripped}`)
                 this.recordChatGame('Replication', stripped)
             }, 20000)
 
@@ -4997,7 +4997,7 @@ class BotSession {
             this.triviaTimer = setTimeout(() => {
                 this.triviaTimer = null
                 if (!this.bot) return
-                this.sendMinecraftChat(`@${answer}`)
+                this.sendMinecraftChat(`@ ${answer}`)
                 this.recordChatGame('Blanks', answer)
             }, 20000)
 

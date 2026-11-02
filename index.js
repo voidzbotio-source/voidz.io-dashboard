@@ -4727,7 +4727,7 @@ class BotSession {
         const w = this.bmViewWindow
         if (!w) return
         const end = typeof w.inventoryStart === 'number' ? w.inventoryStart : w.slots.length
-        const FILLER = /glass_pane|^barrier$|^air$/
+        const FILLER = /glass_pane|^barrier$|^air$|^amethyst_shard$/
         const slots = []
         for (let i = 0; i < end; i++) {
             const item = w.slots[i]

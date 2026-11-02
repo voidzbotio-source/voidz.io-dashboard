@@ -1767,6 +1767,43 @@ function cleanMessage(text) {
 
 }
 
+// Backup kick: if a teammate privately messages the bot something that
+// contains this code word, the bot kicks them from the team - a manual
+// fallback for the low-HP auto-kick. Substring match (not exact), case-
+// insensitive. (Short code words like "ee" also match inside normal words
+// such as "see" - keep that in mind when choosing one.)
+const BACKUP_KICK_CODEWORD = 'ee'
+
+// Detects an incoming private message TO the bot and returns
+// { sender, message }, or null. Covers the common /msg display formats;
+// the exact one varies per server, so several patterns are tried.
+function parseIncomingWhisper(rawText) {
+
+    const text = cleanMessage(rawText)
+
+    const patterns = [
+        /^([A-Za-z0-9_]{1,16}) whispers(?: to you)?:\s?(.*)$/i,
+        /^([A-Za-z0-9_]{1,16}) -> ?(?:me|you):?\s?(.*)$/i,
+        /^\[([A-Za-z0-9_]{1,16}) ?-> ?(?:me|you)\]\s?(.*)$/i,
+        /^([A-Za-z0-9_]{1,16}) [→»>] ?[Yy]ou:?\s?(.*)$/,
+        /^\(?from\)? ([A-Za-z0-9_]{1,16}\)?:?\s?)(.*)$/i,
+        /^from ([A-Za-z0-9_]{1,16}):\s?(.*)$/i
+    ]
+
+    for (const pattern of patterns) {
+        const match = text.match(pattern)
+        if (match) {
+            // the "(from X)" pattern captures group 1 with trailing junk - normalize
+            const sender = String(match[1]).replace(/[^A-Za-z0-9_].*$/, '').trim()
+            const message = String(match[2] || '').trim()
+            if (sender) return { sender, message }
+        }
+    }
+
+    return null
+
+}
+
 // Join/left/kicked broadcasts (reinvite and the Kick button both
 // trigger these) are already reflected in the Team card's roster and
 // the new Team Activity Log, so they're just noise in the live Chat
@@ -3816,6 +3853,43 @@ class BotSession {
 
     }
 
+    // True if this name is a teammate we trust for the backup kick - on
+    // the team roster OR on the Auto-Invite list. Gating to trusted names
+    // stops a random enemy from spamming the code word to make the bot
+    // spam /t kick (which would just get the bot muted).
+    isTrustedTeammate(name) {
+        if (this.isTeamMember(name)) return true
+        const list = Array.isArray(this.config.autoReinvite) ? this.config.autoReinvite : []
+        const lower = name.toLowerCase()
+        return list.some(entry => String((typeof entry === 'string' ? entry : entry?.name) || '').toLowerCase() === lower)
+    }
+
+    // Core of the backup kick: given a sender + their private message, kick
+    // them if it carries the code word and they're a trusted teammate.
+    applyBackupKick(sender, message) {
+
+        sender = String(sender || '').trim()
+        message = String(message || '')
+
+        if (!/^[A-Za-z0-9_]{1,16}$/.test(sender)) return
+        if (!message.toLowerCase().includes(BACKUP_KICK_CODEWORD)) return
+        if (sender.toLowerCase() === (this.bot?.username || '').toLowerCase()) return
+        if (!this.isTrustedTeammate(sender)) return
+
+        this.log(`Backup kick: ${sender} sent the code word via /msg - kicking from team.`)
+        io.to(this.username).emit('notice', { type: 'info', text: `🔒 Backup kick: ${sender} used the code word — kicking them from the team.` })
+
+        this.sendMinecraftChat(`/t kick ${sender}`)
+
+    }
+
+    // Backup kick (Java): whispers arrive as a chat line like "X whispers
+    // to you: ...", so parse the sender/message out first.
+    checkBackupKick(text) {
+        const parsed = parseIncomingWhisper(text)
+        if (parsed) this.applyBackupKick(parsed.sender, parsed.message)
+    }
+
     // Checks every badge definition against the current lifetime
     // counters and unlocks any that just became true. Called after
     // whatever counter it might affect changes (a KOTH capture, a new
@@ -4916,6 +4990,7 @@ class BotSession {
             this.checkTeamDeath(text)
             this.checkNemesisDeath(text)
             this.checkBlackMarket(text)
+            this.checkBackupKick(text)
 
             // Action bar text ('game_info') refreshes far too often to
             // show in the chat feed, but is worth its own read-only
@@ -5311,6 +5386,12 @@ class BotSession {
             if (!text.trim()) return
 
             if (packet.type === 'chat' || packet.type === 'whisper' || packet.type === 'announcement') {
+
+                // On Bedrock a whisper arrives already split into sender +
+                // message, so the backup kick can check it directly.
+                if (packet.type === 'whisper') {
+                    this.applyBackupKick(packet.source_name, text)
+                }
 
                 this.broadcastChat(packet.source_name || 'Unknown', text)
                 return

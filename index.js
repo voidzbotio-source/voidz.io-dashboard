@@ -1844,6 +1844,48 @@ function sendDiscordWebhook(webhookUrl, content, roleId) {
 
 }
 
+// Item/block display names for the "Blanks" trivia game (a hangman-style
+// mask, e.g. "P_tt_d Cl_s_d E_el_ss_m" -> "Potted Closed Eyeblossom"),
+// generated from Minecraft's en_us.json lang file (see
+// minecraft-item-names.json). Regenerate that file for a newer version if
+// trivia uses items it predates.
+let MINECRAFT_ITEM_NAMES = []
+try {
+    MINECRAFT_ITEM_NAMES = JSON.parse(fs.readFileSync(path.join(__dirname, 'minecraft-item-names.json'), 'utf8'))
+} catch (error) {
+    console.error('[STARTUP] Could not load minecraft-item-names.json - Blanks trivia will have no wordlist.', error.message)
+}
+
+// Returns every item name whose shape matches the masked line (same word
+// count, same length per word, and every revealed letter matching).
+function findBlanksCandidates(maskedLine) {
+
+    const maskWords = maskedLine.split(' ').filter(Boolean)
+
+    return MINECRAFT_ITEM_NAMES.filter(name => {
+
+        const nameWords = name.split(' ')
+
+        if (nameWords.length !== maskWords.length) return false
+
+        return maskWords.every((mask, i) => {
+
+            const word = nameWords[i]
+
+            if (mask.length !== word.length) return false
+
+            for (let c = 0; c < mask.length; c++) {
+                if (mask[c] !== '_' && mask[c].toLowerCase() !== word[c].toLowerCase()) return false
+            }
+
+            return true
+
+        })
+
+    })
+
+}
+
 function containsLifeSteal(text) {
 
     const normalized = cleanMessage(text).toLowerCase()
@@ -4888,6 +4930,39 @@ class BotSession {
             this.triviaTimer = setTimeout(() => {
                 this.triviaTimer = null
                 if (this.bot) this.sendMinecraftChat(`@${stripped}`)
+            }, 25000)
+
+            return
+
+        }
+
+        if (this.triviaActiveType === 'blanks') {
+
+            // The masked question (e.g. "D__m_nd _re") shares the CHAT GAME
+            // prefix; strip it and keep only lines that look like a mask
+            // (letters + underscores, with at least one blank).
+            const stripped = cleaned.replace(/^CHAT GAME\W*/i, '')
+
+            if (stripped === cleaned || !stripped) return
+            if (!/^_*[A-Za-z][A-Za-z_]*(?: _*[A-Za-z][A-Za-z_]*)*$/.test(stripped)) return
+            if (!stripped.includes('_')) return
+
+            const candidates = findBlanksCandidates(stripped)
+
+            if (candidates.length === 0) return
+
+            // One match -> that answer; a few -> list up to 3 so the team
+            // can pick. Posted to team chat after the same delay.
+            const answer = candidates.length === 1 ? candidates[0] : candidates.slice(0, 3).join(', ')
+
+            this.triviaActiveType = null
+
+            this.log(`Trivia (Blanks): mask "${stripped}" -> ${candidates.length} candidate(s): ${answer}`)
+
+            this.cancelPendingTrivia()
+            this.triviaTimer = setTimeout(() => {
+                this.triviaTimer = null
+                if (this.bot) this.sendMinecraftChat(`@${answer}`)
             }, 25000)
 
             return

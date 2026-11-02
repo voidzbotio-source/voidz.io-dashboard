@@ -4861,7 +4861,7 @@ class BotSession {
             this.cancelPendingTrivia()
             this.triviaTimer = setTimeout(() => {
                 this.triviaTimer = null
-                if (this.bot) this.sendMinecraftChat(`!${answer}`)
+                if (this.bot) this.sendMinecraftChat(`@${answer}`)
             }, 25000)
 
             return
@@ -4887,7 +4887,7 @@ class BotSession {
             this.cancelPendingTrivia()
             this.triviaTimer = setTimeout(() => {
                 this.triviaTimer = null
-                if (this.bot) this.sendMinecraftChat(`!${stripped}`)
+                if (this.bot) this.sendMinecraftChat(`@${stripped}`)
             }, 25000)
 
             return

@@ -3853,15 +3853,17 @@ class BotSession {
 
     }
 
-    // True if this name is a teammate we trust for the backup kick - on
-    // the team roster OR on the Auto-Invite list. Gating to trusted names
-    // stops a random enemy from spamming the code word to make the bot
-    // spam /t kick (which would just get the bot muted).
-    isTrustedTeammate(name) {
-        if (this.isTeamMember(name)) return true
+    isOnAutoReinvite(name) {
         const list = Array.isArray(this.config.autoReinvite) ? this.config.autoReinvite : []
         const lower = name.toLowerCase()
         return list.some(entry => String((typeof entry === 'string' ? entry : entry?.name) || '').toLowerCase() === lower)
+    }
+
+    // True if this name is a teammate we trust for whisper commands - on
+    // the team roster OR on the Auto-Invite list. Gating to trusted names
+    // stops a random enemy from spamming the bot into a mute.
+    isTrustedTeammate(name) {
+        return this.isTeamMember(name) || this.isOnAutoReinvite(name)
     }
 
     // Core of the backup kick: given a sender + their private message, kick
@@ -3876,11 +3878,19 @@ class BotSession {
         if (sender.toLowerCase() === (this.bot?.username || '').toLowerCase()) return
         if (!this.isTrustedTeammate(sender)) return
 
-        this.log(`Backup kick: ${sender} sent the code word via /msg - kicking and reinviting.`)
-        io.to(this.username).emit('notice', { type: 'info', text: `🔒 Backup kick: ${sender} used the code word — kicking and reinviting.` })
+        // Reinvite only if they're on the Auto-Invite list. A teammate who
+        // is on the team but NOT on that list gets kicked and stays out
+        // (they asked to leave); someone on the list gets kicked and
+        // brought straight back (temporary low-HP protection).
+        const reinvite = this.isOnAutoReinvite(sender)
+
+        this.log(`Backup kick: ${sender} sent the code word via /msg - kicking${reinvite ? ' and reinviting' : ' (no reinvite - not on Auto-Invite list)'}.`)
+        io.to(this.username).emit('notice', { type: 'info', text: `🔒 Backup kick: ${sender} used the code word — kicking${reinvite ? ' and reinviting' : ' (no reinvite)'}.` })
 
         this.sendMinecraftChat(`/t kick ${sender}`)
-        setTimeout(() => { if (this.bot) this.sendMinecraftChat(`/t invite ${sender}`) }, 350)
+        if (reinvite) {
+            setTimeout(() => { if (this.bot) this.sendMinecraftChat(`/t invite ${sender}`) }, 350)
+        }
 
     }
 
@@ -3919,6 +3929,89 @@ class BotSession {
         return [`Team ${h.name || '?'} | Size ${h.current ?? '?'}/${h.max ?? '?'} | ${h.points ?? '?'} pts`]
     }
 
+    // sudo (make the bot type/run arbitrary text) is extra-gated behind a
+    // passcode. On a locked sudo the bot generates a 6-digit code shown ONLY
+    // on the owner's dashboard (so a teammate can't self-authorize) and asks
+    // for it; once answered, that sender gets 3 sudo uses for 5 minutes. The
+    // triggering command is queued and runs the moment it's unlocked.
+    handleSudo(sender, message) {
+
+        const payload = message.replace(/^sudo\s+/i, '').trim()
+
+        if (!payload) {
+            this.whisperReply(sender, ['Usage: sudo <text or /command> — makes the bot type/run it.'])
+            return
+        }
+
+        const key = sender.toLowerCase()
+        const now = Date.now()
+
+        if (!this.sudoAuth) this.sudoAuth = new Map()
+        const auth = this.sudoAuth.get(key)
+
+        if (auth && auth.until > now && auth.usesLeft > 0) {
+            this.runSudo(sender, payload, auth)
+            return
+        }
+
+        // Locked - issue a challenge. Code is shown on the dashboard only.
+        if (!this.sudoPending) this.sudoPending = new Map()
+        const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0')
+        this.sudoPending.set(key, { code, payload, expiresAt: now + 5 * 60 * 1000 })
+
+        io.to(this.username).emit('notice', { type: 'info', text: `🔑 Sudo code for ${sender}: ${code} — valid 5 min (tell them to whisper it).`, logActivity: true })
+        this.whisperReply(sender, ['Sudo is locked. Whisper the 6-digit code shown on the owner\'s dashboard to unlock it (3 commands / 5 min).'])
+        this.log(`Sudo challenge issued for ${sender} (code on dashboard).`)
+
+    }
+
+    // Runs one sudo command and decrements that sender's remaining uses.
+    runSudo(sender, payload, auth) {
+        auth.usesLeft--
+        if (auth.usesLeft <= 0) this.sudoAuth.delete(sender.toLowerCase())
+        this.log(`Whisper sudo from ${sender}: ${payload}`)
+        io.to(this.username).emit('notice', { type: 'info', text: `💬 ${sender} via sudo: ${payload}` })
+        this.sendMinecraftChat(payload)
+        this.whisperReply(sender, [`Done.${auth.usesLeft > 0 ? ` ${auth.usesLeft} sudo use${auth.usesLeft === 1 ? '' : 's'} left.` : ' That was your last use.'}`])
+    }
+
+    // Answering a sudo passcode challenge: on the right code, unlock 3 uses
+    // for 5 minutes and run the command that triggered the challenge.
+    trySudoUnlock(sender, code) {
+
+        if (!this.sudoPending) return
+        const key = sender.toLowerCase()
+        const pending = this.sudoPending.get(key)
+
+        if (!pending) return
+
+        if (pending.expiresAt < Date.now()) {
+            this.sudoPending.delete(key)
+            this.whisperReply(sender, ['That sudo code expired — send your sudo command again for a new one.'])
+            return
+        }
+
+        if (String(code) !== pending.code) {
+            this.whisperReply(sender, ['Wrong code.'])
+            return
+        }
+
+        this.sudoPending.delete(key)
+
+        if (!this.sudoAuth) this.sudoAuth = new Map()
+        const auth = { until: Date.now() + 5 * 60 * 1000, usesLeft: 3 }
+        this.sudoAuth.set(key, auth)
+
+        this.log(`Sudo unlocked for ${sender}.`)
+        this.whisperReply(sender, ['Sudo unlocked — 3 commands for 5 minutes.'])
+
+        // Run the command that triggered the challenge (uses one of the 3).
+        if (pending.payload) {
+            this.runSudo(sender, pending.payload, auth)
+        }
+
+    }
+
     // Remote control by /msg. A trusted teammate whispers the bot a command
     // and the bot replies (info commands) or acts (hub/afk/ls) - and still
     // handles the backup-kick code word. Gated to trusted teammates + a
@@ -3940,12 +4033,24 @@ class BotSession {
         const cmd = message.toLowerCase()
         const word = cmd.split(/\s+/)[0]
 
+        // Whispering just a 6-digit number (or "code 123456") is treated as
+        // answering a pending sudo passcode challenge.
+        const codeEntry = message.trim().match(/^(?:code\s+)?(\d{6})$/i)
+        if (codeEntry) {
+            this.trySudoUnlock(sender, codeEntry[1])
+            return
+        }
+
         switch (word) {
 
             case 'cmdhelp':
             case 'commands':
             case 'help':
-                this.whisperReply(sender, ['Commands (whisper me): cmdhelp, status, players, where, keys, team, hub, afk, ls'])
+                this.whisperReply(sender, ['Commands (whisper me): cmdhelp, status, players, where, keys, team, hub, afk, ls, sudo <text>'])
+                return
+
+            case 'sudo':
+                this.handleSudo(sender, message)
                 return
 
             case 'status':
@@ -4417,14 +4522,10 @@ class BotSession {
 
         io.to(this.username).emit('notice', { type: 'info', text: '🛒 Black Market has opened - limited stock!' })
 
-        // Open /bm to read what's actually in stock, then ping Discord with
-        // the list. If auto-buy is on, it reopens /bm shortly after (the
-        // small delay lets this read window settle first).
-        this.pingBlackMarketStock()
-
-        if (this.config.blackMarketAutoBuy) {
-            setTimeout(() => { if (this.bot) this.autoBuyBlackMarket() }, 1500)
-        }
+        // One /bm open: read the stock for the ping AND (if auto-buy is on)
+        // buy from that same window - no second /bm, no 1.5s delay, so it's
+        // quicker off the restock.
+        this.pingBlackMarketStock(this.config.blackMarketAutoBuy)
 
     }
 
@@ -4433,7 +4534,9 @@ class BotSession {
     readBlackMarketStock(shopWindow) {
 
         const end = typeof shopWindow.inventoryStart === 'number' ? shopWindow.inventoryStart : shopWindow.slots.length
-        const FILLER = /glass_pane|^barrier$|^air$/
+        // GUI filler + decorative/non-purchasable slots (amethyst shard is
+        // just decoration in this shop - it isn't an item you can buy).
+        const FILLER = /glass_pane|^barrier$|^air$|^amethyst_shard$/
 
         const seen = new Set()
         const out = []
@@ -4456,8 +4559,10 @@ class BotSession {
     }
 
     // Opens /bm, reads the stock, and sends the Discord ping with the item
-    // list. Falls back to a plain ping if the shop can't be opened/read.
-    pingBlackMarketStock() {
+    // list. If buyToo is set (and auto-buy is on), it buys from the SAME
+    // open window so /bm is only opened once. Falls back to a plain ping if
+    // the shop can't be opened/read.
+    pingBlackMarketStock(buyToo = false) {
 
         if (!this.bot) return
 
@@ -4483,6 +4588,10 @@ class BotSession {
             sendDiscordWebhook(webhook, body, role)
 
             this.log(`Black Market stock: ${stock.map(i => i.name).join(', ') || '(none read)'}`)
+
+            if (buyToo && this.config.blackMarketAutoBuy) {
+                this.buyFromBlackMarketWindow(shopWindow, false)
+            }
 
         }
 
@@ -4540,6 +4649,38 @@ class BotSession {
 
         if (!this.bot) return
 
+        this.log('Black Market auto-buy: opening /bm...')
+
+        // /bm not opening any window at all (market currently closed -
+        // e.g. this is a post-reboot resync check that caught it between
+        // restocks) would otherwise leave this listener dangling forever.
+        const shopTimeout = setTimeout(() => {
+            this.bot?.removeListener('windowOpen', shopListener)
+            this.log('Black Market auto-buy: no shop window opened within 5s (market likely closed) - skipping.')
+            if (manual) {
+                io.to(this.username).emit('notice', { type: 'info', text: '🛒 The Black Market isn\'t open right now — nothing to buy.' })
+            }
+        }, 5000)
+
+        const shopListener = shopWindow => {
+            clearTimeout(shopTimeout)
+            this.buyFromBlackMarketWindow(shopWindow, manual)
+        }
+
+        this.bot.once('windowOpen', shopListener)
+
+        this.sendMinecraftChat('/bm')
+
+    }
+
+    // Buys from an ALREADY-OPEN /bm shop window. Shared by the restock path
+    // (which opens /bm once to read stock + buy) and autoBuyBlackMarket
+    // (manual check / reboot resync). One purchase per restock: gambles
+    // evenly if several tracked items are in stock.
+    buyFromBlackMarketWindow(shopWindow, manual) {
+
+        if (!this.bot) return
+
         const configuredItems = Array.isArray(this.config.blackMarketAutoBuyItems) && this.config.blackMarketAutoBuyItems.length > 0
             ? this.config.blackMarketAutoBuyItems
             : DEFAULT_BLACK_MARKET_ITEMS
@@ -4574,112 +4715,89 @@ class BotSession {
                 .filter(i => i.name === name)
                 .reduce((sum, i) => sum + (i.count || 0), 0)
 
-        this.log('Black Market auto-buy: opening /bm...')
+        // Which of the tracked items are actually in stock right now.
+        const inStock = targets
+            .map(target => ({ ...target, match: findMatch(shopWindow, target.pattern, target.itemName) }))
+            .filter(entry => entry.match)
 
-        // /bm not opening any window at all (market currently closed -
-        // e.g. this is a post-reboot resync check that caught it between
-        // restocks) would otherwise leave this listener dangling forever.
-        const shopTimeout = setTimeout(() => {
-            this.bot?.removeListener('windowOpen', shopListener)
-            this.log('Black Market auto-buy: no shop window opened within 5s (market likely closed) - skipping.')
+        if (inStock.length === 0) {
+            this.log('Black Market auto-buy: none of the tracked items are in stock - nothing to buy.')
             if (manual) {
-                io.to(this.username).emit('notice', { type: 'info', text: '🛒 The Black Market isn\'t open right now — nothing to buy.' })
+                io.to(this.username).emit('notice', { type: 'info', text: '🛒 Black Market is open, but none of your tracked items are in stock.' })
             }
-        }, 5000)
+            return
+        }
 
-        const shopListener = shopWindow => {
+        // Only one purchase is allowed per restock, so if several tracked
+        // items are up, gamble evenly between them.
+        const chosen = inStock[Math.floor(Math.random() * inStock.length)]
+        const { itemName, label, match: target } = chosen
 
-            clearTimeout(shopTimeout)
+        if (inStock.length > 1) {
+            this.log(`Black Market auto-buy: ${inStock.length} tracked items in stock (${inStock.map(e => e.label).join(', ')}) - gambled and picked ${label}.`)
+        } else {
+            this.log(`Black Market auto-buy: ${label} in stock - buying it.`)
+        }
 
-            // Which of the tracked items are actually in stock right now.
-            const inStock = targets
-                .map(target => ({ ...target, match: findMatch(shopWindow, target.pattern, target.itemName) }))
-                .filter(entry => entry.match)
+        // How many of this item we hold BEFORE buying - the purchase is
+        // confirmed (and logged) by this going up, which is the only
+        // reliable signal here: this Black Market sends no "you bought X"
+        // chat, and the GUI confirm layout can't be assumed.
+        const beforeCount = countItem(itemName)
 
-            if (inStock.length === 0) {
-                this.log('Black Market auto-buy: none of the tracked items are in stock - nothing to buy.')
-                if (manual) {
-                    io.to(this.username).emit('notice', { type: 'info', text: '🛒 Black Market is open, but none of your tracked items are in stock.' })
-                }
-                return
-            }
+        // If a confirm dialog opens after clicking the item, click its
+        // confirm button the instant it's there. The dialog's slots can
+        // arrive a tick after it opens, so retry briefly rather than giving
+        // up on the first empty read.
+        let confirmClicked = false
+        const confirmListener = confirmWindow => {
 
-            // Only one purchase is allowed per restock, so if several
-            // tracked items are up, gamble evenly between them.
-            const chosen = inStock[Math.floor(Math.random() * inStock.length)]
-            const { itemName, label, match: target } = chosen
-
-            if (inStock.length > 1) {
-                this.log(`Black Market auto-buy: ${inStock.length} tracked items in stock (${inStock.map(e => e.label).join(', ')}) - gambled and picked ${label}.`)
-            } else {
-                this.log(`Black Market auto-buy: ${label} in stock - buying it.`)
-            }
-
-            // How many of this item we hold BEFORE buying - the purchase is
-            // confirmed (and logged) by this going up, which is the only
-            // reliable signal here: this Black Market sends no "you bought
-            // X" chat, and the GUI confirm layout can't be assumed.
-            const beforeCount = countItem(itemName)
-
-            // If a confirm dialog opens after clicking the item, click its
-            // confirm button the instant it's there. The dialog's slots can
-            // arrive a tick after it opens, so retry briefly rather than
-            // giving up on the first empty read.
-            let confirmClicked = false
-            const confirmListener = confirmWindow => {
-
-                let tries = 0
-                const tryConfirm = () => {
-                    if (confirmClicked || !this.bot) return
-                    const confirmTarget = findMatch(confirmWindow, /confirm|purchase|buy|yes/i, 'lime_wool')
-                    if (confirmTarget) {
-                        confirmClicked = true
-                        this.bot.clickWindow(confirmTarget.index, 0, 0).catch(() => {})
-                        this.log(`Black Market auto-buy: clicked confirm for ${label}.`)
-                        return
-                    }
-                    if (tries++ < 8) setTimeout(tryConfirm, 150)
-                    else this.log(`Black Market auto-buy: confirm dialog for ${label} had no recognizable confirm button.`)
-                }
-                tryConfirm()
-
-            }
-
-            this.bot.once('windowOpen', confirmListener)
-            const confirmListenerCleanup = setTimeout(() => this.bot?.removeListener('windowOpen', confirmListener), 5000)
-
-            // Click the item. Some shops buy on this single click, others
-            // pop a confirm dialog (handled above) - either way, whether
-            // the purchase actually happened is decided by the inventory
-            // check below, not by which path the GUI took.
-            this.bot.clickWindow(target.index, 0, 0).catch(() => {})
-
-            // Poll for the item to actually arrive (inventory packets come
-            // a beat after the purchase). Logs only on a real increase, so
-            // every genuine purchase is recorded and failed clicks aren't.
-            let checks = 0
-            const verify = () => {
-                if (!this.bot) return
-                const now = countItem(itemName)
-                if (now > beforeCount) {
-                    clearTimeout(confirmListenerCleanup)
-                    this.log(`Black Market auto-buy: ${label} purchased (inventory +${now - beforeCount}).`)
-                    io.to(this.username).emit('notice', { type: 'success', text: `🛒 Black Market: ${label} auto-purchased!` })
-                    this.blackMarketPurchaseHistory.push({ itemId: `minecraft:${itemName}`, label, timestamp: Date.now() })
-                    this.blackMarketPurchaseHistory = this.blackMarketPurchaseHistory.slice(-25)
-                    saveBlackMarketPurchaseHistory(this.username, this.blackMarketPurchaseHistory)
+            let tries = 0
+            const tryConfirm = () => {
+                if (confirmClicked || !this.bot) return
+                const confirmTarget = findMatch(confirmWindow, /confirm|purchase|buy|yes/i, 'lime_wool')
+                if (confirmTarget) {
+                    confirmClicked = true
+                    this.bot.clickWindow(confirmTarget.index, 0, 0).catch(() => {})
+                    this.log(`Black Market auto-buy: clicked confirm for ${label}.`)
                     return
                 }
-                if (checks++ < 12) setTimeout(verify, 400)
-                else this.log(`Black Market auto-buy: clicked ${label} but it never arrived in inventory - likely didn't go through.`)
+                if (tries++ < 8) setTimeout(tryConfirm, 150)
+                else this.log(`Black Market auto-buy: confirm dialog for ${label} had no recognizable confirm button.`)
             }
-            setTimeout(verify, 300)
+            tryConfirm()
 
         }
 
-        this.bot.once('windowOpen', shopListener)
+        this.bot.once('windowOpen', confirmListener)
+        const confirmListenerCleanup = setTimeout(() => this.bot?.removeListener('windowOpen', confirmListener), 5000)
 
-        this.sendMinecraftChat('/bm')
+        // Click the item. Some shops buy on this single click, others pop a
+        // confirm dialog (handled above) - either way, whether the purchase
+        // actually happened is decided by the inventory check below, not by
+        // which path the GUI took.
+        this.bot.clickWindow(target.index, 0, 0).catch(() => {})
+
+        // Poll for the item to actually arrive (inventory packets come a
+        // beat after the purchase). Logs only on a real increase, so every
+        // genuine purchase is recorded and failed clicks aren't.
+        let checks = 0
+        const verify = () => {
+            if (!this.bot) return
+            const now = countItem(itemName)
+            if (now > beforeCount) {
+                clearTimeout(confirmListenerCleanup)
+                this.log(`Black Market auto-buy: ${label} purchased (inventory +${now - beforeCount}).`)
+                io.to(this.username).emit('notice', { type: 'success', text: `🛒 Black Market: ${label} auto-purchased!` })
+                this.blackMarketPurchaseHistory.push({ itemId: `minecraft:${itemName}`, label, timestamp: Date.now() })
+                this.blackMarketPurchaseHistory = this.blackMarketPurchaseHistory.slice(-25)
+                saveBlackMarketPurchaseHistory(this.username, this.blackMarketPurchaseHistory)
+                return
+            }
+            if (checks++ < 12) setTimeout(verify, 400)
+            else this.log(`Black Market auto-buy: clicked ${label} but it never arrived in inventory - likely didn't go through.`)
+        }
+        setTimeout(verify, 300)
 
     }
 

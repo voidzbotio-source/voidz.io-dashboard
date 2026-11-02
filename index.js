@@ -5041,7 +5041,7 @@ class BotSession {
             this.triviaTimer = setTimeout(() => {
                 this.triviaTimer = null
                 if (!this.bot) return
-                this.sendMinecraftChat(`@ ${answer}`)
+                this.sendMinecraftChat(answer)
                 this.recordChatGame('Math', answer)
             }, 20000)
 
@@ -5069,7 +5069,7 @@ class BotSession {
             this.triviaTimer = setTimeout(() => {
                 this.triviaTimer = null
                 if (!this.bot) return
-                this.sendMinecraftChat(`@ ${stripped}`)
+                this.sendMinecraftChat(stripped)
                 this.recordChatGame('Replication', stripped)
             }, 20000)
 
@@ -5093,7 +5093,7 @@ class BotSession {
             if (candidates.length === 0) return
 
             // One match -> that answer; a few -> list up to 3 so the team
-            // can pick. Posted to team chat after the same delay.
+            // can pick. Posted to normal chat after the same delay.
             const answer = candidates.length === 1 ? candidates[0] : candidates.slice(0, 3).join(', ')
 
             this.triviaActiveType = null
@@ -5104,7 +5104,7 @@ class BotSession {
             this.triviaTimer = setTimeout(() => {
                 this.triviaTimer = null
                 if (!this.bot) return
-                this.sendMinecraftChat(`@ ${answer}`)
+                this.sendMinecraftChat(answer)
                 this.recordChatGame('Blanks', answer)
             }, 20000)
 

@@ -337,6 +337,16 @@ function blackMarketItemPattern(itemName) {
 
 const HOME_DELAY = 10000
 
+// Balance auto-manage (opt-in): every BALANCE_CHECK_INTERVAL the bot
+// runs /bal, and deposits everything ABOVE BALANCE_KEEP into the team
+// bank, so it always sits at ~7m on hand. BALANCE_RESPONSE_WINDOW is
+// how long we treat the next "has $X" line as the answer to our /bal
+// before giving up (so a stray balance line later doesn't trigger a
+// deposit). Deposit-only for now - withdraw side intentionally left out.
+const BALANCE_CHECK_INTERVAL = 5 * 60 * 1000
+const BALANCE_KEEP = 7000000
+const BALANCE_RESPONSE_WINDOW = 15000
+
 const HUB_RECOVERY_DELAY = 90000
 
 const KEYALL_TIMEZONE = 'Europe/Brussels'
@@ -2283,6 +2293,10 @@ class BotSession {
         this.keyallTimer = null
         this.nextKeyallAt = null
         this.jqSafetyTimer = null
+        this.balanceTimer = null
+        this.balanceWaitTimer = null
+        this.awaitingBalance = false
+        this.lastKnownBalance = null
 
         this.shuttingDown = false
 
@@ -2758,7 +2772,8 @@ class BotSession {
             automation: {
                 triviaAutoAnswer: this.config.triviaAutoAnswer !== false,
                 backupKickEnabled: this.config.backupKickEnabled !== false,
-                blackMarketAutoBuy: !!this.config.blackMarketAutoBuy
+                blackMarketAutoBuy: !!this.config.blackMarketAutoBuy,
+                balanceAutoManage: this.config.balanceAutoManage === true
             },
             triviaHistory: this.triviaHistory,
 
@@ -2878,6 +2893,82 @@ class BotSession {
     stopJqSafetyTimer() { if (this.jqSafetyTimer) { clearTimeout(this.jqSafetyTimer); this.jqSafetyTimer = null } }
 
     // --------------------------------------------------------
+    // BALANCE AUTO-MANAGE (opt-in, deposit-only)
+    // --------------------------------------------------------
+
+    stopBalanceManager() {
+        if (this.balanceTimer) { clearInterval(this.balanceTimer); this.balanceTimer = null }
+        if (this.balanceWaitTimer) { clearTimeout(this.balanceWaitTimer); this.balanceWaitTimer = null }
+        this.awaitingBalance = false
+    }
+
+    startBalanceManager() {
+
+        if (this.config.balanceAutoManage !== true) return
+        if (!this.bot || this.shuttingDown) return
+
+        this.stopBalanceManager()
+
+        // First pass once the AFK /home teleport has settled, then on
+        // the regular interval. (balanceWaitTimer is reused here only
+        // for the one-shot initial delay; requestBalance resets it.)
+        this.balanceWaitTimer = setTimeout(() => { this.balanceWaitTimer = null; this.requestBalance() }, HOME_DELAY + BALANCE_RESPONSE_WINDOW)
+
+        this.balanceTimer = setInterval(() => this.requestBalance(), BALANCE_CHECK_INTERVAL)
+
+        this.log('Balance auto-manage: enabled (deposit everything over $7,000,000 every 5 min).')
+
+    }
+
+    // Fires /bal and arms a short window during which the next
+    // "has $X" line is read as our balance (see checkBalance).
+    requestBalance() {
+
+        if (this.config.balanceAutoManage !== true) { this.stopBalanceManager(); return }
+        if (!this.bot || !this.bot.entity || this.shuttingDown || !this.lifeStealReached) return
+
+        this.awaitingBalance = true
+
+        if (this.balanceWaitTimer) clearTimeout(this.balanceWaitTimer)
+        this.balanceWaitTimer = setTimeout(() => {
+            this.balanceWaitTimer = null
+            this.awaitingBalance = false
+        }, BALANCE_RESPONSE_WINDOW)
+
+        this.sendMinecraftChat('/bal')
+
+    }
+
+    // Reads the "ECONOMY » <name> has $X" reply to our own /bal and,
+    // if we're sitting above the 7m keep line, deposits the excess
+    // into the team bank. Only acts inside the window armed by
+    // requestBalance(), so other balance lines are ignored.
+    checkBalance(text) {
+
+        if (!this.awaitingBalance) return
+
+        const match = text.match(/has \$([\d,]+)/)
+        if (!match) return
+
+        this.awaitingBalance = false
+        if (this.balanceWaitTimer) { clearTimeout(this.balanceWaitTimer); this.balanceWaitTimer = null }
+
+        const balance = parseInt(match[1].replace(/,/g, ''), 10)
+        if (!Number.isFinite(balance)) return
+
+        this.lastKnownBalance = balance
+
+        if (balance > BALANCE_KEEP) {
+            const amount = balance - BALANCE_KEEP
+            this.sendMinecraftChat(`/t deposit ${amount}`)
+            this.log(`Balance auto-manage: $${balance.toLocaleString()} on hand - depositing $${amount.toLocaleString()} to team bank.`)
+        } else {
+            this.log(`Balance auto-manage: $${balance.toLocaleString()} on hand (<= $7,000,000) - nothing to deposit.`)
+        }
+
+    }
+
+    // --------------------------------------------------------
     // STATE
     // --------------------------------------------------------
 
@@ -2990,6 +3081,10 @@ class BotSession {
             }, HOME_DELAY + BLACK_MARKET_RESYNC_DELAY)
 
         }
+
+        // Start the 5-minute balance auto-manage loop (no-op unless the
+        // toggle is on).
+        this.startBalanceManager()
 
     }
 
@@ -5547,6 +5642,7 @@ class BotSession {
             this.checkNemesisDeath(text)
             this.checkBlackMarket(text)
             this.checkTrivia(text)
+            this.checkBalance(text)
             this.checkWhisperCommand(text)
 
             // Action bar text ('game_info') refreshes far too often to
@@ -6062,6 +6158,7 @@ class BotSession {
         this.stopRecoveryTimer()
         this.stopKeyallTimer()
         this.stopJqSafetyTimer()
+        this.stopBalanceManager()
         this.stopPovViewer()
 
         if (this.reconnectTimer) {
@@ -6582,7 +6679,7 @@ function getPlaceholderDashboardData() {
         blackMarketAutoBuy: false,
         blackMarketAutoBuyItems: DEFAULT_BLACK_MARKET_ITEMS,
         blackMarketPurchaseHistory: [],
-        automation: { triviaAutoAnswer: true, backupKickEnabled: true, blackMarketAutoBuy: false },
+        automation: { triviaAutoAnswer: true, backupKickEnabled: true, blackMarketAutoBuy: false, balanceAutoManage: false },
         triviaHistory: [],
         keys: { vote: 0, exclusive: 0, insane: 0, lantern: 0 },
         totalKeys: 0,
@@ -7217,6 +7314,7 @@ app.post('/api/automation', (req, res) => {
     if ('triviaAutoAnswer' in body) patch.triviaAutoAnswer = !!body.triviaAutoAnswer
     if ('backupKickEnabled' in body) patch.backupKickEnabled = !!body.backupKickEnabled
     if ('blackMarketAutoBuy' in body) patch.blackMarketAutoBuy = !!body.blackMarketAutoBuy
+    if ('balanceAutoManage' in body) patch.balanceAutoManage = !!body.balanceAutoManage
 
     if (Object.keys(patch).length === 0) {
         return res.status(400).json({ error: 'Nothing to update.' })
@@ -7227,6 +7325,13 @@ app.post('/api/automation', (req, res) => {
     const existing = sessions.get(req.session.username)
     if (existing) {
         existing.config = { ...existing.config, ...patch }
+
+        // Start/stop the live balance loop immediately on toggle, rather
+        // than waiting for the next LifeSteal (re)join.
+        if ('balanceAutoManage' in patch) {
+            if (patch.balanceAutoManage) existing.startBalanceManager()
+            else existing.stopBalanceManager()
+        }
     }
 
     appLog(`Automation toggles updated by ${req.session.username}: ${JSON.stringify(patch)}`)
@@ -7236,7 +7341,8 @@ app.post('/api/automation', (req, res) => {
         automation: {
             triviaAutoAnswer: patch.triviaAutoAnswer ?? (getBotConfig(req.session.username)?.triviaAutoAnswer !== false),
             backupKickEnabled: patch.backupKickEnabled ?? (getBotConfig(req.session.username)?.backupKickEnabled !== false),
-            blackMarketAutoBuy: patch.blackMarketAutoBuy ?? !!getBotConfig(req.session.username)?.blackMarketAutoBuy
+            blackMarketAutoBuy: patch.blackMarketAutoBuy ?? !!getBotConfig(req.session.username)?.blackMarketAutoBuy,
+            balanceAutoManage: patch.balanceAutoManage ?? (getBotConfig(req.session.username)?.balanceAutoManage === true)
         }
     })
 

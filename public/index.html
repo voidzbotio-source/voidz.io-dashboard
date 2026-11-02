@@ -5268,6 +5268,14 @@
                     </span>
                 </label>
 
+                <label class="toggle-row">
+                    <span>Balance auto-manage <span style="color: var(--muted); font-weight: 400;">(deposit over $7m every 5 min)</span></span>
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="autoBalanceToggle" onchange="setAutomation('balanceAutoManage', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </span>
+                </label>
+
                 <div class="keys-category-label">Chat game history</div>
 
                 <div id="triviaHistoryList" class="team-body scroll" style="max-height: 180px;">
@@ -9050,6 +9058,7 @@
                 if ($('autoTriviaToggle')) $('autoTriviaToggle').checked = data.automation.triviaAutoAnswer !== false
                 if ($('autoBmToggle')) $('autoBmToggle').checked = !!data.automation.blackMarketAutoBuy
                 if ($('autoBackupKickToggle')) $('autoBackupKickToggle').checked = data.automation.backupKickEnabled !== false
+                if ($('autoBalanceToggle')) $('autoBalanceToggle').checked = data.automation.balanceAutoManage === true
             }
 
             const triviaKey = JSON.stringify(data.triviaHistory || [])
@@ -12720,7 +12729,7 @@
                 .then(({ ok, data }) => {
                     automationBusy = false
                     if (!ok) { showToast((data && data.error) || 'Could not update.', 'error'); return }
-                    const labels = { triviaAutoAnswer: 'Chat game auto-answer', blackMarketAutoBuy: 'Black Market auto-buy', backupKickEnabled: 'Backup kick' }
+                    const labels = { triviaAutoAnswer: 'Chat game auto-answer', blackMarketAutoBuy: 'Black Market auto-buy', backupKickEnabled: 'Backup kick', balanceAutoManage: 'Balance auto-manage' }
                     showToast(`${labels[key] || 'Setting'} ${value ? 'on' : 'off'}.`, value ? 'success' : 'info')
                 })
                 .catch(() => { automationBusy = false; showToast('Could not reach the server.', 'error') })

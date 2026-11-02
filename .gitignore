@@ -19,6 +19,9 @@ logs/
 # Dependencies
 node_modules/
 
+# Desktop app download (large build artifact, placed on the server)
+downloads/
+
 # Old local backups, not needed in the repo
 index-backup.js
 index-backup2.js

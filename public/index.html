@@ -6128,6 +6128,36 @@
                         <button class="modal-ok" id="adminPwConfirmBtn" onclick="confirmAdminPasswordChange()" style="width: 100%;">Change password</button>
                     </div>
 
+                    <div style="margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border);">
+
+                        <div style="font-weight: 700; font-size: 13px; margin-bottom: 6px;">Forgot it? View current password</div>
+                        <p class="settings-section-desc">We'll email a code to your recovery address; enter it to reveal your current password.</p>
+
+                        <div id="adminPwViewError" class="settings-error"></div>
+
+                        <div id="adminPwViewStart">
+                            <button class="modal-ok" id="adminPwViewStartBtn" onclick="startViewPassword()" style="width: 100%; background: transparent; color: var(--text); border-color: var(--border);">Email me a code to view it</button>
+                        </div>
+
+                        <div id="adminPwViewConfirm" style="display: none;">
+                            <div class="field">
+                                <label for="adminPwViewCode">Email code</label>
+                                <input id="adminPwViewCode" type="text" inputmode="numeric" autocomplete="off" placeholder="000000">
+                            </div>
+                            <button class="modal-ok" id="adminPwViewConfirmBtn" onclick="confirmViewPassword()" style="width: 100%;">Reveal password</button>
+                        </div>
+
+                        <div id="adminPwViewResult" style="display: none; margin-top: 10px;">
+                            <p class="settings-section-desc">Your current admin password:</p>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input id="adminPwViewValue" type="text" readonly onclick="this.select()" style="font-family: monospace; letter-spacing: 1px;">
+                                <button class="modal-ok" onclick="copyViewedPassword()" style="width: auto; padding: 10px 14px;">Copy</button>
+                            </div>
+                            <p class="settings-section-desc" style="color: var(--red); margin-top: 8px;">Don't share this. Close Settings when you're done.</p>
+                        </div>
+
+                    </div>
+
                 </div>
 
                 <div class="settings-section">
@@ -6142,6 +6172,19 @@
                     <div id="loginActivityList" class="team-body scroll" style="max-height: 220px;">
                         <div class="empty-state">Loading&hellip;</div>
                     </div>
+
+                </div>
+
+                <div id="desktopAppSection" class="settings-section" style="display: none;">
+
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+                        <span>Desktop app</span>
+                    </div>
+
+                    <p class="settings-section-desc">Open the dashboard in its own window, like a real app. Download the Windows version, unzip it, and run <b>Voidz.IO.exe</b>.</p>
+
+                    <a id="desktopDownloadBtn" class="modal-ok" href="/download/desktop" style="display: block; text-align: center; text-decoration: none; width: 100%; box-sizing: border-box;">Download Desktop App <span id="desktopDownloadSize" style="opacity:0.7;"></span></a>
 
                 </div>
 
@@ -7107,6 +7150,7 @@
                 .catch(() => {})
 
             loadLoginActivity()
+            loadDesktopDownload()
 
             $('settingsModalOverlay')?.classList.add('show')
 
@@ -7327,6 +7371,23 @@
         const LOGIN_OUTCOME_LABELS = { 'success': 'Signed in', 'bad-password': 'Wrong password', 'bad-2fa': 'Wrong 2FA code' }
         const LOGIN_METHOD_LABELS = { 'authenticator': 'authenticator', 'recovery-email': 'email code', 'backup-code': 'backup code', 'trusted-device': 'trusted device', 'password': 'password' }
 
+        function loadDesktopDownload() {
+            const section = $('desktopAppSection')
+            if (!section) return
+            fetch('/api/download/desktop/status')
+                .then(r => r.json())
+                .then(data => {
+                    if (data && data.available) {
+                        section.style.display = 'block'
+                        const size = $('desktopDownloadSize')
+                        if (size) size.textContent = data.sizeMb ? `(${data.sizeMb} MB)` : ''
+                    } else {
+                        section.style.display = 'none'
+                    }
+                })
+                .catch(() => { section.style.display = 'none' })
+        }
+
         function loadLoginActivity() {
 
             const container = $('loginActivityList')
@@ -7532,6 +7593,64 @@
             $('adminPwConfirm').style.display = 'none'
             for (const id of ['adminNewPassword', 'adminNewPasswordConfirm', 'adminCurrentPassword', 'adminPwEmailCode', 'adminPwAuthCode']) {
                 if ($(id)) $(id).value = ''
+            }
+            // view-password sub-form
+            if ($('adminPwViewError')) { $('adminPwViewError').textContent = ''; $('adminPwViewError').classList.remove('show') }
+            if ($('adminPwViewStart')) $('adminPwViewStart').style.display = 'block'
+            if ($('adminPwViewConfirm')) $('adminPwViewConfirm').style.display = 'none'
+            if ($('adminPwViewResult')) $('adminPwViewResult').style.display = 'none'
+            if ($('adminPwViewCode')) $('adminPwViewCode').value = ''
+            if ($('adminPwViewValue')) $('adminPwViewValue').value = ''
+        }
+
+        function adminPwViewError(message) {
+            const box = $('adminPwViewError')
+            if (!box) return
+            box.textContent = message || ''
+            box.classList.toggle('show', !!message)
+        }
+
+        function startViewPassword() {
+            adminPwViewError('')
+            const btn = $('adminPwViewStartBtn')
+            btn.disabled = true; btn.textContent = 'Sending...'
+            fetch('/api/admin/password/view/start', { method: 'POST' })
+                .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                .then(({ ok, data }) => {
+                    btn.disabled = false; btn.textContent = 'Email me a code to view it'
+                    if (!ok) { adminPwViewError(data.error || 'Could not send the code.'); return }
+                    $('adminPwViewStart').style.display = 'none'
+                    $('adminPwViewConfirm').style.display = 'block'
+                    showToast('Code emailed to your recovery address.', 'info')
+                })
+                .catch(() => { btn.disabled = false; btn.textContent = 'Email me a code to view it'; adminPwViewError('Could not reach the server.') })
+        }
+
+        function confirmViewPassword() {
+            adminPwViewError('')
+            const code = $('adminPwViewCode').value.trim()
+            const btn = $('adminPwViewConfirmBtn')
+            btn.disabled = true; btn.textContent = 'Checking...'
+            fetch('/api/admin/password/view/confirm', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code })
+            })
+                .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                .then(({ ok, data }) => {
+                    btn.disabled = false; btn.textContent = 'Reveal password'
+                    if (!ok) { adminPwViewError(data.error || 'Incorrect code.'); return }
+                    $('adminPwViewConfirm').style.display = 'none'
+                    $('adminPwViewValue').value = data.password || ''
+                    $('adminPwViewResult').style.display = 'block'
+                })
+                .catch(() => { btn.disabled = false; btn.textContent = 'Reveal password'; adminPwViewError('Could not reach the server.') })
+        }
+
+        function copyViewedPassword() {
+            const val = $('adminPwViewValue').value
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(val).then(() => showToast('Copied.', 'success')).catch(() => {})
+            } else {
+                $('adminPwViewValue').select(); document.execCommand('copy'); showToast('Copied.', 'success')
             }
         }
 

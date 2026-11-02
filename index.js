@@ -370,6 +370,8 @@ const ADMIN_CRED_FILE = path.join(__dirname, 'admin-cred.json')
 const LOGS_DIR = path.join(__dirname, 'logs')
 const AUTH_CACHE_DIR = path.join(__dirname, 'auth_cache')
 const PUBLIC_DIR = path.join(__dirname, 'public')
+const DOWNLOADS_DIR = path.join(__dirname, 'downloads')
+const DESKTOP_APP_FILE = 'Voidz.IO.zip'
 
 fs.mkdirSync(LOGS_DIR, { recursive: true })
 fs.mkdirSync(AUTH_CACHE_DIR, { recursive: true })
@@ -682,29 +684,64 @@ function verifyPassword(password, salt, hash) {
 // --- Admin password override ---
 // The admin password normally lives in DASHBOARD_PASSWORD (.env). Once the
 // admin changes it in-app (which requires password + email code + an
-// authenticator code), a scrypt hash is stored here and used INSTEAD of
-// the env value. Kept in its own file so toggling 2FA can't wipe it.
+// authenticator code), it's stored here instead. It's ENCRYPTED (not just
+// hashed) so the email-gated "view password" feature can show it; the key
+// is derived from SESSION_SECRET (in .env), so leaking admin-cred.json
+// alone doesn't expose the password. Kept in its own file so toggling 2FA
+// can't wipe it.
+const ADMIN_ENC_KEY = crypto.scryptSync(SESSION_SECRET, 'voidz-admin-cred-v1', 32)
+
+function encryptSecret(plain) {
+    const iv = crypto.randomBytes(12)
+    const cipher = crypto.createCipheriv('aes-256-gcm', ADMIN_ENC_KEY, iv)
+    const enc = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()])
+    return { iv: iv.toString('hex'), enc: enc.toString('hex'), tag: cipher.getAuthTag().toString('hex') }
+}
+
+function decryptSecret(obj) {
+    const decipher = crypto.createDecipheriv('aes-256-gcm', ADMIN_ENC_KEY, Buffer.from(obj.iv, 'hex'))
+    decipher.setAuthTag(Buffer.from(obj.tag, 'hex'))
+    return Buffer.concat([decipher.update(Buffer.from(obj.enc, 'hex')), decipher.final()]).toString('utf8')
+}
+
+// Length-safe constant-time string compare (timingSafeEqual needs equal
+// lengths; comparing fixed-size hashes sidesteps that and any length leak).
+function constantTimeEqualStr(a, b) {
+    const ha = crypto.createHash('sha256').update(String(a)).digest()
+    const hb = crypto.createHash('sha256').update(String(b)).digest()
+    return crypto.timingSafeEqual(ha, hb)
+}
+
 function getAdminPasswordOverride() {
     try {
         const parsed = JSON.parse(fs.readFileSync(ADMIN_CRED_FILE, 'utf8'))
-        return (parsed && parsed.salt && parsed.hash) ? parsed : null
+        return (parsed && parsed.enc && parsed.iv && parsed.tag) ? parsed : null
     } catch {
         return null
     }
 }
 
-function setAdminPasswordOverride(salt, hash) {
-    fs.writeFileSync(ADMIN_CRED_FILE, JSON.stringify({ salt, hash, updatedAt: new Date().toISOString() }, null, 2))
+// Stores an already-encrypted blob (built at change-request time so the
+// plaintext never sits in a session).
+function writeAdminPasswordOverride(encObj) {
+    fs.writeFileSync(ADMIN_CRED_FILE, JSON.stringify({ ...encObj, updatedAt: new Date().toISOString() }, null, 2))
 }
 
-// True if the given password is the admin's current one - the in-app
-// override if set, otherwise the .env value.
-function verifyAdminPassword(password) {
+// The current admin password in plaintext (decrypted override, else the
+// .env value), or null if an override exists but can't be decrypted.
+function getAdminPasswordPlaintext() {
     const override = getAdminPasswordOverride()
     if (override) {
-        return verifyPassword(String(password || ''), override.salt, override.hash)
+        try { return decryptSecret(override) } catch { return null }
     }
-    return String(password || '') === DASHBOARD_PASSWORD
+    return DASHBOARD_PASSWORD
+}
+
+// True if the given password is the admin's current one.
+function verifyAdminPassword(password) {
+    const current = getAdminPasswordPlaintext()
+    if (current === null) return false
+    return constantTimeEqualStr(String(password || ''), current)
 }
 
 // ============================================================
@@ -6280,6 +6317,24 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'index.html'))
 })
 
+// Desktop app download (served from downloads/ if the built zip is there).
+app.get('/api/download/desktop/status', (req, res) => {
+    try {
+        const stat = fs.statSync(path.join(DOWNLOADS_DIR, DESKTOP_APP_FILE))
+        res.json({ available: true, sizeMb: Math.round(stat.size / (1024 * 1024)) })
+    } catch {
+        res.json({ available: false })
+    }
+})
+
+app.get('/download/desktop', (req, res) => {
+    const file = path.join(DOWNLOADS_DIR, DESKTOP_APP_FILE)
+    if (!fs.existsSync(file)) {
+        return res.status(404).send('The desktop app has not been uploaded to this server yet.')
+    }
+    res.download(file, DESKTOP_APP_FILE)
+})
+
 // ============================================================
 // API
 // ============================================================
@@ -6999,15 +7054,14 @@ app.post('/api/admin/password/start', async (req, res) => {
         return res.status(400).json({ error: 'That is already your current password.' })
     }
 
-    // Stash the pending change in the session: the already-hashed new
-    // password and a hashed email code, both short-lived.
+    // Stash the pending change in the session: the new password already
+    // ENCRYPTED (so the plaintext never sits in the session) plus a hashed
+    // email code, both short-lived.
     const emailCode = String(crypto.randomInt(0, 1000000)).padStart(6, '0')
-    const newCred = hashPassword(newPassword)
     const codeCred = hashPassword(emailCode)
 
     req.session.pendingAdminPwChange = {
-        newSalt: newCred.salt,
-        newHash: newCred.hash,
+        newEnc: encryptSecret(newPassword),
         codeSalt: codeCred.salt,
         codeHash: codeCred.hash,
         expiresAt: Date.now() + RECOVERY_CODE_TTL_MS,
@@ -7068,7 +7122,7 @@ app.post('/api/admin/password/confirm', (req, res) => {
         return res.status(401).json({ error: `Check both codes and try again (${emailOk ? 'authenticator' : authOk ? 'email' : 'both'} code wrong).` })
     }
 
-    setAdminPasswordOverride(pending.newSalt, pending.newHash)
+    writeAdminPasswordOverride(pending.newEnc)
     delete req.session.pendingAdminPwChange
 
     appLog(`Admin password changed by ${req.session.username}`)
@@ -7076,6 +7130,91 @@ app.post('/api/admin/password/confirm', (req, res) => {
     sendSecurityAlert(getRecoveryEmail(req.session.username), 'Admin password was changed', 'The password for your Voidz.IO admin account was just changed.')
 
     res.json({ ok: true })
+
+})
+
+// View the current admin password - gated behind an emailed code (so just
+// having an admin session open isn't enough to reveal it). Requires a
+// recovery email + mail set up.
+app.post('/api/admin/password/view/start', async (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can do this.' })
+    }
+
+    const recoveryEmail = getRecoveryEmail(req.session.username)
+
+    if (!recoveryEmail || !mailConfigured()) {
+        return res.status(400).json({ error: 'Set up a recovery email first (that is where the code is sent).' })
+    }
+
+    const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0')
+    const codeCred = hashPassword(code)
+
+    req.session.pendingAdminPwView = {
+        codeSalt: codeCred.salt,
+        codeHash: codeCred.hash,
+        expiresAt: Date.now() + RECOVERY_CODE_TTL_MS,
+        attempts: 0
+    }
+
+    try {
+        await sendMail(
+            recoveryEmail,
+            'Voidz.IO password view code',
+            `Someone asked to view your Voidz.IO admin password. Your code is: ${code}\n\nIt expires in 10 minutes. If this wasn't you, do NOT share it - and change your password.`,
+            buildCodeEmailHtml({
+                heading: 'Code to view your password',
+                intro: 'Enter this code in the dashboard to reveal your current admin password.',
+                code,
+                note: "If you didn't ask to view your password, do not share this code."
+            })
+        )
+    } catch (error) {
+        delete req.session.pendingAdminPwView
+        appLog(`Admin password view email failed: ${error.message}`)
+        return res.status(500).json({ error: 'Could not send the email code. Try again shortly.' })
+    }
+
+    res.json({ ok: true })
+
+})
+
+app.post('/api/admin/password/view/confirm', (req, res) => {
+
+    if (req.session.username !== DASHBOARD_USERNAME) {
+        return res.status(403).json({ error: 'Only the admin account can do this.' })
+    }
+
+    const pending = req.session.pendingAdminPwView
+
+    if (!pending || pending.expiresAt < Date.now()) {
+        delete req.session.pendingAdminPwView
+        return res.status(400).json({ error: 'No request in progress (or it expired). Start over.' })
+    }
+
+    const code = String(req.body?.code || '').trim()
+
+    if (!verifyPassword(code, pending.codeSalt, pending.codeHash)) {
+        pending.attempts = (pending.attempts || 0) + 1
+        if (pending.attempts >= 5) {
+            delete req.session.pendingAdminPwView
+            return res.status(429).json({ error: 'Too many incorrect codes. Start over.' })
+        }
+        return res.status(401).json({ error: 'That code is incorrect.' })
+    }
+
+    delete req.session.pendingAdminPwView
+
+    const password = getAdminPasswordPlaintext()
+
+    if (password === null) {
+        return res.status(500).json({ error: "Your password was changed in-app but can't be decrypted (SESSION_SECRET may have changed). Reset it instead." })
+    }
+
+    appLog(`Admin password viewed by ${req.session.username}`)
+
+    res.json({ ok: true, password })
 
 })
 

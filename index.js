@@ -1317,6 +1317,19 @@ function saveBlackMarketPurchaseHistory(username, history) {
     saveBotConfigs(configs)
 }
 
+// History of chat games the bot successfully answered (newest last).
+function getTriviaHistory(username) {
+    const configs = loadBotConfigs()
+    const history = configs[username]?.triviaHistory
+    return Array.isArray(history) ? history : []
+}
+
+function saveTriviaHistory(username, history) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], triviaHistory: history }
+    saveBotConfigs(configs)
+}
+
 function getAutoReinviteList(username) {
     const configs = loadBotConfigs()
     const list = configs[username]?.autoReinvite
@@ -2312,6 +2325,9 @@ class BotSession {
         // getBlackMarketPurchaseHistory() and autoBuyBlackMarket().
         this.blackMarketPurchaseHistory = getBlackMarketPurchaseHistory(username)
 
+        // Chat games the bot answered - see recordChatGame().
+        this.triviaHistory = getTriviaHistory(username)
+
         // Who captured each KOTH, how many team points it was worth,
         // and when - shown as a log alongside the Points detail chart.
         // Persisted the same way as teamHistory.
@@ -2738,6 +2754,13 @@ class BotSession {
                 ? this.config.blackMarketAutoBuyItems
                 : DEFAULT_BLACK_MARKET_ITEMS,
             blackMarketPurchaseHistory: this.blackMarketPurchaseHistory,
+
+            automation: {
+                triviaAutoAnswer: this.config.triviaAutoAnswer !== false,
+                backupKickEnabled: this.config.backupKickEnabled !== false,
+                blackMarketAutoBuy: !!this.config.blackMarketAutoBuy
+            },
+            triviaHistory: this.triviaHistory,
 
             keys,
             totalKeys: keys.vote + keys.exclusive + keys.insane,
@@ -3925,6 +3948,8 @@ class BotSession {
     // them if it carries the code word and they're a trusted teammate.
     applyBackupKick(sender, message) {
 
+        if (this.config.backupKickEnabled === false) return
+
         sender = String(sender || '').trim()
         message = String(message || '')
 
@@ -4856,6 +4881,11 @@ class BotSession {
     // delay so it doesn't look like an instant bot reaction.
     checkTrivia(text) {
 
+        if (this.config.triviaAutoAnswer === false) {
+            this.cancelPendingTrivia()
+            return
+        }
+
         const cleaned = cleanMessage(text)
 
         const chosenMatch = cleaned.match(/(\w+)\s+has been chosen!?$/i)
@@ -4903,7 +4933,9 @@ class BotSession {
             this.cancelPendingTrivia()
             this.triviaTimer = setTimeout(() => {
                 this.triviaTimer = null
-                if (this.bot) this.sendMinecraftChat(`@${answer}`)
+                if (!this.bot) return
+                this.sendMinecraftChat(`@${answer}`)
+                this.recordChatGame('Math', answer)
             }, 25000)
 
             return
@@ -4929,7 +4961,9 @@ class BotSession {
             this.cancelPendingTrivia()
             this.triviaTimer = setTimeout(() => {
                 this.triviaTimer = null
-                if (this.bot) this.sendMinecraftChat(`@${stripped}`)
+                if (!this.bot) return
+                this.sendMinecraftChat(`@${stripped}`)
+                this.recordChatGame('Replication', stripped)
             }, 25000)
 
             return
@@ -4962,13 +4996,24 @@ class BotSession {
             this.cancelPendingTrivia()
             this.triviaTimer = setTimeout(() => {
                 this.triviaTimer = null
-                if (this.bot) this.sendMinecraftChat(`@${answer}`)
+                if (!this.bot) return
+                this.sendMinecraftChat(`@${answer}`)
+                this.recordChatGame('Blanks', answer)
             }, 25000)
 
             return
 
         }
 
+    }
+
+    // Logs a chat game the bot answered (shown in the Automation card's
+    // history) and pushes a fresh dashboard update so it appears live.
+    recordChatGame(type, answer) {
+        this.triviaHistory.push({ type, answer: String(answer).slice(0, 60), timestamp: Date.now() })
+        this.triviaHistory = this.triviaHistory.slice(-50)
+        saveTriviaHistory(this.username, this.triviaHistory)
+        this.updateDashboard()
     }
 
     // Cancels a queued (delayed) trivia answer - called when the round ends
@@ -6430,6 +6475,8 @@ function getPlaceholderDashboardData() {
         blackMarketAutoBuy: false,
         blackMarketAutoBuyItems: DEFAULT_BLACK_MARKET_ITEMS,
         blackMarketPurchaseHistory: [],
+        automation: { triviaAutoAnswer: true, backupKickEnabled: true, blackMarketAutoBuy: false },
+        triviaHistory: [],
         keys: { vote: 0, exclusive: 0, insane: 0, lantern: 0 },
         totalKeys: 0,
         lastChat: 'None',
@@ -7043,6 +7090,44 @@ app.post('/api/black-market-items', (req, res) => {
     }
 
     res.json({ ok: true, list: list.length > 0 ? list : DEFAULT_BLACK_MARKET_ITEMS })
+
+})
+
+// ============================================================
+// AUTOMATION TOGGLES (the Automation card)
+// ============================================================
+
+app.post('/api/automation', (req, res) => {
+
+    const body = req.body || {}
+    const patch = {}
+
+    // Only the keys actually sent are changed; each is a plain boolean.
+    if ('triviaAutoAnswer' in body) patch.triviaAutoAnswer = !!body.triviaAutoAnswer
+    if ('backupKickEnabled' in body) patch.backupKickEnabled = !!body.backupKickEnabled
+    if ('blackMarketAutoBuy' in body) patch.blackMarketAutoBuy = !!body.blackMarketAutoBuy
+
+    if (Object.keys(patch).length === 0) {
+        return res.status(400).json({ error: 'Nothing to update.' })
+    }
+
+    saveBotConfig(req.session.username, patch)
+
+    const existing = sessions.get(req.session.username)
+    if (existing) {
+        existing.config = { ...existing.config, ...patch }
+    }
+
+    appLog(`Automation toggles updated by ${req.session.username}: ${JSON.stringify(patch)}`)
+
+    res.json({
+        ok: true,
+        automation: {
+            triviaAutoAnswer: patch.triviaAutoAnswer ?? (getBotConfig(req.session.username)?.triviaAutoAnswer !== false),
+            backupKickEnabled: patch.backupKickEnabled ?? (getBotConfig(req.session.username)?.backupKickEnabled !== false),
+            blackMarketAutoBuy: patch.blackMarketAutoBuy ?? !!getBotConfig(req.session.username)?.blackMarketAutoBuy
+        }
+    })
 
 })
 

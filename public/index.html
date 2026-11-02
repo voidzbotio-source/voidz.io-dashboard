@@ -1069,6 +1069,7 @@
         .card[data-card-id="danger"] { --card-accent: var(--red); }
         .card[data-card-id="keys"] { --card-accent: var(--yellow); }
         .card[data-card-id="autobuy"] { --card-accent: var(--teal); }
+        .card[data-card-id="automation"] { --card-accent: var(--green); }
         .card[data-card-id="players"] { --card-accent: var(--blue); }
         .card[data-card-id="team"] { --card-accent: var(--purple); }
         .card[data-card-id="leaderboard"] { --card-accent: var(--yellow); }
@@ -5227,6 +5228,49 @@
             </section>
 
             <!-- ========================================== -->
+            <!-- AUTOMATION -->
+            <!-- ========================================== -->
+
+            <section class="card col-2" data-card-id="automation" draggable="true" style="animation-delay: 0.157s;">
+
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0-8-8"/><path d="M12 6v6l4 2"/><path d="M4 12H2l3 3 3-3H6"/></svg>
+                    Automation
+                </div>
+
+                <label class="toggle-row">
+                    <span>Chat game auto-answer <span style="color: var(--muted); font-weight: 400;">(Math / Replication / Blanks)</span></span>
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="autoTriviaToggle" onchange="setAutomation('triviaAutoAnswer', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </span>
+                </label>
+
+                <label class="toggle-row">
+                    <span>Black Market auto-buy</span>
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="autoBmToggle" onchange="setAutomation('blackMarketAutoBuy', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </span>
+                </label>
+
+                <label class="toggle-row">
+                    <span>Backup kick <span style="color: var(--muted); font-weight: 400;">(code word via /msg)</span></span>
+                    <span class="toggle-switch">
+                        <input type="checkbox" id="autoBackupKickToggle" onchange="setAutomation('backupKickEnabled', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </span>
+                </label>
+
+                <div class="keys-category-label">Chat game history</div>
+
+                <div id="triviaHistoryList" class="team-body scroll" style="max-height: 180px;">
+                    <div class="empty-state">No chat games answered yet.</div>
+                </div>
+
+            </section>
+
+            <!-- ========================================== -->
             <!-- PLAYERS -->
             <!-- ========================================== -->
 
@@ -8919,6 +8963,20 @@
 
             }
 
+            // Automation card: reflect toggle state (unless a switch is mid-
+            // flip) and render the chat game history.
+            if (data.automation && !automationBusy) {
+                if ($('autoTriviaToggle')) $('autoTriviaToggle').checked = data.automation.triviaAutoAnswer !== false
+                if ($('autoBmToggle')) $('autoBmToggle').checked = !!data.automation.blackMarketAutoBuy
+                if ($('autoBackupKickToggle')) $('autoBackupKickToggle').checked = data.automation.backupKickEnabled !== false
+            }
+
+            const triviaKey = JSON.stringify(data.triviaHistory || [])
+            if (triviaKey !== lastTriviaHistoryKey) {
+                lastTriviaHistoryKey = triviaKey
+                renderTriviaHistory(data.triviaHistory)
+            }
+
             const povLink = $('povViewerLink')
 
             if (povLink) {
@@ -12565,6 +12623,50 @@
         let autoBuyItems = []
         let autoBuyHistory = []
         let lastAutoBuyHistoryKey = ''
+        let lastTriviaHistoryKey = ''
+        let automationBusy = false
+
+        const TRIVIA_TYPE_COLORS = { Math: 'var(--blue)', Replication: 'var(--teal)', Blanks: 'var(--purple)' }
+
+        function setAutomation(key, value) {
+            automationBusy = true
+            fetch('/api/automation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [key]: value })
+            })
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+                    automationBusy = false
+                    if (!ok) { showToast((data && data.error) || 'Could not update.', 'error'); return }
+                    const labels = { triviaAutoAnswer: 'Chat game auto-answer', blackMarketAutoBuy: 'Black Market auto-buy', backupKickEnabled: 'Backup kick' }
+                    showToast(`${labels[key] || 'Setting'} ${value ? 'on' : 'off'}.`, value ? 'success' : 'info')
+                })
+                .catch(() => { automationBusy = false; showToast('Could not reach the server.', 'error') })
+        }
+
+        function renderTriviaHistory(history) {
+            const container = $('triviaHistoryList')
+            if (!container) return
+            const events = Array.isArray(history) ? history : []
+            if (!events.length) {
+                container.innerHTML = '<div class="empty-state">No chat games answered yet.</div>'
+                return
+            }
+            container.innerHTML = events.slice().reverse().map(e => {
+                const when = e.timestamp ? new Date(e.timestamp).toLocaleString() : ''
+                const color = TRIVIA_TYPE_COLORS[e.type] || 'var(--muted)'
+                return `
+                    <div class="autoinvite-row">
+                        <span class="member-dot" style="background: ${color};"></span>
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-size: 13px; color: var(--text);">${escapeHtml(e.type || 'Game')} <span style="color: var(--muted);">&middot; ${escapeHtml(e.answer || '')}</span></div>
+                            <div style="font-size: 11px; color: var(--muted);">${escapeHtml(when)}</div>
+                        </div>
+                    </div>
+                `
+            }).join('')
+        }
 
         function loadAutoBuyItems() {
 

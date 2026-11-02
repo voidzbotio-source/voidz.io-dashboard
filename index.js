@@ -3977,7 +3977,6 @@ class BotSession {
         this.log(`Whisper sudo from ${sender}: ${payload}`)
         io.to(this.username).emit('notice', { type: 'info', text: `💬 ${sender} via sudo: ${payload}` })
         this.sendMinecraftChat(payload)
-        this.whisperReply(sender, [`Done.${auth.usesLeft > 0 ? ` ${auth.usesLeft} sudo use${auth.usesLeft === 1 ? '' : 's'} left.` : ' That was your last use.'}`])
     }
 
     // Whispering the passcode unlocks 3 sudo uses for 5 minutes and runs any

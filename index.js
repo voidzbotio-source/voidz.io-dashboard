@@ -2324,6 +2324,9 @@ class BotSession {
         // line is known to belong to that round. 'math' and
         // 'replication' are answered right now - see checkTrivia().
         this.triviaActiveType = null
+        // The pending (delayed) answer timer, so it can be cancelled if
+        // the round ends (someone wins) before it fires.
+        this.triviaTimer = null
 
         // Auto-reinvited players who have already been kicked for
         // low HP this "episode" - keyed by lowercase name, cleared
@@ -4816,11 +4819,15 @@ class BotSession {
         const chosenMatch = cleaned.match(/(\w+)\s+has been chosen!?$/i)
 
         if (chosenMatch) {
+            this.cancelPendingTrivia()
             this.triviaActiveType = chosenMatch[1].toLowerCase()
             return
         }
 
+        // Round over (someone won, or nobody did) - cancel any answer we
+        // had queued so we don't type into a finished round.
         if (/\bhas won\b/i.test(cleaned) || /\bnobody won\b/i.test(cleaned)) {
+            this.cancelPendingTrivia()
             this.triviaActiveType = null
             return
         }
@@ -4851,7 +4858,11 @@ class BotSession {
 
             this.log(`Trivia (Math): ${a} ${mathMatch[2]} ${b} = ${answer}`)
 
-            setTimeout(() => { if (this.bot) this.sendMinecraftChat(String(answer)) }, 25000)
+            this.cancelPendingTrivia()
+            this.triviaTimer = setTimeout(() => {
+                this.triviaTimer = null
+                if (this.bot) this.sendMinecraftChat(String(answer))
+            }, 25000)
 
             return
 
@@ -4873,12 +4884,25 @@ class BotSession {
 
             this.log(`Trivia (Replication): "${stripped}"`)
 
-            setTimeout(() => { if (this.bot) this.sendMinecraftChat(stripped) }, 25000)
+            this.cancelPendingTrivia()
+            this.triviaTimer = setTimeout(() => {
+                this.triviaTimer = null
+                if (this.bot) this.sendMinecraftChat(stripped)
+            }, 25000)
 
             return
 
         }
 
+    }
+
+    // Cancels a queued (delayed) trivia answer - called when the round ends
+    // or a new one starts, so the bot never answers a finished round.
+    cancelPendingTrivia() {
+        if (this.triviaTimer) {
+            clearTimeout(this.triviaTimer)
+            this.triviaTimer = null
+        }
     }
 
     finalizeTeamInfoCapture() {

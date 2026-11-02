@@ -4674,6 +4674,113 @@ class BotSession {
 
     }
 
+    // --- Interactive Black Market viewer (the BM card) ---
+    // Opens /bm, streams its contents to the dashboard as a clickable grid,
+    // keeps it open ~30s, then closes. Clicking a tile buys that slot.
+    openBlackMarketView() {
+
+        if (this.config.platform === 'bedrock') {
+            io.to(this.username).emit('notice', { type: 'error', text: 'The Black Market is Java-only.' })
+            return
+        }
+        if (!this.bot || !this.bot.entity) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Start the bot and get it online first.' })
+            return
+        }
+
+        this.closeBlackMarketView(true)
+
+        this.bmViewClosesAt = Date.now() + 30000
+        this.bmViewCloseTimer = setTimeout(() => this.closeBlackMarketView(), 30000)
+
+        this.fetchBlackMarketWindow(true)
+
+    }
+
+    // Sends /bm and, on the shop window, stores + streams it. firstOpen
+    // reports "market closed" if nothing opens; a refresh (after a buy)
+    // stays quiet.
+    fetchBlackMarketWindow(firstOpen) {
+
+        if (!this.bot) return
+
+        const shopTimeout = setTimeout(() => {
+            this.bot?.removeListener('windowOpen', onOpen)
+            if (firstOpen) {
+                this.closeBlackMarketView()
+                io.to(this.username).emit('notice', { type: 'info', text: "🛒 The Black Market isn't open right now." })
+            }
+        }, 5000)
+
+        const onOpen = shopWindow => {
+            clearTimeout(shopTimeout)
+            this.bmViewWindow = shopWindow
+            this.streamBlackMarketView()
+        }
+
+        this.bot.once('windowOpen', onOpen)
+        this.sendMinecraftChat('/bm')
+
+    }
+
+    streamBlackMarketView() {
+        const w = this.bmViewWindow
+        if (!w) return
+        const end = typeof w.inventoryStart === 'number' ? w.inventoryStart : w.slots.length
+        const FILLER = /glass_pane|^barrier$|^air$/
+        const slots = []
+        for (let i = 0; i < end; i++) {
+            const item = w.slots[i]
+            if (!item || FILLER.test(item.name)) continue
+            const name = String(item.displayName || item.name || '').replace(/§./g, '').trim()
+            slots.push({ slot: i, name, item: item.name, count: item.count || 1 })
+        }
+        io.to(this.username).emit('bmView', { open: true, slots, closesAt: this.bmViewClosesAt })
+    }
+
+    // Clicks a slot to buy it, auto-confirming the lime-wool "yes" if a
+    // confirm dialog appears, then refreshes the grid.
+    buyBlackMarketSlot(slot) {
+        const n = Number(slot)
+        if (!this.bot || !this.bmViewWindow || !Number.isInteger(n)) return
+        const item = this.bmViewWindow.slots[n]
+        if (!item) return
+
+        this.log(`BM view: buying slot ${n} (${item.displayName || item.name}).`)
+        io.to(this.username).emit('notice', { type: 'info', text: `🛒 Buying ${item.displayName || item.name}…` })
+
+        let confirmClicked = false
+        const onConfirm = confirmWindow => {
+            let tries = 0
+            const tryConfirm = () => {
+                if (confirmClicked || !this.bot) return
+                const entry = confirmWindow.slots
+                    .map((it, idx) => ({ it, idx }))
+                    .filter(e => e.it)
+                    .find(({ it }) => it.name === 'lime_wool' || /confirm|purchase|buy|yes/i.test(it.displayName || ''))
+                if (entry) { confirmClicked = true; this.bot.clickWindow(entry.idx, 0, 0).catch(() => {}); return }
+                if (tries++ < 8) setTimeout(tryConfirm, 150)
+            }
+            tryConfirm()
+        }
+        this.bot.once('windowOpen', onConfirm)
+        this.bot.clickWindow(n, 0, 0).catch(() => {})
+
+        // Refresh the grid after the purchase settles (if still viewing).
+        setTimeout(() => {
+            this.bot?.removeListener('windowOpen', onConfirm)
+            if (this.bot && this.bmViewCloseTimer) this.fetchBlackMarketWindow(false)
+        }, 1500)
+    }
+
+    closeBlackMarketView(silent = false) {
+        if (this.bmViewCloseTimer) { clearTimeout(this.bmViewCloseTimer); this.bmViewCloseTimer = null }
+        if (this.bot && this.bmViewWindow) { try { this.bot.closeWindow(this.bmViewWindow) } catch {} }
+        this.bmViewWindow = null
+        this.bmViewClosesAt = null
+        if (!silent) io.to(this.username).emit('bmView', { open: false })
+    }
+
     // Manual "Check BM" (Quick Actions): opens /bm right now and buys a
     // tracked item if one's in stock, regardless of the auto-buy toggle
     // (that toggle only controls buying automatically on a restock). Uses
@@ -6556,6 +6663,8 @@ function handleWebCommand(username, command) {
         case 'rejoin': botSession.manualRejoin(); break
         case 'reset-team-history': botSession.resetTeamHistory(); break
         case 'check-bm': botSession.checkBlackMarketNow(); break
+        case 'bm-view': botSession.openBlackMarketView(); break
+        case 'bm-close': botSession.closeBlackMarketView(); break
         case 'stop-bot': botSession.stopBotRemote(); break
 
         default:
@@ -6568,6 +6677,8 @@ function handleWebCommand(username, command) {
                 botSession.kickTeamMember(command.substring('kick-player '.length))
             } else if (lower.startsWith('remove-team-reading ')) {
                 botSession.removeTeamHistoryReading(command.substring('remove-team-reading '.length))
+            } else if (lower.startsWith('bm-buy ')) {
+                botSession.buyBlackMarketSlot(command.substring('bm-buy '.length))
             }
 
             break

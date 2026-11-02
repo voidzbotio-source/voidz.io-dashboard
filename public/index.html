@@ -1070,6 +1070,12 @@
         .card[data-card-id="keys"] { --card-accent: var(--yellow); }
         .card[data-card-id="autobuy"] { --card-accent: var(--teal); }
         .card[data-card-id="automation"] { --card-accent: var(--green); }
+        .card[data-card-id="bmview"] { --card-accent: var(--yellow); }
+        .bm-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 10px 6px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; text-align: center; transition: border-color 0.15s, transform 0.1s; }
+        .bm-tile:hover { border-color: var(--yellow); transform: translateY(-1px); }
+        .bm-tile:active { transform: translateY(0); }
+        .bm-tile-name { font-size: 11px; font-weight: 600; color: var(--text); line-height: 1.2; word-break: break-word; }
+        .bm-tile-count { font-size: 10px; color: var(--muted); }
         .card[data-card-id="players"] { --card-accent: var(--blue); }
         .card[data-card-id="team"] { --card-accent: var(--purple); }
         .card[data-card-id="leaderboard"] { --card-accent: var(--yellow); }
@@ -5271,6 +5277,28 @@
             </section>
 
             <!-- ========================================== -->
+            <!-- BLACK MARKET VIEWER -->
+            <!-- ========================================== -->
+
+            <section class="card col-2" data-card-id="bmview" draggable="true" style="animation-delay: 0.158s;">
+
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                    Black Market
+                    <span id="bmViewCountdown" class="badge" style="margin-left: auto; display: none; color: var(--yellow); border-color: var(--yellow);"></span>
+                </div>
+
+                <p class="settings-section-desc">Open a live view of the Black Market. It stays open ~30s &mdash; click any item to buy it.</p>
+
+                <button class="modal-ok" id="bmViewOpenBtn" onclick="openBmView()" style="width: 100%; margin-bottom: 12px;">Open Black Market</button>
+
+                <div id="bmViewGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px;">
+                    <div class="empty-state" style="grid-column: 1 / -1;">Not open. Click the button above.</div>
+                </div>
+
+            </section>
+
+            <!-- ========================================== -->
             <!-- PLAYERS -->
             <!-- ========================================== -->
 
@@ -8289,6 +8317,59 @@
             // exists for exactly this.
             if (data?.logActivity) {
                 pushActivity(data.text, data.type)
+            }
+
+        })
+
+        // ==================================================
+        // BLACK MARKET LIVE VIEWER
+        // ==================================================
+
+        let bmViewCountdownTimer = null
+
+        function openBmView() {
+            sendCommand('bm-view')
+            const btn = $('bmViewOpenBtn')
+            if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; setTimeout(() => { btn.disabled = false; btn.textContent = 'Open Black Market' }, 3000) }
+        }
+
+        function buyBmSlot(slot) {
+            sendCommand('bm-buy ' + slot)
+        }
+
+        socket.on('bmView', data => {
+
+            const grid = $('bmViewGrid')
+            const countdown = $('bmViewCountdown')
+            if (!grid) return
+
+            if (bmViewCountdownTimer) { clearInterval(bmViewCountdownTimer); bmViewCountdownTimer = null }
+
+            if (!data || !data.open) {
+                grid.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1;">Closed. Click the button to open it again.</div>'
+                if (countdown) countdown.style.display = 'none'
+                return
+            }
+
+            const slots = Array.isArray(data.slots) ? data.slots : []
+            grid.innerHTML = slots.length
+                ? slots.map(s => `
+                    <div class="bm-tile" onclick="buyBmSlot(${s.slot})" title="Click to buy">
+                        <div class="bm-tile-name">${escapeHtml(s.name || s.item || '?')}</div>
+                        <div class="bm-tile-count">x${s.count || 1}</div>
+                    </div>
+                `).join('')
+                : '<div class="empty-state" style="grid-column: 1 / -1;">The Black Market is empty right now.</div>'
+
+            if (countdown && data.closesAt) {
+                const tick = () => {
+                    const left = Math.max(0, Math.round((data.closesAt - Date.now()) / 1000))
+                    countdown.textContent = `${left}s`
+                    countdown.style.display = 'inline-block'
+                    if (left <= 0 && bmViewCountdownTimer) { clearInterval(bmViewCountdownTimer); bmViewCountdownTimer = null }
+                }
+                tick()
+                bmViewCountdownTimer = setInterval(tick, 1000)
             }
 
         })

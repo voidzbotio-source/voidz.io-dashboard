@@ -3589,14 +3589,38 @@ class BotSession {
             return
         }
 
-        for (const name of names.slice(0, 10)) {
+        // Tracked teammates first - those are the ones whose HP we're
+        // trying to recover from the tab list - then a few others.
+        const tracked = new Set((Array.isArray(this.config.autoReinvite) ? this.config.autoReinvite : [])
+            .map(entry => ((typeof entry === 'string' ? entry : entry?.name) || '').toLowerCase())
+            .filter(Boolean))
+
+        const ordered = names.slice().sort((a, b) => {
+            const ta = tracked.has(a.toLowerCase()) ? 0 : 1
+            const tb = tracked.has(b.toLowerCase()) ? 0 : 1
+            return ta - tb
+        })
+
+        const belowObj = this.rawScoreboard?.getPosition(2)
+
+        for (const name of ordered.slice(0, 12)) {
 
             const player = this.bot.players[name]
-            const raw = player?.displayName?.toString?.() ?? String(player?.displayName ?? '(no display name)')
+            const dn = player?.displayName
+
+            // toMotd() keeps the §-colour codes (toString() strips them);
+            // JSON.stringify escapes any custom-font glyphs to \uXXXX so
+            // they're readable. The colour is where HP is most likely
+            // encoded if it's in the tab list at all.
+            let motd = '(no display name)'
+            try { motd = dn?.toMotd?.() ?? dn?.toString?.() ?? String(dn) } catch { motd = String(dn) }
+
+            const hp = belowObj?.items.find(item => item.name === name)?.value ?? '-'
+            const flag = tracked.has(name.toLowerCase()) ? '*' : ' '
 
             io.to(this.username).emit('chat', {
                 username: 'DEBUG',
-                message: `${name}: ${JSON.stringify(raw)}`,
+                message: `${flag}${name} hp=${hp}: ${JSON.stringify(motd)}`,
                 time: new Date().toISOString()
             })
 

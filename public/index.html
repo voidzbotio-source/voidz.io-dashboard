@@ -3513,6 +3513,18 @@
                 inset -2px -2px 0 rgba(255, 255, 255, 0.3);
         }
 
+        .inv-slot-droppable {
+            cursor: pointer;
+            transition: filter 0.1s, outline-color 0.1s;
+            outline: 2px solid transparent;
+            outline-offset: -2px;
+        }
+
+        .inv-slot-droppable:hover {
+            filter: brightness(1.15);
+            outline-color: var(--red);
+        }
+
         .inv-slot-icon {
             width: 22px;
             height: 22px;
@@ -5465,6 +5477,9 @@
                 <div class="card-title">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 8L12 4 4 8m16 0-8 4m8-4v8l-8 4m0-8L4 8m8 4v8M4 8v8l8 4"/></svg>
                     Inventory
+                    <button class="title-action" id="dropAllBtn" title="Drop everything (keeps armor & off-hand)" onclick="dropAllItems()" style="margin-left: auto;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
                 </div>
 
                 <div
@@ -8345,6 +8360,19 @@
             sendCommand('bm-buy ' + slot)
         }
 
+        // Drop the stack in one inventory slot (clicking an item in the
+        // Inventory card). Confirms first so a stray tap doesn't throw
+        // away gear.
+        function dropInvSlot(slot) {
+            const item = currentInventory.find(i => i.slot === slot)
+            const label = item ? `${item.count}× ${item.displayName || item.name}` : 'this item'
+            sendCommand('drop ' + slot, { confirm: `Drop ${label}? It'll fall on the ground where the bot is standing.` })
+        }
+
+        function dropAllItems() {
+            sendCommand('drop-all', { confirm: 'Drop EVERYTHING in the main inventory + hotbar? (Armor and off-hand are kept.) This cannot be undone.' })
+        }
+
         socket.on('bmView', data => {
 
             const grid = $('bmViewGrid')
@@ -8857,7 +8885,8 @@
             'recover': 'Recover',
             'rejoin': 'Rejoin',
             'check-bm': 'Check Black Market',
-            'reset-team-history': 'Reset Team History'
+            'reset-team-history': 'Reset Team History',
+            'drop-all': 'Drop all items'
         }
 
         // ==================================================
@@ -11252,6 +11281,11 @@
 
         let lastInventorySignature = null
 
+        // Last inventory the card rendered, so dropInvSlot() can look up
+        // a slot's name/count for the confirm dialog without re-reading
+        // the DOM.
+        let currentInventory = []
+
         function renderInventory(items) {
 
             const container =
@@ -11274,6 +11308,7 @@
             }
 
             lastInventorySignature = signature
+            currentInventory = Array.isArray(items) ? items : []
 
             const scrollTop = container.scrollTop
 
@@ -11331,7 +11366,7 @@
                                                     : `${name} x${item.count}`
 
                                                 return `
-                                                    <div class="inv-slot" title="${escapeHtml(title)}">
+                                                    <div class="inv-slot inv-slot-droppable" title="${escapeHtml(title)} — click to drop" onclick="dropInvSlot(${item.slot})">
                                                         <img
                                                             class="inv-slot-icon"
                                                             src="${itemIconUrl(item.name, 'item')}"

@@ -2723,6 +2723,88 @@ class BotSession {
 
     }
 
+    // --------------------------------------------------------
+    // DROP ITEMS (Java only - bedrock-protocol has no equivalent
+    // inventory-toss API, and the inventory card is empty there anyway)
+    // --------------------------------------------------------
+
+    dropReady() {
+        if (this.config.platform === 'bedrock') {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Dropping items is Java-only.' })
+            return false
+        }
+        if (!this.bot || !this.bot.inventory) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Bot is not connected.' })
+            return false
+        }
+        return true
+    }
+
+    // Drops the whole stack in a single inventory slot (the Drop button
+    // on each item in the Inventory card sends 'drop <slot>').
+    async dropInventorySlot(slotArg) {
+
+        if (!this.dropReady()) return
+
+        const slot = parseInt(slotArg, 10)
+
+        if (!Number.isInteger(slot)) return
+
+        const item = this.bot.inventory.slots[slot]
+
+        if (!item) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'That slot is already empty.' })
+            return
+        }
+
+        const label = item.displayName || item.name
+        const count = item.count
+
+        try {
+            await this.bot.tossStack(item)
+            this.log(`Dropped ${count}x ${label} (slot ${slot}).`)
+            io.to(this.username).emit('notice', { type: 'info', text: `Dropped ${count}× ${label}` })
+        } catch (err) {
+            this.log(`Drop failed (slot ${slot}): ${err.message}`)
+            io.to(this.username).emit('notice', { type: 'error', text: `Couldn't drop that: ${err.message}` })
+        }
+
+        this.updateDashboard()
+
+    }
+
+    // Drops every stack in the main inventory + hotbar. inventory.items()
+    // deliberately excludes the armor and off-hand slots, so this won't
+    // throw away equipped gear.
+    async dropAllInventory() {
+
+        if (!this.dropReady()) return
+
+        const items = this.bot.inventory.items()
+
+        if (items.length === 0) {
+            io.to(this.username).emit('notice', { type: 'info', text: 'Inventory is already empty.' })
+            return
+        }
+
+        let dropped = 0
+
+        for (const item of items) {
+            try {
+                await this.bot.tossStack(item)
+                dropped++
+            } catch (err) {
+                this.log(`Drop-all: failed to drop ${item?.name}: ${err.message}`)
+            }
+        }
+
+        this.log(`Dropped all - ${dropped} stack(s).`)
+        io.to(this.username).emit('notice', { type: 'info', text: `Dropped ${dropped} stack(s) (armor & off-hand kept)` })
+
+        this.updateDashboard()
+
+    }
+
     formatUptime() {
 
         if (!this.connectedAt) {
@@ -6834,6 +6916,7 @@ function handleWebCommand(username, command) {
         case 'check-bm': botSession.checkBlackMarketNow(); break
         case 'bm-view': botSession.openBlackMarketView(); break
         case 'bm-close': botSession.closeBlackMarketView(); break
+        case 'drop-all': botSession.dropAllInventory(); break
         case 'stop-bot': botSession.stopBotRemote(); break
 
         default:
@@ -6848,6 +6931,8 @@ function handleWebCommand(username, command) {
                 botSession.removeTeamHistoryReading(command.substring('remove-team-reading '.length))
             } else if (lower.startsWith('bm-buy ')) {
                 botSession.buyBlackMarketSlot(command.substring('bm-buy '.length))
+            } else if (lower.startsWith('drop ')) {
+                botSession.dropInventorySlot(command.substring('drop '.length))
             }
 
             break

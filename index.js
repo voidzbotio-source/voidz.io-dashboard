@@ -3029,6 +3029,14 @@ class BotSession {
 
         if (!this.awaitingBalance) return
 
+        // Only trust the economy reply to OUR /bal - it names the bot
+        // itself ("ECONOMY » SkeletonFleaxer has $..."). Without this,
+        // any chat line containing "has $<number>" inside the 15s window
+        // could trigger a bogus deposit or swallow the real reply. Since
+        // this moves real money, err on the side of doing nothing.
+        const self = this.bot?.username
+        if (!self || !text.toLowerCase().includes(self.toLowerCase())) return
+
         const match = text.match(/has \$([\d,]+)/)
         if (!match) return
 

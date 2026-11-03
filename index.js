@@ -1909,6 +1909,25 @@ function findBlanksCandidates(maskedLine) {
 
 }
 
+// Parses a sidebar "Time Left" value into whole seconds. Handles a
+// clock ("0:10", "1:05" -> m:ss), a suffixed count ("10s", "10 sec")
+// and a bare number ("10"). Returns null if nothing numeric is found.
+function parseTimeLeftSeconds(raw) {
+
+    if (!raw) return null
+
+    const text = String(raw).replace(/[§&][0-9a-fk-or]/gi, '').trim()
+
+    const clock = text.match(/(\d+):(\d{1,2})/)
+    if (clock) return parseInt(clock[1], 10) * 60 + parseInt(clock[2], 10)
+
+    const num = text.match(/\d+/)
+    if (num) return parseInt(num[0], 10)
+
+    return null
+
+}
+
 function containsLifeSteal(text) {
 
     const normalized = cleanMessage(text).toLowerCase()
@@ -2406,6 +2425,13 @@ class BotSession {
         // (or they drop off the tab list) so they aren't kicked
         // every single tick while they stay critical.
         this.lowHpHandled = new Set()
+
+        // The auto-reinvite player we've already nudged during the
+        // current KOTH capture (lowercase name), so the "Make sure
+        // you're in the team!" whisper fires once per capture, not every
+        // tick inside the final 10 seconds. Cleared when nobody we track
+        // is capping (see checkKothCaptureNudge()).
+        this.kothNudgeHandled = null
 
         // POV viewer (see startPovViewer()) - the port is assigned
         // once and kept for the life of this session so the dashboard
@@ -4677,6 +4703,52 @@ class BotSession {
             io.to(this.username).emit('notice', { type: 'info', text: `${actualName} dropped to 5 hearts (10 HP) - kicked and reinvited` })
 
         }
+
+    }
+
+    // When someone on the auto-reinvite list is capping a KOTH with
+    // about 10 seconds left, whisper them "Make sure you're in the
+    // team!" (twice) so the capture's points actually land on us. Reads
+    // the live "Capping:" / "Time Left:" sidebar values; fires once per
+    // capture (kothNudgeHandled), and resets as soon as nobody we track
+    // is capping. Runs on the 1-second dashboard tick.
+    checkKothCaptureNudge() {
+
+        if (!this.bot || this.shuttingDown) return
+
+        const status = this.getKothCaptureStatus()
+
+        // Nobody (we care about) capping -> clear so the next capture
+        // by this player can nudge again.
+        if (!status || !status.capping) {
+            this.kothNudgeHandled = null
+            return
+        }
+
+        // Strip Minecraft colour codes down to a bare player name.
+        const capper = String(status.capping).replace(/[§&][0-9a-fk-or]/gi, '').trim()
+
+        if (!capper || !this.isOnAutoReinvite(capper)) {
+            this.kothNudgeHandled = null
+            return
+        }
+
+        const seconds = parseTimeLeftSeconds(status.timeLeft)
+
+        // Only inside the final 10 seconds (but not after it's hit 0).
+        if (seconds === null || seconds > 10 || seconds < 1) return
+
+        const key = capper.toLowerCase()
+
+        if (this.kothNudgeHandled === key) return
+
+        this.kothNudgeHandled = key
+
+        const msg = `/msg ${capper} Make sure you're in the team!`
+        this.sendMinecraftChat(msg)
+        setTimeout(() => this.sendMinecraftChat(msg), 500)
+
+        this.log(`KOTH nudge: ${capper} (auto-reinvite) capping with ${seconds}s left - sent "Make sure you're in the team!" x2.`)
 
     }
 
@@ -8416,6 +8488,7 @@ setInterval(() => {
     for (const botSession of sessions.values()) {
         botSession.updateDashboard()
         botSession.checkAutoInviteLowHealth()
+        botSession.checkKothCaptureNudge()
         botSession.touchOnlinePlayers()
     }
 }, 1000)

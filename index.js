@@ -3740,6 +3740,22 @@ class BotSession {
 
             emitLine(`bot.health=${this.bot.health}  list(0)=${listEntry?.value ?? '-'}  belowName(2)=${belowNameEntry?.value ?? '-'}`)
 
+            // Also dump every Auto-Invite tracked teammate's HP from both
+            // slots - this is what the low-HP auto-kick actually reads,
+            // and the bot being AFK means slot 2 is usually empty for
+            // anyone off fighting while slot 0 (tab list) still has them.
+            const tracked = (Array.isArray(this.config.autoReinvite) ? this.config.autoReinvite : [])
+                .map(entry => (typeof entry === 'string' ? entry : entry?.name) || '')
+                .filter(Boolean)
+
+            for (const name of tracked) {
+                const l = list?.items.find(item => item.name === name)
+                const b = belowName?.items.find(item => item.name === name)
+                const online = this.bot.players && this.bot.players[name] ? 'online' : 'offline'
+                const inTeam = this.isTeamMember(name) ? 'in-team' : 'NOT-in-team'
+                emitLine(`  ${name}: list(0)=${l?.value ?? '-'}  belowName(2)=${b?.value ?? '-'}  (${online}, ${inTeam})`)
+            }
+
         }
 
         report()
@@ -4767,13 +4783,32 @@ class BotSession {
     // "doesn't always work" from the dashboard with no error to show
     // for it.
     //
-    // HP comes from the "below name" scoreboard objective (display
-    // slot 2, the number shown under each player's nametag in-world -
-    // exposed here via RawScoreboardTracker since mineflayer's own
-    // bot.scoreboard never populates on this server's protocol
-    // version - see the class comment above BotSession). 5 HP was the
-    // threshold confirmed working in production; raised to 10 HP per
-    // request.
+    // Another player's HP on FlareMC comes from the tab-list scoreboard
+    // objective (display slot 0, "list") - it's server-wide, so it's
+    // there even when the player is nowhere near the AFK bot. The "below
+    // name" objective (slot 2) only populates for players in render
+    // range of the bot, which is why reading slot 2 alone silently
+    // missed any teammate fighting elsewhere (the bot sits AFK at
+    // /home). Prefer slot 0; fall back to slot 2 only when slot 0 has no
+    // entry for this exact (case-sensitive) name. Exposed via
+    // RawScoreboardTracker since mineflayer's own bot.scoreboard never
+    // populates on this server's protocol version.
+    getPlayerHp(name) {
+
+        const listObj = this.rawScoreboard?.getPosition(0)
+        const listEntry = listObj?.items.find(item => item.name === name)
+        if (Number.isFinite(listEntry?.value)) return { hp: listEntry.value, source: 'list' }
+
+        const belowObj = this.rawScoreboard?.getPosition(2)
+        const belowEntry = belowObj?.items.find(item => item.name === name)
+        if (Number.isFinite(belowEntry?.value)) return { hp: belowEntry.value, source: 'belowName' }
+
+        return null
+
+    }
+
+    // 5 HP was the threshold confirmed working in production; raised to
+    // 10 HP (5 hearts) per request.
     checkAutoInviteLowHealth() {
 
         if (!this.bot || !this.bot.players) return
@@ -4788,10 +4823,6 @@ class BotSession {
 
         if (trackedNames.length === 0) return
 
-        const belowName = this.rawScoreboard?.getPosition(2)
-
-        if (!belowName) return
-
         const onlineNames = Object.keys(this.bot.players)
 
         for (const trackedName of trackedNames) {
@@ -4805,10 +4836,11 @@ class BotSession {
                 continue
             }
 
-            const scoreEntry = belowName.items.find(item => item.name === actualName)
-            const hp = Number.isFinite(scoreEntry?.value) ? scoreEntry.value : null
+            const hpInfo = this.getPlayerHp(actualName)
 
-            if (hp === null) continue
+            if (!hpInfo) continue
+
+            const hp = hpInfo.hp
 
             if (hp > 10) {
                 this.lowHpHandled.delete(key)
@@ -4819,13 +4851,13 @@ class BotSession {
 
             this.lowHpHandled.add(key)
 
-            this.log(`${actualName} is at ${hp} HP and in the team - kicking ASAP and reinviting.`)
+            this.log(`${actualName} is at ${hp} HP (via ${hpInfo.source}) and in the team - kicking ASAP and reinviting.`)
 
             this.sendMinecraftChat(`/t kick ${actualName}`)
 
             setTimeout(() => this.sendMinecraftChat(`/t invite ${actualName}`), 350)
 
-            io.to(this.username).emit('notice', { type: 'info', text: `${actualName} dropped to 5 hearts (10 HP) - kicked and reinvited` })
+            io.to(this.username).emit('notice', { type: 'info', text: `${actualName} dropped to ${hp} HP - kicked and reinvited` })
 
         }
 

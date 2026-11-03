@@ -3168,6 +3168,18 @@ class BotSession {
         // toggle is on).
         this.startBalanceManager()
 
+        // Rebind the POV viewer to the LifeSteal world. It was first
+        // started back on spawn in the Hub; after the server transfer to
+        // LifeSteal that WorldView is looking at stale/empty chunks,
+        // which is why the POV came up black. Restart it once the AFK
+        // /home teleport has settled so it binds to a fully-loaded world.
+        setTimeout(() => {
+            if (!this.bot || !this.bot.entity || this.shuttingDown) return
+            if (!this.lifeStealReached) return
+            this.log('On LifeSteal - restarting POV viewer against the loaded world.')
+            this.startPovViewer()
+        }, HOME_DELAY + BLACK_MARKET_RESYNC_DELAY)
+
     }
 
     // Starts (or restarts) prismarine-viewer's live 3D view of what
@@ -3221,6 +3233,63 @@ class BotSession {
         if (this.povViewerCloseFn) {
             try { this.povViewerCloseFn() } catch {}
             this.povViewerCloseFn = null
+        }
+
+    }
+
+    // --------------------------------------------------------
+    // MANUAL MOVEMENT (Java only - driven live from the POV card's
+    // on-screen pad / keyboard; bedrock-protocol has no setControlState)
+    // --------------------------------------------------------
+
+    static MOVE_CONTROLS = ['forward', 'back', 'left', 'right', 'jump', 'sneak', 'sprint']
+
+    // Press/release one movement control. keydown -> state true,
+    // keyup -> state false, so held keys keep the bot walking.
+    setMovement(action, state) {
+
+        if (this.config.platform === 'bedrock') return
+        if (!this.bot || !this.bot.entity) return
+        if (!BotSession.MOVE_CONTROLS.includes(action)) return
+
+        try {
+            this.bot.setControlState(action, !!state)
+        } catch (err) {
+            this.log(`Move (${action}) failed: ${err.message}`)
+        }
+
+    }
+
+    // Safety net: release everything (card unmounted, tab blurred, bot
+    // disconnecting) so it doesn't keep walking into a wall forever.
+    stopAllMovement() {
+
+        if (!this.bot) return
+
+        for (const action of BotSession.MOVE_CONTROLS) {
+            try { this.bot.setControlState(action, false) } catch {}
+        }
+
+    }
+
+    // Nudge the look direction by a yaw/pitch delta (radians). Pitch is
+    // clamped to straight-up / straight-down.
+    turnBot(dYaw, dPitch) {
+
+        if (this.config.platform === 'bedrock') return
+        if (!this.bot || !this.bot.entity) return
+
+        const yaw = this.bot.entity.yaw + (Number(dYaw) || 0)
+        let pitch = this.bot.entity.pitch + (Number(dPitch) || 0)
+
+        const limit = Math.PI / 2
+        if (pitch > limit) pitch = limit
+        if (pitch < -limit) pitch = -limit
+
+        try {
+            this.bot.look(yaw, pitch, false)
+        } catch (err) {
+            this.log(`Look failed: ${err.message}`)
         }
 
     }
@@ -6241,6 +6310,7 @@ class BotSession {
         this.stopKeyallTimer()
         this.stopJqSafetyTimer()
         this.stopBalanceManager()
+        this.stopAllMovement()
         this.stopPovViewer()
 
         if (this.reconnectTimer) {
@@ -8553,7 +8623,39 @@ io.on('connection', socket => {
 
     })
 
+    // Live movement from the POV card. Kept off the 'command' path so
+    // it doesn't fire a toast per keystroke and stays low-latency.
+    socket.on('botMove', payload => {
+
+        const activeSession = sessions.get(username)
+        if (!activeSession) return
+
+        const action = String(payload?.action || '')
+
+        if (action === 'stop-all') {
+            activeSession.stopAllMovement()
+            return
+        }
+
+        activeSession.setMovement(action, !!payload?.state)
+
+    })
+
+    socket.on('botLook', payload => {
+
+        const activeSession = sessions.get(username)
+        if (!activeSession) return
+
+        activeSession.turnBot(payload?.dYaw, payload?.dPitch)
+
+    })
+
     socket.on('disconnect', () => {
+        // Don't leave the bot walking when the only dashboard driving it
+        // goes away. (Harmless if another tab is still connected - it can
+        // just press the key again.)
+        const activeSession = sessions.get(username)
+        if (activeSession) activeSession.stopAllMovement()
         originalLog(`[WEB] Dashboard disconnected: ${username}`)
     })
 

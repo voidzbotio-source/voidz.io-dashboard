@@ -1083,6 +1083,7 @@
         .card[data-card-id="serveractivity"] { --card-accent: var(--blue); }
         .card[data-card-id="badges"] { --card-accent: var(--purple); }
         .card[data-card-id="inventory"] { --card-accent: var(--orange); }
+        .card[data-card-id="remotecontrol"] { --card-accent: var(--blue); }
         .card[data-card-id="threats"] { --card-accent: var(--red); }
         .card[data-card-id="allies"] { --card-accent: var(--green); }
         .card[data-card-id="autoinvite"] { --card-accent: var(--green); }
@@ -3525,6 +3526,73 @@
             outline-color: var(--red);
         }
 
+        /* Remote control pad */
+        .rc-kbd-toggle {
+            margin-left: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--muted);
+            cursor: pointer;
+            user-select: none;
+        }
+        .rc-kbd-toggle input { accent-color: var(--card-accent, var(--primary)); cursor: pointer; }
+
+        .rc-pads {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 18px;
+            align-items: flex-start;
+        }
+        .rc-pad { flex: 1 1 150px; }
+        .rc-pad-label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+        .rc-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+        }
+        .rc-row {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+        }
+        .rc-btn {
+            background: var(--surface-2, rgba(255,255,255,0.05));
+            border: 1px solid var(--border, rgba(255,255,255,0.12));
+            color: var(--text, #fff);
+            border-radius: 8px;
+            padding: 10px 0;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            user-select: none;
+            touch-action: none;
+            transition: background 0.08s, transform 0.08s, border-color 0.08s;
+        }
+        .rc-btn.rc-wide { flex: 1; font-size: 0.72rem; }
+        .rc-btn:hover { border-color: var(--card-accent, var(--primary)); }
+        .rc-btn.rc-active {
+            background: var(--card-accent, var(--primary));
+            border-color: var(--card-accent, var(--primary));
+            color: #fff;
+            transform: translateY(1px);
+        }
+        .rc-hint {
+            margin: 12px 0 0;
+            font-size: 0.72rem;
+            line-height: 1.5;
+            color: var(--muted);
+        }
+
         .inv-slot-icon {
             width: 22px;
             height: 22px;
@@ -5488,6 +5556,58 @@
                 >
                     <div class="empty-state">Bot is offline.</div>
                 </div>
+
+            </section>
+
+            <!-- ========================================== -->
+            <!-- REMOTE CONTROL -->
+            <!-- ========================================== -->
+
+            <section class="card col-2" data-card-id="remotecontrol" draggable="true" style="animation-delay: 0.2s;">
+
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
+                    Remote Control
+                    <label class="rc-kbd-toggle" title="Capture WASD / arrows / space / shift and drive the bot">
+                        <input type="checkbox" id="rcKeyboardToggle" onchange="setRcKeyboard(this.checked)">
+                        <span>Keyboard</span>
+                    </label>
+                </div>
+
+                <div class="rc-pads">
+
+                    <div class="rc-pad">
+                        <div class="rc-pad-label">Move</div>
+                        <div class="rc-grid">
+                            <span></span>
+                            <button class="rc-btn" data-hold="forward">W</button>
+                            <span></span>
+                            <button class="rc-btn" data-hold="left">A</button>
+                            <button class="rc-btn" data-hold="back">S</button>
+                            <button class="rc-btn" data-hold="right">D</button>
+                        </div>
+                        <div class="rc-row">
+                            <button class="rc-btn rc-wide" data-hold="jump">Jump</button>
+                            <button class="rc-btn rc-wide" data-hold="sneak">Sneak</button>
+                            <button class="rc-btn rc-wide" data-hold="sprint">Sprint</button>
+                        </div>
+                    </div>
+
+                    <div class="rc-pad">
+                        <div class="rc-pad-label">Look</div>
+                        <div class="rc-grid">
+                            <span></span>
+                            <button class="rc-btn" data-look="up">▲</button>
+                            <span></span>
+                            <button class="rc-btn" data-look="turnleft">◄</button>
+                            <button class="rc-btn" data-look="down">▼</button>
+                            <button class="rc-btn" data-look="turnright">►</button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <p class="rc-hint">Hold a button (or turn on <b>Keyboard</b>: W/A/S/D move, Space jump, Shift sneak, Ctrl sprint, arrows look). Java accounts only.</p>
 
             </section>
 
@@ -8372,6 +8492,116 @@
         function dropAllItems() {
             sendCommand('drop-all', { confirm: 'Drop EVERYTHING in the main inventory + hotbar? (Armor and off-hand are kept.) This cannot be undone.' })
         }
+
+        // ==================================================
+        // REMOTE CONTROL (POV movement)
+        // ==================================================
+
+        const RC_LOOK_STEP = 0.35          // radians per tick (~20 degrees)
+        const RC_LOOK_INTERVAL = 120        // ms between look ticks while held
+        const RC_KEYMAP = { 'w': 'forward', 'a': 'left', 's': 'back', 'd': 'right', ' ': 'jump', 'shift': 'sneak', 'control': 'sprint' }
+        const RC_LOOKMAP = { 'arrowleft': 'turnleft', 'arrowright': 'turnright', 'arrowup': 'up', 'arrowdown': 'down' }
+
+        let rcKeyboardActive = false
+        const rcLookTimers = {}
+        const rcKeysDown = new Set()
+
+        function rcEmitMove(action, state) {
+            if (typeof socket !== 'undefined' && socket) socket.emit('botMove', { action, state })
+        }
+
+        // dYaw: + turns right. dPitch: - looks up, + looks down
+        // (mineflayer pitch is -PI/2 up .. +PI/2 down).
+        function rcLookDelta(id) {
+            switch (id) {
+                case 'turnleft': return { dYaw: -RC_LOOK_STEP, dPitch: 0 }
+                case 'turnright': return { dYaw: RC_LOOK_STEP, dPitch: 0 }
+                case 'up': return { dYaw: 0, dPitch: -RC_LOOK_STEP }
+                case 'down': return { dYaw: 0, dPitch: RC_LOOK_STEP }
+            }
+            return null
+        }
+
+        function rcLookStartById(id) {
+            if (rcLookTimers[id]) return
+            const delta = rcLookDelta(id)
+            if (!delta) return
+            const fire = () => { if (typeof socket !== 'undefined' && socket) socket.emit('botLook', delta) }
+            fire()
+            rcLookTimers[id] = setInterval(fire, RC_LOOK_INTERVAL)
+        }
+
+        function rcLookStopById(id) {
+            if (rcLookTimers[id]) { clearInterval(rcLookTimers[id]); delete rcLookTimers[id] }
+        }
+
+        function rcHighlight(selector, on) {
+            const el = document.querySelector(selector)
+            if (el) el.classList.toggle('rc-active', on)
+        }
+
+        function rcReleaseAll() {
+            rcKeysDown.clear()
+            for (const id in rcLookTimers) { clearInterval(rcLookTimers[id]); delete rcLookTimers[id] }
+            document.querySelectorAll('.rc-btn.rc-active').forEach(b => b.classList.remove('rc-active'))
+            if (typeof socket !== 'undefined' && socket) socket.emit('botMove', { action: 'stop-all' })
+        }
+
+        function setRcKeyboard(on) {
+            rcKeyboardActive = on
+            if (!on) rcReleaseAll()
+        }
+
+        function rcIsTyping(el) {
+            return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+        }
+
+        // --- on-screen buttons (press & hold, mouse or touch) ---
+        document.addEventListener('pointerdown', e => {
+            const btn = e.target.closest && e.target.closest('.rc-btn')
+            if (!btn) return
+            e.preventDefault()
+            if (btn.setPointerCapture) { try { btn.setPointerCapture(e.pointerId) } catch {} }
+            btn.classList.add('rc-active')
+            if (btn.dataset.hold) rcEmitMove(btn.dataset.hold, true)
+            else if (btn.dataset.look) rcLookStartById(btn.dataset.look)
+        })
+
+        const rcPointerRelease = e => {
+            const btn = e.target.closest && e.target.closest('.rc-btn')
+            if (!btn) return
+            btn.classList.remove('rc-active')
+            if (btn.dataset.hold) rcEmitMove(btn.dataset.hold, false)
+            else if (btn.dataset.look) rcLookStopById(btn.dataset.look)
+        }
+        document.addEventListener('pointerup', rcPointerRelease)
+        document.addEventListener('pointercancel', rcPointerRelease)
+
+        // --- keyboard (opt-in via the Keyboard toggle) ---
+        document.addEventListener('keydown', e => {
+            if (!rcKeyboardActive || rcIsTyping(e.target)) return
+            const k = (e.key || '').toLowerCase()
+            const move = RC_KEYMAP[k], look = RC_LOOKMAP[k]
+            if (!move && !look) return
+            e.preventDefault()
+            if (rcKeysDown.has(k)) return   // ignore auto-repeat
+            rcKeysDown.add(k)
+            if (move) { rcEmitMove(move, true); rcHighlight(`[data-hold="${move}"]`, true) }
+            else { rcLookStartById(look); rcHighlight(`[data-look="${look}"]`, true) }
+        })
+
+        document.addEventListener('keyup', e => {
+            if (!rcKeyboardActive) return
+            const k = (e.key || '').toLowerCase()
+            if (!rcKeysDown.has(k)) return
+            rcKeysDown.delete(k)
+            const move = RC_KEYMAP[k], look = RC_LOOKMAP[k]
+            if (move) { rcEmitMove(move, false); rcHighlight(`[data-hold="${move}"]`, false) }
+            else if (look) { rcLookStopById(look); rcHighlight(`[data-look="${look}"]`, false) }
+        })
+
+        // Stop everything if the tab loses focus mid-press.
+        window.addEventListener('blur', rcReleaseAll)
 
         socket.on('bmView', data => {
 

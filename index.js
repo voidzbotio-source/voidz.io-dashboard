@@ -4795,10 +4795,14 @@ class BotSession {
     // populates on this server's protocol version.
     getPlayerHp(name) {
 
-        const listObj = this.rawScoreboard?.getPosition(0)
-        const listEntry = listObj?.items.find(item => item.name === name)
-        if (Number.isFinite(listEntry?.value)) return { hp: listEntry.value, source: 'list' }
-
+        // NOTE: slot 0 (tab list) and slot 2 (below-name) do NOT share a
+        // scale on this server - slot 0 read healthy players as "low" and
+        // caused the bot to kick everyone. Until the real slot-0 scale is
+        // confirmed from a live `sidebar-debug-hp` dump, read ONLY slot 2
+        // (the known-correct 0-20 HP objective, threshold 10 = 5 hearts).
+        // Trade-off: slot 2 only populates for players in render range of
+        // the (AFK) bot, so distant teammates still aren't covered - but
+        // that is strictly safer than wrongly kicking full-HP players.
         const belowObj = this.rawScoreboard?.getPosition(2)
         const belowEntry = belowObj?.items.find(item => item.name === name)
         if (Number.isFinite(belowEntry?.value)) return { hp: belowEntry.value, source: 'belowName' }

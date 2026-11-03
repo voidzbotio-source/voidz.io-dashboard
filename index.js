@@ -3589,38 +3589,14 @@ class BotSession {
             return
         }
 
-        // Tracked teammates first - those are the ones whose HP we're
-        // trying to recover from the tab list - then a few others.
-        const tracked = new Set((Array.isArray(this.config.autoReinvite) ? this.config.autoReinvite : [])
-            .map(entry => ((typeof entry === 'string' ? entry : entry?.name) || '').toLowerCase())
-            .filter(Boolean))
-
-        const ordered = names.slice().sort((a, b) => {
-            const ta = tracked.has(a.toLowerCase()) ? 0 : 1
-            const tb = tracked.has(b.toLowerCase()) ? 0 : 1
-            return ta - tb
-        })
-
-        const belowObj = this.rawScoreboard?.getPosition(2)
-
-        for (const name of ordered.slice(0, 12)) {
+        for (const name of names.slice(0, 10)) {
 
             const player = this.bot.players[name]
-            const dn = player?.displayName
-
-            // toMotd() keeps the §-colour codes (toString() strips them);
-            // JSON.stringify escapes any custom-font glyphs to \uXXXX so
-            // they're readable. The colour is where HP is most likely
-            // encoded if it's in the tab list at all.
-            let motd = '(no display name)'
-            try { motd = dn?.toMotd?.() ?? dn?.toString?.() ?? String(dn) } catch { motd = String(dn) }
-
-            const hp = belowObj?.items.find(item => item.name === name)?.value ?? '-'
-            const flag = tracked.has(name.toLowerCase()) ? '*' : ' '
+            const raw = player?.displayName?.toString?.() ?? String(player?.displayName ?? '(no display name)')
 
             io.to(this.username).emit('chat', {
                 username: 'DEBUG',
-                message: `${flag}${name} hp=${hp}: ${JSON.stringify(motd)}`,
+                message: `${name}: ${JSON.stringify(raw)}`,
                 time: new Date().toISOString()
             })
 
@@ -3763,22 +3739,6 @@ class BotSession {
             const belowNameEntry = belowName?.items.find(item => item.name === this.bot.username)
 
             emitLine(`bot.health=${this.bot.health}  list(0)=${listEntry?.value ?? '-'}  belowName(2)=${belowNameEntry?.value ?? '-'}`)
-
-            // Also dump every Auto-Invite tracked teammate's HP from both
-            // slots - this is what the low-HP auto-kick actually reads,
-            // and the bot being AFK means slot 2 is usually empty for
-            // anyone off fighting while slot 0 (tab list) still has them.
-            const tracked = (Array.isArray(this.config.autoReinvite) ? this.config.autoReinvite : [])
-                .map(entry => (typeof entry === 'string' ? entry : entry?.name) || '')
-                .filter(Boolean)
-
-            for (const name of tracked) {
-                const l = list?.items.find(item => item.name === name)
-                const b = belowName?.items.find(item => item.name === name)
-                const online = this.bot.players && this.bot.players[name] ? 'online' : 'offline'
-                const inTeam = this.isTeamMember(name) ? 'in-team' : 'NOT-in-team'
-                emitLine(`  ${name}: list(0)=${l?.value ?? '-'}  belowName(2)=${b?.value ?? '-'}  (${online}, ${inTeam})`)
-            }
 
         }
 
@@ -4807,36 +4767,13 @@ class BotSession {
     // "doesn't always work" from the dashboard with no error to show
     // for it.
     //
-    // Another player's HP on FlareMC comes from the tab-list scoreboard
-    // objective (display slot 0, "list") - it's server-wide, so it's
-    // there even when the player is nowhere near the AFK bot. The "below
-    // name" objective (slot 2) only populates for players in render
-    // range of the bot, which is why reading slot 2 alone silently
-    // missed any teammate fighting elsewhere (the bot sits AFK at
-    // /home). Prefer slot 0; fall back to slot 2 only when slot 0 has no
-    // entry for this exact (case-sensitive) name. Exposed via
-    // RawScoreboardTracker since mineflayer's own bot.scoreboard never
-    // populates on this server's protocol version.
-    getPlayerHp(name) {
-
-        // NOTE: slot 0 (tab list) and slot 2 (below-name) do NOT share a
-        // scale on this server - slot 0 read healthy players as "low" and
-        // caused the bot to kick everyone. Until the real slot-0 scale is
-        // confirmed from a live `sidebar-debug-hp` dump, read ONLY slot 2
-        // (the known-correct 0-20 HP objective, threshold 10 = 5 hearts).
-        // Trade-off: slot 2 only populates for players in render range of
-        // the (AFK) bot, so distant teammates still aren't covered - but
-        // that is strictly safer than wrongly kicking full-HP players.
-        const belowObj = this.rawScoreboard?.getPosition(2)
-        const belowEntry = belowObj?.items.find(item => item.name === name)
-        if (Number.isFinite(belowEntry?.value)) return { hp: belowEntry.value, source: 'belowName' }
-
-        return null
-
-    }
-
-    // 5 HP was the threshold confirmed working in production; raised to
-    // 10 HP (5 hearts) per request.
+    // HP comes from the "below name" scoreboard objective (display
+    // slot 2, the number shown under each player's nametag in-world -
+    // exposed here via RawScoreboardTracker since mineflayer's own
+    // bot.scoreboard never populates on this server's protocol
+    // version - see the class comment above BotSession). 5 HP was the
+    // threshold confirmed working in production; raised to 10 HP per
+    // request.
     checkAutoInviteLowHealth() {
 
         if (!this.bot || !this.bot.players) return
@@ -4851,6 +4788,10 @@ class BotSession {
 
         if (trackedNames.length === 0) return
 
+        const belowName = this.rawScoreboard?.getPosition(2)
+
+        if (!belowName) return
+
         const onlineNames = Object.keys(this.bot.players)
 
         for (const trackedName of trackedNames) {
@@ -4864,11 +4805,10 @@ class BotSession {
                 continue
             }
 
-            const hpInfo = this.getPlayerHp(actualName)
+            const scoreEntry = belowName.items.find(item => item.name === actualName)
+            const hp = Number.isFinite(scoreEntry?.value) ? scoreEntry.value : null
 
-            if (!hpInfo) continue
-
-            const hp = hpInfo.hp
+            if (hp === null) continue
 
             if (hp > 10) {
                 this.lowHpHandled.delete(key)
@@ -4879,13 +4819,13 @@ class BotSession {
 
             this.lowHpHandled.add(key)
 
-            this.log(`${actualName} is at ${hp} HP (via ${hpInfo.source}) and in the team - kicking ASAP and reinviting.`)
+            this.log(`${actualName} is at ${hp} HP and in the team - kicking ASAP and reinviting.`)
 
             this.sendMinecraftChat(`/t kick ${actualName}`)
 
             setTimeout(() => this.sendMinecraftChat(`/t invite ${actualName}`), 350)
 
-            io.to(this.username).emit('notice', { type: 'info', text: `${actualName} dropped to ${hp} HP - kicked and reinvited` })
+            io.to(this.username).emit('notice', { type: 'info', text: `${actualName} dropped to 5 hearts (10 HP) - kicked and reinvited` })
 
         }
 

@@ -347,6 +347,10 @@ const BALANCE_CHECK_INTERVAL = 5 * 60 * 1000
 const BALANCE_KEEP = 7000000
 const BALANCE_RESPONSE_WINDOW = 15000
 
+// Command that opens the bot's Ender Chest (EssentialsX default is /ec).
+// Change this if FlareMC uses a different one (e.g. /enderchest).
+const EC_OPEN_COMMAND = '/ec'
+
 const HUB_RECOVERY_DELAY = 90000
 
 const KEYALL_TIMEZONE = 'Europe/Brussels'
@@ -5035,6 +5039,98 @@ class BotSession {
         if (!silent) io.to(this.username).emit('bmView', { open: false })
     }
 
+    // --- Interactive Ender Chest viewer (the EC card) ---
+    // Opens /ec, streams its contents to the dashboard as a clickable
+    // grid, keeps it open ~60s, then closes. Clicking a tile Q-drops
+    // that whole stack onto the ground where the bot is standing.
+    // Java-only (same as the other window viewers). NOTE: the open
+    // command is /ec (EssentialsX standard) - change EC_OPEN_COMMAND
+    // below if FlareMC uses a different one.
+    openEnderChestView() {
+
+        if (this.config.platform === 'bedrock') {
+            io.to(this.username).emit('notice', { type: 'error', text: 'The Ender Chest viewer is Java-only.' })
+            return
+        }
+        if (!this.bot || !this.bot.entity) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Start the bot and get it online first.' })
+            return
+        }
+
+        this.closeEnderChestView(true)
+
+        this.ecViewClosesAt = Date.now() + 60000
+        this.ecViewCloseTimer = setTimeout(() => this.closeEnderChestView(), 60000)
+
+        this.fetchEnderChestWindow()
+
+    }
+
+    fetchEnderChestWindow() {
+
+        if (!this.bot) return
+
+        const openTimeout = setTimeout(() => {
+            this.bot?.removeListener('windowOpen', onOpen)
+            this.closeEnderChestView()
+            io.to(this.username).emit('notice', { type: 'info', text: "Couldn't open the Ender Chest (/ec)." })
+        }, 5000)
+
+        const onOpen = chestWindow => {
+            clearTimeout(openTimeout)
+            this.ecViewWindow = chestWindow
+            this.streamEnderChestView()
+        }
+
+        this.bot.once('windowOpen', onOpen)
+        this.sendMinecraftChat(EC_OPEN_COMMAND)
+
+    }
+
+    streamEnderChestView() {
+        const w = this.ecViewWindow
+        if (!w) return
+        // Only the chest's own slots, not the player-inventory section
+        // the window also exposes below them.
+        const end = typeof w.inventoryStart === 'number' ? w.inventoryStart : w.slots.length
+        const slots = []
+        for (let i = 0; i < end; i++) {
+            const item = w.slots[i]
+            if (!item) continue
+            const name = String(item.displayName || item.name || '').replace(/§./g, '').trim()
+            slots.push({ slot: i, name, item: item.name, count: item.count || 1 })
+        }
+        io.to(this.username).emit('ecView', { open: true, slots, closesAt: this.ecViewClosesAt })
+    }
+
+    // Q-drops the whole stack in one ender-chest slot onto the ground
+    // (clickWindow mode 4 = drop, button 1 = drop full stack), then
+    // refreshes the grid once the slot clears.
+    dropEnderChestSlot(slot) {
+        const n = Number(slot)
+        if (!this.bot || !this.ecViewWindow || !Number.isInteger(n)) return
+        const item = this.ecViewWindow.slots[n]
+        if (!item) return
+
+        const label = String(item.displayName || item.name || '').replace(/§./g, '').trim()
+        const count = item.count || 1
+
+        this.log(`EC view: dropping slot ${n} (${count}x ${label}).`)
+        this.bot.clickWindow(n, 1, 4).catch(err => this.log(`EC drop failed (slot ${n}): ${err.message}`))
+
+        io.to(this.username).emit('notice', { type: 'info', text: `Dropped ${count}× ${label}` })
+
+        setTimeout(() => { if (this.bot && this.ecViewWindow) this.streamEnderChestView() }, 400)
+    }
+
+    closeEnderChestView(silent = false) {
+        if (this.ecViewCloseTimer) { clearTimeout(this.ecViewCloseTimer); this.ecViewCloseTimer = null }
+        if (this.bot && this.ecViewWindow) { try { this.bot.closeWindow(this.ecViewWindow) } catch {} }
+        this.ecViewWindow = null
+        this.ecViewClosesAt = null
+        if (!silent) io.to(this.username).emit('ecView', { open: false })
+    }
+
     // Manual "Check BM" (Quick Actions): opens /bm right now and buys a
     // tracked item if one's in stock, regardless of the auto-buy toggle
     // (that toggle only controls buying automatically on a restock). Uses
@@ -6319,6 +6415,8 @@ class BotSession {
         this.stopJqSafetyTimer()
         this.stopBalanceManager()
         this.stopAllMovement()
+        this.closeBlackMarketView(true)
+        this.closeEnderChestView(true)
         this.stopPovViewer()
 
         if (this.reconnectTimer) {
@@ -6922,6 +7020,8 @@ function handleWebCommand(username, command) {
         case 'check-bm': botSession.checkBlackMarketNow(); break
         case 'bm-view': botSession.openBlackMarketView(); break
         case 'bm-close': botSession.closeBlackMarketView(); break
+        case 'ec-view': botSession.openEnderChestView(); break
+        case 'ec-close': botSession.closeEnderChestView(); break
         case 'drop-all': botSession.dropAllInventory(); break
         case 'stop-bot': botSession.stopBotRemote(); break
 
@@ -6939,6 +7039,8 @@ function handleWebCommand(username, command) {
                 botSession.buyBlackMarketSlot(command.substring('bm-buy '.length))
             } else if (lower.startsWith('drop ')) {
                 botSession.dropInventorySlot(command.substring('drop '.length))
+            } else if (lower.startsWith('ec-drop ')) {
+                botSession.dropEnderChestSlot(command.substring('ec-drop '.length))
             }
 
             break

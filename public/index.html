@@ -1071,6 +1071,7 @@
         .card[data-card-id="autobuy"] { --card-accent: var(--teal); }
         .card[data-card-id="automation"] { --card-accent: var(--green); }
         .card[data-card-id="bmview"] { --card-accent: var(--yellow); }
+        .card[data-card-id="enderchest"] { --card-accent: var(--purple); }
         .bm-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 10px 6px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; text-align: center; transition: border-color 0.15s, transform 0.1s; }
         .bm-tile:hover { border-color: var(--yellow); transform: translateY(-1px); }
         .bm-tile:active { transform: translateY(0); }
@@ -5387,6 +5388,28 @@
             </section>
 
             <!-- ========================================== -->
+            <!-- ENDER CHEST -->
+            <!-- ========================================== -->
+
+            <section class="card col-2" data-card-id="enderchest" draggable="true" style="animation-delay: 0.162s;">
+
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M10 10v4h4v-4"/></svg>
+                    Ender Chest
+                    <span id="ecViewCountdown" class="badge" style="margin-left: auto; display: none; color: var(--purple); border-color: var(--purple);"></span>
+                </div>
+
+                <p class="settings-section-desc">Open a live view of the bot's Ender Chest (<code>/ec</code>). It stays open ~60s &mdash; click any item to drop that whole stack on the ground.</p>
+
+                <button class="modal-ok" id="ecViewOpenBtn" onclick="openEcView()" style="width: 100%; margin-bottom: 12px;">Open Ender Chest</button>
+
+                <div id="ecViewGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px;">
+                    <div class="empty-state" style="grid-column: 1 / -1;">Not open. Click the button above.</div>
+                </div>
+
+            </section>
+
+            <!-- ========================================== -->
             <!-- PLAYERS -->
             <!-- ========================================== -->
 
@@ -8641,6 +8664,62 @@
         })
 
         // ==================================================
+        // ENDER CHEST LIVE VIEWER
+        // ==================================================
+
+        let ecViewCountdownTimer = null
+
+        function openEcView() {
+            sendCommand('ec-view')
+            const btn = $('ecViewOpenBtn')
+            if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; setTimeout(() => { btn.disabled = false; btn.textContent = 'Open Ender Chest' }, 3000) }
+        }
+
+        function dropEcSlot(slot, label) {
+            sendCommand('ec-drop ' + slot, { confirm: `Drop ${label || 'this stack'}? It'll fall on the ground where the bot is standing.` })
+        }
+
+        socket.on('ecView', data => {
+
+            const grid = $('ecViewGrid')
+            const countdown = $('ecViewCountdown')
+            if (!grid) return
+
+            if (ecViewCountdownTimer) { clearInterval(ecViewCountdownTimer); ecViewCountdownTimer = null }
+
+            if (!data || !data.open) {
+                grid.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1;">Closed. Click the button to open it again.</div>'
+                if (countdown) countdown.style.display = 'none'
+                return
+            }
+
+            const slots = Array.isArray(data.slots) ? data.slots : []
+            grid.innerHTML = slots.length
+                ? slots.map(s => {
+                    const name = s.name || s.item || '?'
+                    const label = `${s.count || 1}× ${name}`
+                    return `
+                    <div class="bm-tile" onclick="dropEcSlot(${s.slot}, ${JSON.stringify(label).replace(/"/g, '&quot;')})" title="Click to drop">
+                        <div class="bm-tile-name">${escapeHtml(name)}</div>
+                        <div class="bm-tile-count">x${s.count || 1}</div>
+                    </div>
+                `}).join('')
+                : '<div class="empty-state" style="grid-column: 1 / -1;">The Ender Chest is empty.</div>'
+
+            if (countdown && data.closesAt) {
+                const tick = () => {
+                    const left = Math.max(0, Math.round((data.closesAt - Date.now()) / 1000))
+                    countdown.textContent = `${left}s`
+                    countdown.style.display = 'inline-block'
+                    if (left <= 0 && ecViewCountdownTimer) { clearInterval(ecViewCountdownTimer); ecViewCountdownTimer = null }
+                }
+                tick()
+                ecViewCountdownTimer = setInterval(tick, 1000)
+            }
+
+        })
+
+        // ==================================================
         // TUTORIAL
         // ==================================================
 
@@ -9116,7 +9195,9 @@
             'rejoin': 'Rejoin',
             'check-bm': 'Check Black Market',
             'reset-team-history': 'Reset Team History',
-            'drop-all': 'Drop all items'
+            'drop-all': 'Drop all items',
+            'ec-view': 'Open Ender Chest',
+            'ec-close': 'Close Ender Chest'
         }
 
         // ==================================================

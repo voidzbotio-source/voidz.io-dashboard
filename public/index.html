@@ -2072,6 +2072,31 @@
             flex-shrink: 0;
         }
 
+        .player-name {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .player-dist {
+            flex-shrink: 0;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--blue);
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 1px 8px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .player-dist-far {
+            color: var(--muted);
+            font-weight: 500;
+        }
+
         /* ================================================= */
         /* TITLE ACTION BUTTON */
         /* ================================================= */
@@ -9620,7 +9645,8 @@
             )
 
             updatePlayers(
-                data.players || []
+                data.players || [],
+                data.playerDistances || {}
             )
 
             updateThreats(
@@ -10028,14 +10054,22 @@
 
         let allPlayers = []
 
+        let playerDistances = {}
+
         function updatePlayers(
-            players
+            players,
+            distances
         ) {
 
             allPlayers =
                 Array.isArray(players)
                     ? players
                     : []
+
+            playerDistances =
+                (distances && typeof distances === 'object')
+                    ? distances
+                    : {}
 
             renderPlayerList()
 
@@ -10073,14 +10107,34 @@
                 return
             }
 
+            // Sort players with a known distance nearest-first; the rest
+            // ("out of range" - too far or in another world) keep their
+            // alphabetical order after them.
+            const dist = player => {
+                const d = playerDistances[player]
+                return (typeof d === 'number') ? d : Infinity
+            }
+
+            const sorted = filtered
+                .slice()
+                .sort((a, b) => {
+                    const da = dist(a), db = dist(b)
+                    if (da !== db) return da - db
+                    return a.toLowerCase().localeCompare(b.toLowerCase())
+                })
+
             container.innerHTML =
-                filtered
-                    .map(
-                        player =>
-                            `<div class="player">
-                                ${escapeHtml(player)}
+                sorted
+                    .map(player => {
+                        const d = playerDistances[player]
+                        const badge = (typeof d === 'number')
+                            ? `<span class="player-dist" title="${d} blocks away in the bot's world">${d}m</span>`
+                            : `<span class="player-dist player-dist-far" title="Out of range - too far away or in another world">· far</span>`
+                        return `<div class="player">
+                                <span class="player-name">${escapeHtml(player)}</span>
+                                ${badge}
                             </div>`
-                    )
+                    })
                     .join('')
 
         }

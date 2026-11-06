@@ -2473,6 +2473,32 @@ class BotSession {
 
     }
 
+    // Distance in blocks from the bot to every player whose entity is
+    // currently LOADED - i.e. within the bot's entity-tracking range and
+    // in the same world/dimension. Players who are in the tab list but
+    // too far away (or in another world) have no loaded entity, so they
+    // simply don't appear here - which is exactly how we know they're
+    // "elsewhere". Java only: bedrock-protocol doesn't expose other
+    // players' entities or positions.
+    getPlayerDistances() {
+
+        if (this.config.platform === 'bedrock') return {}
+        if (!this.bot || !this.bot.entity || !this.bot.entity.position || !this.bot.players) return {}
+
+        const self = this.bot.entity.position
+        const result = {}
+
+        for (const name of Object.keys(this.bot.players)) {
+            if (name === this.bot.username) continue
+            const ent = this.bot.players[name]?.entity
+            if (!ent || !ent.position) continue
+            result[name] = Math.round(self.distanceTo(ent.position))
+        }
+
+        return result
+
+    }
+
     // uuid -> current username for everyone currently visible. A real
     // Minecraft username change only takes effect for other clients
     // once that player reconnects, but the UUID never changes - this
@@ -2846,6 +2872,7 @@ class BotSession {
 
             players,
             playerCount: players.length,
+            playerDistances: online ? this.getPlayerDistances() : {},
             uuidToUsername: online ? this.getUuidToUsername() : {},
             playerLastSeen: this.playerLastSeen,
 

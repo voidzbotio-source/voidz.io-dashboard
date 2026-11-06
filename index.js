@@ -1511,6 +1511,24 @@ function saveNemesisHistory(username, history) {
     saveBotConfigs(configs)
 }
 
+// Rolling chat log, persisted so it survives a dashboard reload AND a
+// server restart - and so messages that arrived while no browser tab was
+// open are still there on next load. Kept to the last CHAT_HISTORY_LIMIT
+// lines.
+const CHAT_HISTORY_LIMIT = 500
+
+function getChatHistory(username) {
+    const configs = loadBotConfigs()
+    const history = configs[username]?.chatHistory
+    return Array.isArray(history) ? history : []
+}
+
+function saveChatHistory(username, history) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], chatHistory: history }
+    saveBotConfigs(configs)
+}
+
 // Manual fix for the Leaderboard showing a renamed player as two
 // separate rows - checkKothCapture/checkTeamDeath only tag NEW
 // entries with a UUID, so the old ones under a previous name stay
@@ -2373,6 +2391,11 @@ class BotSession {
         // when the death message named one - see checkNemesisDeath().
         this.nemesisHistory = getNemesisHistory(username)
 
+        // Rolling chat log, persisted (debounced) so it survives reloads
+        // and restarts - see recordChat()/scheduleChatSave().
+        this.chatHistory = getChatHistory(username)
+        this.chatSaveTimer = null
+
         // Lifetime badge-unlock counters, independent of the prunable
         // history arrays above.
         this.badgeProgress = getBadgeProgress(username)
@@ -2949,10 +2972,44 @@ class BotSession {
         this.lastChatMessage = `<${username}> ${message}`
         this.lastChatTime = time
 
-        io.to(this.username).emit('chat', { username, message, time })
+        this.recordChat(username, message, time)
 
         this.updateDashboard()
 
+    }
+
+    // Single place that both stores a chat line in the persisted log and
+    // pushes it live to the dashboard. DEBUG diagnostic lines deliberately
+    // don't go through here, so they stay live-only and never clutter the
+    // saved backlog.
+    recordChat(username, message, time) {
+
+        const entry = { username, message, time: time || new Date().toISOString() }
+
+        this.chatHistory.push(entry)
+        if (this.chatHistory.length > CHAT_HISTORY_LIMIT) {
+            this.chatHistory = this.chatHistory.slice(-CHAT_HISTORY_LIMIT)
+        }
+
+        this.scheduleChatSave()
+
+        io.to(this.username).emit('chat', entry)
+
+    }
+
+    // Debounced disk write - chat can be frequent, so coalesce saves
+    // instead of hitting bot-configs.json on every single line.
+    scheduleChatSave() {
+        if (this.chatSaveTimer) return
+        this.chatSaveTimer = setTimeout(() => {
+            this.chatSaveTimer = null
+            try { saveChatHistory(this.username, this.chatHistory) } catch {}
+        }, 5000)
+    }
+
+    flushChatSave() {
+        if (this.chatSaveTimer) { clearTimeout(this.chatSaveTimer); this.chatSaveTimer = null }
+        try { saveChatHistory(this.username, this.chatHistory) } catch {}
     }
 
     sendMinecraftChat(message) {
@@ -5967,7 +6024,7 @@ class BotSession {
                     this.lastChatMessage = text
                     this.lastChatTime = new Date().toISOString()
 
-                    io.to(this.username).emit('chat', { username, message: text, time: this.lastChatTime })
+                    this.recordChat(username, text, this.lastChatTime)
 
                     this.log(`[${username}] ${text}`)
 
@@ -6370,7 +6427,7 @@ class BotSession {
                     this.lastChatMessage = text
                     this.lastChatTime = new Date().toISOString()
 
-                    io.to(this.username).emit('chat', { username: 'SERVER', message: text, time: this.lastChatTime })
+                    this.recordChat('SERVER', text, this.lastChatTime)
 
                     this.log(`[SERVER] ${text}`)
 
@@ -6457,6 +6514,7 @@ class BotSession {
         this.stopAllMovement()
         this.closeBlackMarketView(true)
         this.closeEnderChestView(true)
+        this.flushChatSave()
         this.stopPovViewer()
 
         if (this.reconnectTimer) {
@@ -8749,6 +8807,11 @@ io.on('connection', socket => {
     const botSession = sessions.get(username)
 
     socket.emit('status', botSession ? botSession.getDashboardData() : getPlaceholderDashboardData())
+
+    // Send the persisted chat backlog so a reload (or a first open after
+    // being away) shows the full history, not a blank feed. Falls back to
+    // the saved log on disk when the bot isn't currently running.
+    socket.emit('chatHistory', botSession ? botSession.chatHistory : getChatHistory(username))
 
     socket.on('command', command => {
 

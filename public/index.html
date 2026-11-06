@@ -1598,6 +1598,23 @@
         /* CHAT */
         /* ================================================= */
 
+        .chat-search {
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            font-size: 13px;
+            color: var(--text);
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            outline: none;
+        }
+
+        .chat-search:focus {
+            border-color: var(--card-accent, var(--teal));
+        }
+
         .chat-box {
             height: 300px;
 
@@ -5771,12 +5788,20 @@
                     Live Chat
                 </div>
 
+                <input
+                    id="chatSearch"
+                    type="text"
+                    class="chat-search"
+                    placeholder="Search chat log..."
+                    autocomplete="off"
+                >
+
                 <div
                     id="chatBox"
                     class="chat-box scroll"
                 >
 
-                    <div class="chat-message">
+                    <div class="chat-message" id="chatPlaceholder">
 
                         <span class="chat-text">
                             Waiting for Minecraft chat...
@@ -11863,6 +11888,22 @@
             }
         )
 
+        // Persisted backlog pushed on (re)connect - replaces whatever's in
+        // the feed so a reload shows the full history, including messages
+        // that arrived while no tab was open.
+        socket.on(
+            'chatHistory',
+            history => {
+
+                chatLog = Array.isArray(history)
+                    ? history.slice(-CHAT_DISPLAY_MAX)
+                    : []
+
+                renderChatLog()
+
+            }
+        )
+
         // ==================================================
         // RENAME TRACKING (NAMEMC-STYLE)
         // ==================================================
@@ -12121,84 +12162,96 @@
         // ADD CHAT MESSAGE
         // ==================================================
 
-        function addChatMessage(
-            data
-        ) {
+        // Full chat log held client-side so search can filter it and a
+        // reload can re-render it. The server sends the persisted backlog
+        // via 'chatHistory' (survives reloads / messages received while
+        // away); live lines arrive via 'chat'.
+        let chatLog = []
+        const CHAT_DISPLAY_MAX = 500
 
-            const box =
-                $('chatBox')
+        function chatSearchQuery() {
+            return ($('chatSearch')?.value || '').trim().toLowerCase()
+        }
 
-            if (!box) {
+        function chatEntryMatches(data, q) {
+            if (!q) return true
+            return `${data.username || 'SERVER'} ${data.message || ''}`.toLowerCase().includes(q)
+        }
+
+        function buildChatNode(data) {
+
+            const message = document.createElement('div')
+            message.className = 'chat-message'
+
+            const time = escapeHtml(formatLocalTime(data.time))
+            const username = escapeHtml(data.username || 'SERVER')
+            const text = escapeHtml(data.message || '')
+
+            message.innerHTML = `
+                <span class="chat-time">${time}</span>
+                <span class="chat-user">&lt;${username}&gt;</span>
+                <span class="chat-text">${text}</span>
+            `
+
+            return message
+
+        }
+
+        // Rebuild the whole feed from chatLog honoring the search filter -
+        // used on backlog load and on every search keystroke.
+        function renderChatLog() {
+
+            const box = $('chatBox')
+            if (!box) return
+
+            const q = chatSearchQuery()
+            const matches = chatLog.filter(d => chatEntryMatches(d, q))
+
+            box.innerHTML = ''
+
+            if (matches.length === 0) {
+                box.innerHTML = `<div class="chat-message"><span class="chat-text">${q ? 'No messages match your search.' : 'Waiting for Minecraft chat...'}</span></div>`
                 return
             }
 
-            // Only follow new messages down to the bottom if the user
-            // was already there - otherwise scrolling up to read
-            // something older gets yanked back down the moment the
-            // next message arrives.
-            const wasNearBottom =
-                box.scrollHeight - box.scrollTop - box.clientHeight < 40
+            const frag = document.createDocumentFragment()
+            for (const d of matches) frag.appendChild(buildChatNode(d))
+            box.appendChild(frag)
 
-            const message =
-                document.createElement(
-                    'div'
-                )
-
-            message.className =
-                'chat-message'
-
-            const time =
-                escapeHtml(
-                    formatLocalTime(data.time)
-                )
-
-            const username =
-                escapeHtml(
-                    data.username || 'SERVER'
-                )
-
-            const text =
-                escapeHtml(
-                    data.message || ''
-                )
-
-            message.innerHTML = `
-                <span class="chat-time">
-                    ${time}
-                </span>
-
-                <span class="chat-user">
-                    &lt;${username}&gt;
-                </span>
-
-                <span class="chat-text">
-                    ${text}
-                </span>
-            `
-
-            box.appendChild(
-                message
-            )
-
-            // Keep max 200 messages
-            while (
-                box.children.length > 200
-            ) {
-
-                box.removeChild(
-                    box.firstChild
-                )
-
-            }
-
-            if (wasNearBottom) {
-
-                box.scrollTop =
-                    box.scrollHeight
-
-            }
+            box.scrollTop = box.scrollHeight
 
         }
+
+        // A single live line: store it, then append to the feed (unless a
+        // search filter is active and it doesn't match - it still gets
+        // stored so it shows when the search is cleared).
+        function addChatMessage(data) {
+
+            chatLog.push(data)
+            if (chatLog.length > CHAT_DISPLAY_MAX) chatLog = chatLog.slice(-CHAT_DISPLAY_MAX)
+
+            const box = $('chatBox')
+            if (!box) return
+
+            const placeholder = $('chatPlaceholder')
+            if (placeholder) placeholder.remove()
+
+            if (!chatEntryMatches(data, chatSearchQuery())) return
+
+            // Only follow new messages to the bottom if the user was
+            // already there, so scrolling up to read history isn't yanked
+            // back down on the next line.
+            const wasNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40
+
+            box.appendChild(buildChatNode(data))
+
+            while (box.children.length > CHAT_DISPLAY_MAX) box.removeChild(box.firstChild)
+
+            if (wasNearBottom) box.scrollTop = box.scrollHeight
+
+        }
+
+        $('chatSearch')?.addEventListener('input', renderChatLog)
 
         // ==================================================
         // SEND COMMAND

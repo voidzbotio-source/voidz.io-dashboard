@@ -4722,20 +4722,31 @@ class BotSession {
 
     }
 
-    // Tallies who's actually killed the bot, from its own death
-    // message ("<BotName> was slain by <Killer>" and the many other
-    // vanilla death-message verbs - "was ... by <Name>" covers them
-    // generically). Not every death names a killer (fell, drowned,
-    // etc. have no "by <Name>" at all), which is fine - those just
-    // don't match and nothing gets logged for them.
+    // Tallies who's actually killed the bot, read off FlareMC's PvP
+    // kill feed. A real line (confirmed from a live screenshot) looks
+    // like:
+    //   "17:06  COMBAT -> <icon> <Victim> got stabbed by <Killer> using <weapon>"
+    // i.e. it is NOT anchored at the victim's name (there's a time +
+    // "COMBAT" label + icons in front), and the verb varies ("got
+    // stabbed by", "was slain by", "got blown up by", ...). So: gate on
+    // the combat feed (the "COMBAT" marker or a "using <weapon>" tail,
+    // so an ordinary chat line can't be misread as a death), then match
+    // "<bot> was|got|were <verb...> by <killer>" anywhere in the line.
+    // The bot only matches as the VICTIM here - when it's the killer its
+    // name sits after "by", which this pattern doesn't capture.
     checkNemesisDeath(text) {
 
         const botName = this.bot?.username
 
         if (!botName) return
 
-        const match = cleanMessage(text).match(
-            new RegExp(`^${botName} was .*? by ([A-Za-z0-9_]{1,16})\\b`, 'i')
+        const cleaned = cleanMessage(text)
+
+        // Only trust the combat kill-feed, not regular chat.
+        if (!/\bcombat\b/i.test(cleaned) && !/ using /i.test(cleaned)) return
+
+        const match = cleaned.match(
+            new RegExp(`\\b${botName}\\b\\s+(?:was|got|were)\\b[\\w ]{1,40}?\\bby\\s+([A-Za-z0-9_]{1,16})\\b`, 'i')
         )
 
         if (!match) return
@@ -4752,6 +4763,8 @@ class BotSession {
         saveNemesisHistory(this.username, this.nemesisHistory)
 
         this.log(`Died to ${killer}.`)
+
+        io.to(this.username).emit('notice', { type: 'warning', text: `☠ Killed by ${killer}` })
 
     }
 

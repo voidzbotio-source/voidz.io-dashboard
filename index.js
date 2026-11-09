@@ -4272,9 +4272,23 @@ class BotSession {
 
         const lower = name.toLowerCase()
 
-        return this.teamRoster.members.some(
-            member => (member.name || '').toLowerCase() === lower
-        )
+        return this.teamRoster.members.some(member => {
+
+            const mname = (member.name || '').toLowerCase()
+
+            if (mname === lower) return true
+
+            // Tolerate a rank prefix / icon / colour junk sitting in front
+            // of the username in the roster name (e.g. "★ spookyvoidz" or
+            // "[owner] spookyvoidz") - it displays fine on the Team card
+            // but used to break this exact-string match, which silently
+            // stopped KOTH captures and deaths from counting. Match if the
+            // plain username appears as a whole word token in the stored
+            // name. (Usernames are [A-Za-z0-9_], so _ stays part of a
+            // token.)
+            return mname.split(/[^a-z0-9_]+/).includes(lower)
+
+        })
 
     }
 

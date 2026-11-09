@@ -1517,6 +1517,10 @@ function saveNemesisHistory(username, history) {
 // lines.
 const CHAT_HISTORY_LIMIT = 500
 
+// Server-wide kill log cap (see checkNemesisDeath). The combat feed can
+// be busy, so keep a generous but bounded window.
+const NEMESIS_HISTORY_LIMIT = 300
+
 function getChatHistory(username) {
     const configs = loadBotConfigs()
     const history = configs[username]?.chatHistory
@@ -2395,6 +2399,7 @@ class BotSession {
         // and restarts - see recordChat()/scheduleChatSave().
         this.chatHistory = getChatHistory(username)
         this.chatSaveTimer = null
+        this.nemesisSaveTimer = null
 
         // Lifetime badge-unlock counters, independent of the prunable
         // history arrays above.
@@ -4779,23 +4784,17 @@ class BotSession {
 
     }
 
-    // Tallies who's actually killed the bot, read off FlareMC's PvP
-    // kill feed. A real line (confirmed from a live screenshot) looks
-    // like:
+    // Records EVERY PvP kill from FlareMC's combat kill feed (not just
+    // the bot's own deaths) - a server-wide kill log. A real line
+    // (confirmed from a live screenshot) looks like:
     //   "17:06  COMBAT -> <icon> <Victim> got stabbed by <Killer> using <weapon>"
-    // i.e. it is NOT anchored at the victim's name (there's a time +
-    // "COMBAT" label + icons in front), and the verb varies ("got
-    // stabbed by", "was slain by", "got blown up by", ...). So: gate on
-    // the combat feed (the "COMBAT" marker or a "using <weapon>" tail,
-    // so an ordinary chat line can't be misread as a death), then match
-    // "<bot> was|got|were <verb...> by <killer>" anywhere in the line.
-    // The bot only matches as the VICTIM here - when it's the killer its
-    // name sits after "by", which this pattern doesn't capture.
+    // It is NOT anchored at the victim's name (there's a time + "COMBAT"
+    // label + icons in front) and the verb varies ("got stabbed by",
+    // "was slain by", "got blown up by", ...). Gate on the combat feed
+    // (the "COMBAT" marker or a "using <weapon>" tail) so an ordinary
+    // chat line can't be misread as a kill, then pull <victim>, <killer>
+    // and the weapon. Saves are debounced because the feed can be busy.
     checkNemesisDeath(text) {
-
-        const botName = this.bot?.username
-
-        if (!botName) return
 
         const cleaned = cleanMessage(text)
 
@@ -4803,26 +4802,50 @@ class BotSession {
         if (!/\bcombat\b/i.test(cleaned) && !/ using /i.test(cleaned)) return
 
         const match = cleaned.match(
-            new RegExp(`\\b${botName}\\b\\s+(?:was|got|were)\\b[\\w ]{1,40}?\\bby\\s+([A-Za-z0-9_]{1,16})\\b`, 'i')
+            /([A-Za-z0-9_]{1,16})\s+(?:was|got|were)\b[\w ]{1,40}?\bby\s+([A-Za-z0-9_]{1,16})\b(?:\s+using\s+(.+))?/i
         )
 
         if (!match) return
 
-        const killer = match[1]
+        const victim = match[1]
+        const killer = match[2]
+        const weapon = (match[3] || '').replace(/\s+/g, ' ').trim() || null
+
+        // Guard against a self-referential or malformed parse.
+        if (victim.toLowerCase() === killer.toLowerCase()) return
 
         this.nemesisHistory.push({
             timestamp: Date.now(),
-            killer
+            killer,
+            victim,
+            weapon
         })
 
-        this.nemesisHistory = this.nemesisHistory.slice(-200)
+        this.nemesisHistory = this.nemesisHistory.slice(-NEMESIS_HISTORY_LIMIT)
 
-        saveNemesisHistory(this.username, this.nemesisHistory)
+        this.scheduleNemesisSave()
 
-        this.log(`Died to ${killer}.`)
+        this.log(`Kill: ${killer} killed ${victim}${weapon ? ' using ' + weapon : ''}.`)
 
-        io.to(this.username).emit('notice', { type: 'warning', text: `☠ Killed by ${killer}` })
+        // Only alert when it's the bot itself that died - everyone else's
+        // kills just populate the log silently.
+        if (victim.toLowerCase() === String(this.bot?.username || '').toLowerCase()) {
+            io.to(this.username).emit('notice', { type: 'warning', text: `☠ You were killed by ${killer}` })
+        }
 
+    }
+
+    scheduleNemesisSave() {
+        if (this.nemesisSaveTimer) return
+        this.nemesisSaveTimer = setTimeout(() => {
+            this.nemesisSaveTimer = null
+            try { saveNemesisHistory(this.username, this.nemesisHistory) } catch {}
+        }, 5000)
+    }
+
+    flushNemesisSave() {
+        if (this.nemesisSaveTimer) { clearTimeout(this.nemesisSaveTimer); this.nemesisSaveTimer = null }
+        try { saveNemesisHistory(this.username, this.nemesisHistory) } catch {}
     }
 
     // Runs every dashboard tick (~1s) while connected - see
@@ -6515,6 +6538,7 @@ class BotSession {
         this.closeBlackMarketView(true)
         this.closeEnderChestView(true)
         this.flushChatSave()
+        this.flushNemesisSave()
         this.stopPovViewer()
 
         if (this.reconnectTimer) {

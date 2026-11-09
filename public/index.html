@@ -5564,7 +5564,7 @@
                 </div>
 
                 <div id="nemesisBody" class="leaderboard-body scroll">
-                    <div class="empty-state">No deaths logged yet - good.</div>
+                    <div class="empty-state">No kills seen yet.</div>
                 </div>
 
             </section>
@@ -11221,14 +11221,14 @@
 
                 byKiller[key] = byKiller[key] || { name: entry.killer, count: 0, entries: [] }
                 byKiller[key].count++
-                byKiller[key].entries.push(entry.timestamp)
+                byKiller[key].entries.push(entry)
 
             }
 
             const rows = Object.values(byKiller).sort((a, b) => b.count - a.count)
 
             if (!rows.length) {
-                container.innerHTML = '<div class="empty-state">No deaths logged yet - good.</div>'
+                container.innerHTML = '<div class="empty-state">No kills seen yet.</div>'
                 return
             }
 
@@ -11242,12 +11242,12 @@
                         ? `
                             <div class="nemesis-kill-log">
                                 ${[...row.entries]
-                                    .sort((a, b) => b - a)
-                                    .map(timestamp => `
+                                    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                                    .map(e => `
                                         <div class="koth-history-row death">
-                                            <span class="koth-history-player">${escapeHtml(row.name)}</span>
-                                            <span class="koth-history-verb">killed you</span>
-                                            <span class="koth-history-date">${formatKothDate(timestamp)}</span>
+                                            <span class="koth-history-player">${escapeHtml(e.victim || '?')}</span>
+                                            <span class="koth-history-verb">${e.weapon ? 'with ' + escapeHtml(e.weapon) : 'killed'}</span>
+                                            <span class="koth-history-date">${formatKothDate(e.timestamp)}</span>
                                         </div>
                                     `)
                                     .join('')}
@@ -11256,7 +11256,7 @@
                         : ''
 
                     return `
-                        <div class="leaderboard-row nemesis-row ${expanded ? 'expanded' : ''}" onclick="toggleNemesisDetail('${key}')" title="Click to see every kill">
+                        <div class="leaderboard-row nemesis-row ${expanded ? 'expanded' : ''}" onclick="toggleNemesisDetail('${key}')" title="Click to see who they killed">
                             <div class="leaderboard-rank">${index + 1}</div>
                             <div class="leaderboard-info">
                                 <div class="leaderboard-name">${escapeHtml(row.name)}</div>

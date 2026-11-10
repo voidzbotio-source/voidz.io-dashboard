@@ -1427,7 +1427,7 @@ function saveTeamHistory(username, history) {
 
 // Lowercased player name -> last time the bot actually saw them in its
 // own tab list (ms epoch), updated every second by the global dashboard
-// tick in checkAutoInviteLowHealth()'s sibling loop below - REGARDLESS
+// tick (touchOnlinePlayers) - REGARDLESS
 // of whether any browser has the dashboard open. Threats/Allies/Auto-
 // Invite previously computed "last seen" purely in browser JS off the
 // online/offline transition it happened to witness live, so a name that
@@ -2431,13 +2431,6 @@ class BotSession {
         // The pending (delayed) answer timer, so it can be cancelled if
         // the round ends (someone wins) before it fires.
         this.triviaTimer = null
-
-        // Auto-reinvited players who have already been kicked for
-        // low HP this "episode" - keyed by lowercase name, cleared
-        // once their tab-list HP is seen back at/above the threshold
-        // (or they drop off the tab list) so they aren't kicked
-        // every single tick while they stay critical.
-        this.lowHpHandled = new Set()
 
         // POV viewer (see startPovViewer()) - the port is assigned
         // once and kept for the life of this session so the dashboard
@@ -3802,18 +3795,15 @@ class BotSession {
 
     }
 
-    // Definitive check for which scoreboard objective (and what
-    // units) actually carry HP, for the low-HP auto-kick feature.
-    // checkAutoInviteLowHealth() currently reads position 2
-    // (belowName) as its best guess - a raw packet capture showed
-    // that objective's values vary per player (30/10/10) while
-    // position 0 (the tab-list objective the OLD, since-removed
-    // version of this feature used) sat flat at 0 for every player
-    // sampled - but that's circumstantial, not proven. This
-    // correlates the bot's OWN live health (bot.health, from the
-    // always-reliable update_health packet, entirely independent of
-    // the scoreboard) against both objectives' values for the bot's
-    // own name, live, for 30 seconds. Take damage or heal during the
+    // Diagnostic for which scoreboard objective (and what units)
+    // actually carries another player's HP on this server. A raw packet
+    // capture showed position 2 (belowName) values vary per player
+    // (30/10/10) while position 0 (the tab-list objective) sat flat at 0
+    // for every player sampled. This correlates the bot's OWN live
+    // health (bot.health, from the always-reliable update_health packet,
+    // entirely independent of the scoreboard) against both objectives'
+    // values for the bot's own name, live, for 30 seconds. Take damage
+    // or heal during the
     // window to see which one (if either) actually tracks, and in
     // what units. Trigger from the browser console with:
     //   sendCommand('sidebar-debug-hp')
@@ -4894,88 +4884,6 @@ class BotSession {
 
     }
 
-    // Runs every dashboard tick (~1s) while connected. Any Auto-Invite
-    // tracked player whose tab-list HP drops to 5 hearts (10 HP) or
-    // below gets kicked off the team and immediately reinvited - kicking
-    // drops them from `/t info` shared-location tracking before an
-    // enemy can use it against them at low HP, and the reinvite
-    // brings them straight back in once they're safe. `lowHpHandled`
-    // stops this firing every tick while someone stays critical.
-    //
-    // Requires BOTH: on the Auto-Invite list AND currently a member of
-    // the team per the last /t info capture (isTeamMember(), the same
-    // roster checkTeamDeath()/checkKothCapture() trust) - being merely
-    // online on the server isn't enough. A player who's online but not
-    // actually in the team yet (mid-invite, just got kicked, never
-    // accepted) would previously still pass the old online-only check
-    // and get a pointless /t kick sent for someone who isn't on the
-    // team to begin with - which does nothing, silently, and reads as
-    // "doesn't always work" from the dashboard with no error to show
-    // for it.
-    //
-    // HP comes from the "below name" scoreboard objective (display
-    // slot 2, the number shown under each player's nametag in-world -
-    // exposed here via RawScoreboardTracker since mineflayer's own
-    // bot.scoreboard never populates on this server's protocol
-    // version - see the class comment above BotSession). 5 HP was the
-    // threshold confirmed working in production; raised to 10 HP per
-    // request.
-    checkAutoInviteLowHealth() {
-
-        if (!this.bot || !this.bot.players) return
-
-        const list = Array.isArray(this.config.autoReinvite) ? this.config.autoReinvite : []
-
-        if (list.length === 0) return
-
-        const trackedNames = list
-            .map(entry => (typeof entry === 'string' ? entry : entry?.name) || '')
-            .filter(Boolean)
-
-        if (trackedNames.length === 0) return
-
-        const belowName = this.rawScoreboard?.getPosition(2)
-
-        if (!belowName) return
-
-        const onlineNames = Object.keys(this.bot.players)
-
-        for (const trackedName of trackedNames) {
-
-            const key = trackedName.toLowerCase()
-
-            const actualName = onlineNames.find(name => name.toLowerCase() === key)
-
-            if (!actualName || !this.isTeamMember(actualName)) {
-                this.lowHpHandled.delete(key)
-                continue
-            }
-
-            const scoreEntry = belowName.items.find(item => item.name === actualName)
-            const hp = Number.isFinite(scoreEntry?.value) ? scoreEntry.value : null
-
-            if (hp === null) continue
-
-            if (hp > 10) {
-                this.lowHpHandled.delete(key)
-                continue
-            }
-
-            if (this.lowHpHandled.has(key)) continue
-
-            this.lowHpHandled.add(key)
-
-            this.log(`${actualName} is at ${hp} HP and in the team - kicking ASAP and reinviting.`)
-
-            this.sendMinecraftChat(`/t kick ${actualName}`)
-
-            setTimeout(() => this.sendMinecraftChat(`/t invite ${actualName}`), 350)
-
-            io.to(this.username).emit('notice', { type: 'info', text: `${actualName} dropped to 5 hearts (10 HP) - kicked and reinvited` })
-
-        }
-
-    }
 
     // The Black Market restock is a short-lived limited-quantity
     // event (server-side, roughly every 3 hours) - worth a Discord
@@ -8816,7 +8724,6 @@ app.get('/api/keepalive', (req, res) => {
 setInterval(() => {
     for (const botSession of sessions.values()) {
         botSession.updateDashboard()
-        botSession.checkAutoInviteLowHealth()
         botSession.touchOnlinePlayers()
     }
 }, 1000)

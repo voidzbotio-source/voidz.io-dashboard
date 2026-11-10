@@ -6385,6 +6385,21 @@
 
                 </div>
 
+                <div class="settings-section">
+
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+                        <span>Dashboard Cards</span>
+                    </div>
+
+                    <p class="settings-section-desc">Turn any card off to hide it from the dashboard. Your choice is saved on this device.</p>
+
+                    <div id="cardToggleList"></div>
+
+                    <button class="qa-add-btn" style="margin-top: 10px;" onclick="showAllCards()">Show all cards</button>
+
+                </div>
+
             </div>
 
             <div class="settings-tab-panel" data-panel="account">
@@ -7388,6 +7403,8 @@
         function openSettingsModal() {
 
             switchSettingsTab('bot')
+
+            renderCardToggles()
 
             for (const id of ['settingsError', 'passwordError', 'importBackupError', 'createAccountError']) {
 
@@ -14137,6 +14154,80 @@
 
         loadDashboardLayout()
         initDashboardDragDrop()
+
+        // ==================================================
+        // CARD VISIBILITY (Settings > Appearance > Dashboard Cards)
+        // ==================================================
+
+        const CARD_VIS_KEY = 'voidz-card-visibility'
+
+        function getCardVisibility() {
+            try {
+                const parsed = JSON.parse(localStorage.getItem(CARD_VIS_KEY) || '{}')
+                return (parsed && typeof parsed === 'object') ? parsed : {}
+            } catch { return {} }
+        }
+
+        function saveCardVisibility(map) {
+            try { localStorage.setItem(CARD_VIS_KEY, JSON.stringify(map)) } catch {}
+        }
+
+        // A card is visible unless it's explicitly stored as false.
+        function applyCardVisibility() {
+            const vis = getCardVisibility()
+            document.querySelectorAll('#dashboardGrid .card[data-card-id]').forEach(card => {
+                card.style.display = vis[card.dataset.cardId] === false ? 'none' : ''
+            })
+        }
+
+        function setCardVisible(id, visible) {
+            const map = getCardVisibility()
+            if (visible) delete map[id]      // visible is the default, so just drop the key
+            else map[id] = false
+            saveCardVisibility(map)
+            applyCardVisibility()
+        }
+
+        function showAllCards() {
+            saveCardVisibility({})
+            applyCardVisibility()
+            renderCardToggles()
+        }
+
+        // The card's own title text, ignoring its icon / badges / buttons.
+        function cardLabel(card) {
+            const titleEl = card.querySelector('.card-title')
+            if (!titleEl) return card.dataset.cardId
+            let label = ''
+            for (const node of titleEl.childNodes) {
+                if (node.nodeType === 3) label += node.textContent
+            }
+            label = label.replace(/\s+/g, ' ').trim()
+            return label || card.dataset.cardId
+        }
+
+        function renderCardToggles() {
+            const container = $('cardToggleList')
+            if (!container) return
+            const vis = getCardVisibility()
+            container.innerHTML = Array.from(document.querySelectorAll('#dashboardGrid .card[data-card-id]'))
+                .map(card => {
+                    const id = card.dataset.cardId
+                    const checked = vis[id] === false ? '' : 'checked'
+                    return `
+                        <label class="toggle-row">
+                            <span>${escapeHtml(cardLabel(card))}</span>
+                            <span class="toggle-switch">
+                                <input type="checkbox" ${checked} onchange="setCardVisible('${id}', this.checked)">
+                                <span class="toggle-slider"></span>
+                            </span>
+                        </label>
+                    `
+                })
+                .join('')
+        }
+
+        applyCardVisibility()
 
         // ==================================================
         // CUSTOM QUICK ACTIONS

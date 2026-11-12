@@ -664,6 +664,72 @@
             color: var(--red);
         }
 
+        /* Queue-a-start control (under the Start button) */
+        .queue-start-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            padding: 0 2px;
+        }
+        .queue-start-row > svg {
+            width: 14px;
+            height: 14px;
+            color: var(--muted);
+            flex-shrink: 0;
+        }
+        .queue-start-input {
+            flex: 1;
+            min-width: 0;
+            width: 100%;
+            padding: 5px 8px;
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+            color: var(--text);
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            outline: none;
+        }
+        .queue-start-input:focus { border-color: var(--green); }
+        .queue-start-btn {
+            flex-shrink: 0;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--green);
+            background: rgba(34, 197, 94, 0.12);
+            border: 1px solid rgba(34, 197, 94, 0.5);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+        }
+        .queue-start-btn:hover { background: rgba(34, 197, 94, 0.22); }
+        .queue-start-active {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-top: 6px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            color: var(--green);
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.4);
+            border-radius: var(--radius-sm);
+        }
+        .queue-start-cancel {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 13px;
+            line-height: 1;
+            padding: 0 2px;
+        }
+        .queue-start-cancel:hover { color: var(--red); }
+
         .stop-button:hover:not(:disabled) {
             background: rgba(239, 68, 68, 0.22);
         }
@@ -4890,6 +4956,17 @@
                 <svg id="botToggleIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                 <span id="botToggleLabel">Start</span>
             </button>
+
+            <div id="queueStartRow" class="queue-start-row" title="Start the bot automatically after a countdown">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                <input id="queueStartInput" type="text" class="queue-start-input" placeholder="MM:SS" autocomplete="off" maxlength="5" onkeydown="if(event.key==='Enter')queueStart()">
+                <button id="queueStartBtn" class="queue-start-btn" onclick="queueStart()">Queue</button>
+            </div>
+
+            <div id="queueStartActive" class="queue-start-active" style="display: none;">
+                <span id="queueStartCountdown">Start in 00:00</span>
+                <button class="queue-start-cancel" onclick="cancelQueuedStart()" title="Cancel queued start">&#10005;</button>
+            </div>
 
             <a
                 id="povViewerLink"
@@ -9576,6 +9653,8 @@
                         : 'Start'
                 )
 
+                if (typeof syncQueueStartUI === 'function') syncQueueStartUI(running)
+
             }
 
             // ----------------------------------------------
@@ -12326,6 +12405,126 @@
             }
 
         }
+
+        // ==================================================
+        // QUEUE A START (delayed auto-start under the Start button)
+        // ==================================================
+
+        let queueStartTimer = null
+        const QUEUE_START_KEY = 'voidz-queued-start'
+
+        // Accepts "MM:SS" (or "HH:MM:SS"), or a plain number = minutes.
+        function parseQueueDelay(raw) {
+            const s = (raw || '').trim()
+            if (!s) return null
+            if (s.includes(':')) {
+                const parts = s.split(':').map(p => parseInt(p, 10))
+                if (parts.some(n => !Number.isFinite(n) || n < 0)) return null
+                // MM:SS or HH:MM:SS
+                const secs = parts.reduce((acc, n) => acc * 60 + n, 0)
+                return secs
+            }
+            const mins = parseInt(s, 10)
+            if (!Number.isFinite(mins) || mins < 0) return null
+            return mins * 60
+        }
+
+        function fmtQueueCountdown(totalSec) {
+            const h = Math.floor(totalSec / 3600)
+            const m = Math.floor((totalSec % 3600) / 60)
+            const s = totalSec % 60
+            const mm = String(m).padStart(2, '0')
+            const ss = String(s).padStart(2, '0')
+            return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
+        }
+
+        function queueStart() {
+
+            if ($('botToggleBtn')?.dataset.running === 'true') {
+                showToast('Bot is already running.', 'error')
+                return
+            }
+
+            const secs = parseQueueDelay($('queueStartInput')?.value)
+
+            if (secs === null || secs <= 0) {
+                showToast('Enter a time like 5:00 (MM:SS), or a number of minutes.', 'error')
+                return
+            }
+
+            const target = Date.now() + secs * 1000
+            try { localStorage.setItem(QUEUE_START_KEY, String(target)) } catch {}
+            startQueueCountdown(target)
+            showToast(`Bot will start in ${fmtQueueCountdown(secs)}.`, 'success')
+
+        }
+
+        function startQueueCountdown(target) {
+
+            if (queueStartTimer) clearInterval(queueStartTimer)
+
+            const tick = () => {
+
+                // If the bot got started some other way, drop the queue.
+                if ($('botToggleBtn')?.dataset.running === 'true') {
+                    cancelQueuedStart(true)
+                    return
+                }
+
+                const left = Math.round((target - Date.now()) / 1000)
+
+                if (left <= 0) {
+                    cancelQueuedStart(true)
+                    sendCommand('start-bot')
+                    showToast('Queued start fired — starting bot.', 'success')
+                    return
+                }
+
+                const cd = $('queueStartCountdown')
+                if (cd) cd.textContent = `Start in ${fmtQueueCountdown(left)}`
+
+            }
+
+            queueStartTimer = setInterval(tick, 1000)
+            syncQueueStartUI(false)
+            tick()
+
+        }
+
+        function cancelQueuedStart(silent) {
+            if (queueStartTimer) { clearInterval(queueStartTimer); queueStartTimer = null }
+            try { localStorage.removeItem(QUEUE_START_KEY) } catch {}
+            syncQueueStartUI($('botToggleBtn')?.dataset.running === 'true')
+            if (!silent) showToast('Queued start cancelled.', 'info')
+        }
+
+        // Show the input row vs the live countdown vs nothing, based on bot
+        // state and whether a start is queued.
+        function syncQueueStartUI(running) {
+            const row = $('queueStartRow'), active = $('queueStartActive')
+            if (!row || !active) return
+            if (running) {
+                row.style.display = 'none'
+                active.style.display = 'none'
+            } else if (queueStartTimer) {
+                row.style.display = 'none'
+                active.style.display = 'flex'
+            } else {
+                row.style.display = ''
+                active.style.display = 'none'
+            }
+        }
+
+        // Resume a queued start across reloads - but only if it's still in
+        // the future; a stale one (tab was closed past its time) is dropped
+        // rather than firing a surprise start on load.
+        ;(function resumeQueuedStart() {
+            try {
+                const t = Number(localStorage.getItem(QUEUE_START_KEY))
+                if (Number.isFinite(t) && t > Date.now()) startQueueCountdown(t)
+                else localStorage.removeItem(QUEUE_START_KEY)
+            } catch {}
+        })()
 
         // ==================================================
         // THREATS

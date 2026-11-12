@@ -12407,11 +12407,15 @@
         }
 
         // ==================================================
-        // QUEUE A START (delayed auto-start under the Start button)
+        // QUEUE A START (server-side delayed auto-start)
         // ==================================================
+        // The schedule lives on the SERVER, so it fires even with this
+        // tab (or the whole PC) closed, and survives a server restart.
+        // This UI just sends the request and shows a live countdown driven
+        // by the server's target time ('queuedStart' socket events).
 
-        let queueStartTimer = null
-        const QUEUE_START_KEY = 'voidz-queued-start'
+        let serverQueuedStartAt = null        // ms epoch, or null
+        let queueDisplayTimer = null
 
         // Accepts "MM:SS" (or "HH:MM:SS"), or a plain number = minutes.
         function parseQueueDelay(raw) {
@@ -12420,9 +12424,7 @@
             if (s.includes(':')) {
                 const parts = s.split(':').map(p => parseInt(p, 10))
                 if (parts.some(n => !Number.isFinite(n) || n < 0)) return null
-                // MM:SS or HH:MM:SS
-                const secs = parts.reduce((acc, n) => acc * 60 + n, 0)
-                return secs
+                return parts.reduce((acc, n) => acc * 60 + n, 0)   // MM:SS or HH:MM:SS
             }
             const mins = parseInt(s, 10)
             if (!Number.isFinite(mins) || mins < 0) return null
@@ -12452,61 +12454,65 @@
                 return
             }
 
-            const target = Date.now() + secs * 1000
-            try { localStorage.setItem(QUEUE_START_KEY, String(target)) } catch {}
-            startQueueCountdown(target)
-            showToast(`Bot will start in ${fmtQueueCountdown(secs)}.`, 'success')
+            fetch('/api/queue-start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ delaySeconds: secs })
+            })
+                .then(r => r.json().then(j => ({ ok: r.ok, j })))
+                .then(({ ok, j }) => {
+                    if (!ok) { showToast(j.error || 'Could not queue start.', 'error'); return }
+                    // Server also emits 'queuedStart'; set locally too so it's instant.
+                    serverQueuedStartAt = j.queuedStartAt || null
+                    renderQueuedStart()
+                    showToast(`Bot will start in ${fmtQueueCountdown(secs)} — you can close this / shut down your PC.`, 'success')
+                })
+                .catch(() => showToast('Could not reach the server.', 'error'))
 
         }
 
-        function startQueueCountdown(target) {
+        function cancelQueuedStart() {
+            fetch('/api/queue-start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cancel: true })
+            })
+                .then(() => {
+                    serverQueuedStartAt = null
+                    renderQueuedStart()
+                    showToast('Queued start cancelled.', 'info')
+                })
+                .catch(() => showToast('Could not reach the server.', 'error'))
+        }
 
-            if (queueStartTimer) clearInterval(queueStartTimer)
+        // Drives the countdown display from the server's target time.
+        function renderQueuedStart() {
+
+            if (queueDisplayTimer) { clearInterval(queueDisplayTimer); queueDisplayTimer = null }
+
+            syncQueueStartUI($('botToggleBtn')?.dataset.running === 'true')
+
+            if (!serverQueuedStartAt) return
 
             const tick = () => {
-
-                // If the bot got started some other way, drop the queue.
-                if ($('botToggleBtn')?.dataset.running === 'true') {
-                    cancelQueuedStart(true)
-                    return
-                }
-
-                const left = Math.round((target - Date.now()) / 1000)
-
-                if (left <= 0) {
-                    cancelQueuedStart(true)
-                    sendCommand('start-bot')
-                    showToast('Queued start fired — starting bot.', 'success')
-                    return
-                }
-
+                const left = Math.max(0, Math.round((serverQueuedStartAt - Date.now()) / 1000))
                 const cd = $('queueStartCountdown')
-                if (cd) cd.textContent = `Start in ${fmtQueueCountdown(left)}`
-
+                if (cd) cd.textContent = left > 0 ? `Start in ${fmtQueueCountdown(left)}` : 'Starting…'
+                if (left <= 0 && queueDisplayTimer) { clearInterval(queueDisplayTimer); queueDisplayTimer = null }
             }
-
-            queueStartTimer = setInterval(tick, 1000)
-            syncQueueStartUI(false)
             tick()
-
-        }
-
-        function cancelQueuedStart(silent) {
-            if (queueStartTimer) { clearInterval(queueStartTimer); queueStartTimer = null }
-            try { localStorage.removeItem(QUEUE_START_KEY) } catch {}
-            syncQueueStartUI($('botToggleBtn')?.dataset.running === 'true')
-            if (!silent) showToast('Queued start cancelled.', 'info')
+            queueDisplayTimer = setInterval(tick, 1000)
         }
 
         // Show the input row vs the live countdown vs nothing, based on bot
-        // state and whether a start is queued.
+        // state and whether a start is queued on the server.
         function syncQueueStartUI(running) {
             const row = $('queueStartRow'), active = $('queueStartActive')
             if (!row || !active) return
             if (running) {
                 row.style.display = 'none'
                 active.style.display = 'none'
-            } else if (queueStartTimer) {
+            } else if (serverQueuedStartAt) {
                 row.style.display = 'none'
                 active.style.display = 'flex'
             } else {
@@ -12515,16 +12521,12 @@
             }
         }
 
-        // Resume a queued start across reloads - but only if it's still in
-        // the future; a stale one (tab was closed past its time) is dropped
-        // rather than firing a surprise start on load.
-        ;(function resumeQueuedStart() {
-            try {
-                const t = Number(localStorage.getItem(QUEUE_START_KEY))
-                if (Number.isFinite(t) && t > Date.now()) startQueueCountdown(t)
-                else localStorage.removeItem(QUEUE_START_KEY)
-            } catch {}
-        })()
+        // Server pushes the current/updated queued start here (on connect,
+        // on set, on cancel, and when it fires).
+        socket.on('queuedStart', data => {
+            serverQueuedStartAt = (data && data.at) ? data.at : null
+            renderQueuedStart()
+        })
 
         // ==================================================
         // THREATS

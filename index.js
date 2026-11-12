@@ -6922,6 +6922,73 @@ function getAdminSession() {
     return getOrCreateSession(DASHBOARD_USERNAME)
 }
 
+// ============================================================
+// SCHEDULED (QUEUED) START - server-side, so it fires even with the
+// user's browser/PC off. Persisted as config.queuedStartAt and re-armed
+// on a server restart (see rearmScheduledStarts at the bottom).
+// ============================================================
+
+const scheduledStarts = new Map()                 // username -> { at, timer }
+const MAX_QUEUE_DELAY_MS = 24 * 60 * 60 * 1000     // 24h cap (also setTimeout-safe)
+
+// Shared start path used by both the manual 'start-bot' command and the
+// scheduler. Returns true if a start was actually kicked off.
+function startBotForUser(username, { silent = false } = {}) {
+
+    const config = getBotConfig(username)
+
+    if (!config) {
+        if (!silent) io.to(username).emit('notice', { type: 'error', text: 'Set up your Microsoft account and server in Settings first.' })
+        return false
+    }
+
+    const conflict = findConflictingSession(username, config.microsoftEmail)
+
+    if (conflict) {
+        if (!silent) io.to(username).emit('notice', {
+            type: 'error',
+            text: `That Microsoft account is already connected under another Voidz.IO account (${conflict.username}). Stop it there first, or use a different Microsoft account.`
+        })
+        return false
+    }
+
+    getOrCreateSession(username).startBotRemote()
+    return true
+
+}
+
+function clearScheduledStart(username, { persist = true } = {}) {
+    const existing = scheduledStarts.get(username)
+    if (existing?.timer) clearTimeout(existing.timer)
+    scheduledStarts.delete(username)
+    if (persist) saveBotConfig(username, { queuedStartAt: null })
+}
+
+function fireScheduledStart(username) {
+    clearScheduledStart(username)
+    io.to(username).emit('queuedStart', { at: null })
+    startBotForUser(username)
+}
+
+function armScheduledStart(username, at, { persist = true } = {}) {
+
+    clearScheduledStart(username, { persist: false })
+
+    if (persist) saveBotConfig(username, { queuedStartAt: at })
+
+    const delay = at - Date.now()
+
+    if (delay <= 0) {
+        fireScheduledStart(username)
+        return
+    }
+
+    const timer = setTimeout(() => fireScheduledStart(username), Math.min(delay, MAX_QUEUE_DELAY_MS))
+    scheduledStarts.set(username, { at, timer })
+    io.to(username).emit('queuedStart', { at })
+
+}
+
 // Finds another account's bot that's already using the same
 // Microsoft email and currently trying to be connected. Starting
 // a second bot on the same Microsoft account would just make the
@@ -7008,24 +7075,11 @@ function handleWebCommand(username, command) {
 
     if (lower === 'start-bot') {
 
-        const config = getBotConfig(username)
+        // A manual start supersedes any queued one.
+        clearScheduledStart(username)
+        io.to(username).emit('queuedStart', { at: null })
 
-        if (!config) {
-            io.to(username).emit('notice', { type: 'error', text: 'Set up your Microsoft account and server in Settings first.' })
-            return
-        }
-
-        const conflict = findConflictingSession(username, config.microsoftEmail)
-
-        if (conflict) {
-            io.to(username).emit('notice', {
-                type: 'error',
-                text: `That Microsoft account is already connected under another Voidz.IO account (${conflict.username}). Stop it there first, or use a different Microsoft account.`
-            })
-            return
-        }
-
-        getOrCreateSession(username).startBotRemote()
+        startBotForUser(username)
 
         return
 
@@ -7613,6 +7667,44 @@ app.post('/api/black-market-items', (req, res) => {
 // ============================================================
 // AUTOMATION TOGGLES (the Automation card)
 // ============================================================
+
+// Schedule (or cancel) a server-side delayed start. Fires even with the
+// user's browser/PC off; persists across a server restart.
+app.post('/api/queue-start', (req, res) => {
+
+    const username = req.session.username
+    const body = req.body || {}
+
+    if (body.cancel) {
+        clearScheduledStart(username)
+        io.to(username).emit('queuedStart', { at: null })
+        return res.json({ ok: true, queuedStartAt: null })
+    }
+
+    if (!getBotConfig(username)) {
+        return res.status(400).json({ error: 'Set up your Microsoft account and server in Settings first.' })
+    }
+
+    const delaySeconds = Number(body.delaySeconds)
+
+    if (!Number.isFinite(delaySeconds) || delaySeconds <= 0) {
+        return res.status(400).json({ error: 'Enter how long from now to start (in seconds).' })
+    }
+
+    const delayMs = delaySeconds * 1000
+
+    if (delayMs > MAX_QUEUE_DELAY_MS) {
+        return res.status(400).json({ error: 'The longest you can queue a start is 24 hours.' })
+    }
+
+    const at = Date.now() + delayMs
+    armScheduledStart(username, at)
+
+    appLog(`Queued start for ${username} at ${new Date(at).toISOString()} (in ${Math.round(delaySeconds)}s).`)
+
+    res.json({ ok: true, queuedStartAt: at })
+
+})
 
 app.post('/api/automation', (req, res) => {
 
@@ -8728,6 +8820,19 @@ setInterval(() => {
     }
 }, 1000)
 
+// Re-arm any persisted scheduled starts after a server (re)start - a
+// queue the user set before the server went down is honoured; one whose
+// time already passed while the server was down fires right away.
+;(function rearmScheduledStarts() {
+    const configs = loadBotConfigs()
+    for (const username of Object.keys(configs || {})) {
+        const at = Number(configs[username]?.queuedStartAt)
+        if (Number.isFinite(at) && at > 0) {
+            armScheduledStart(username, at, { persist: false })
+        }
+    }
+})()
+
 // ============================================================
 // SOCKET.IO
 // ============================================================
@@ -8757,6 +8862,10 @@ io.on('connection', socket => {
     // being away) shows the full history, not a blank feed. Falls back to
     // the saved log on disk when the bot isn't currently running.
     socket.emit('chatHistory', botSession ? botSession.chatHistory : getChatHistory(username))
+
+    // Current server-side queued start (so the countdown shows after a
+    // reload / on another device), null if none.
+    socket.emit('queuedStart', { at: getBotConfig(username)?.queuedStartAt || null })
 
     socket.on('command', command => {
 

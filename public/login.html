@@ -167,118 +167,63 @@
             align-items: center;
             justify-content: center;
 
-            padding: 20px;
+            padding: 24px;
 
-            background: var(--background);
+            background:
+                radial-gradient(1200px 800px at 12% -12%, #16131f 0%, transparent 55%),
+                radial-gradient(1000px 700px at 112% 8%, #0c1620 0%, transparent 52%),
+                var(--background);
 
             color: var(--text);
 
             font-family: 'Inter', Arial, sans-serif;
 
-            transition: background-color 0.25s ease, color 0.25s ease;
-        }
-
-        /* ================================================= */
-        /* THEME PICKER */
-        /* ================================================= */
-
-        .theme-picker-float {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 10;
-
-            display: flex;
-            align-items: center;
-            gap: 9px;
-
-            padding: 9px 12px;
-
-            background: var(--panel);
-
-            border: 1px solid var(--border);
-            border-radius: 999px;
-
-            box-shadow: var(--shadow);
-        }
-
-        .theme-swatch {
-            width: 20px;
-            height: 20px;
-            padding: 0;
-
-            border-radius: 50%;
-            border: 2px solid transparent;
-
-            box-shadow: 0 0 0 1px var(--border);
-
-            cursor: pointer;
-
-            transition:
-                transform 0.15s ease,
-                border-color 0.15s ease;
-        }
-
-        .theme-swatch:hover {
-            transform: scale(1.1);
-        }
-
-        .theme-swatch.active {
-            border-color: var(--text);
-        }
-
-        .custom-swatch {
             position: relative;
-
-            background: conic-gradient(
-                from 180deg,
-                #f87171, #fbbf24, #34d399, #6366f1, #c084fc, #f87171
-            );
+            overflow: hidden;
         }
 
-        .custom-swatch input[type="color"] {
-            position: absolute;
+        /* Slow-drifting aurora blobs behind the card */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: -25%;
+            z-index: 0;
+            pointer-events: none;
+
+            background:
+                radial-gradient(440px 440px at 20% 30%, rgba(99, 102, 241, 0.30), transparent 60%),
+                radial-gradient(400px 400px at 82% 22%, rgba(192, 132, 252, 0.22), transparent 60%),
+                radial-gradient(500px 500px at 65% 88%, rgba(45, 212, 191, 0.16), transparent 60%);
+
+            filter: blur(12px);
+            animation: auroraDrift 22s ease-in-out infinite alternate;
+        }
+
+        @keyframes auroraDrift {
+            0%   { transform: translate3d(0, 0, 0) scale(1); }
+            50%  { transform: translate3d(3%, 2%, 0) scale(1.08); }
+            100% { transform: translate3d(-3%, -2%, 0) scale(1.05); }
+        }
+
+        /* Faint grid, faded out toward the edges */
+        body::after {
+            content: '';
+            position: fixed;
             inset: 0;
+            z-index: 0;
+            pointer-events: none;
 
-            width: 100%;
-            height: 100%;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+            background-size: 46px 46px;
 
-            opacity: 0;
-
-            border: none;
-            padding: 0;
-
-            cursor: pointer;
+            -webkit-mask-image: radial-gradient(circle at 50% 42%, #000 0%, transparent 72%);
+            mask-image: radial-gradient(circle at 50% 42%, #000 0%, transparent 72%);
         }
 
-        .theme-custom-reset {
-            width: 20px;
-            height: 20px;
-            padding: 0;
-
-            display: none;
-            align-items: center;
-            justify-content: center;
-
-            border-radius: 50%;
-            border: 1px solid var(--border);
-
-            background: transparent;
-            color: var(--muted);
-
-            font-size: 10px;
-            line-height: 1;
-
-            cursor: pointer;
-
-            transition:
-                color 0.15s ease,
-                border-color 0.15s ease;
-        }
-
-        .theme-custom-reset:hover {
-            color: var(--red);
-            border-color: var(--red);
+        @media (prefers-reduced-motion: reduce) {
+            body::before { animation: none; }
         }
 
         /* ================================================= */
@@ -287,19 +232,43 @@
 
         .card {
             position: relative;
+            z-index: 1;
 
             width: 100%;
-            max-width: 380px;
+            max-width: 400px;
 
-            background: var(--panel);
+            background: linear-gradient(180deg, rgba(23, 24, 30, 0.92), rgba(16, 17, 22, 0.92));
+            -webkit-backdrop-filter: blur(16px) saturate(1.1);
+            backdrop-filter: blur(16px) saturate(1.1);
 
-            border: 1px solid var(--border);
-            border-top: 4px solid var(--blue);
-            border-radius: var(--radius);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 22px;
 
-            padding: 32px 28px;
+            padding: 34px 30px;
 
-            box-shadow: var(--shadow-lg);
+            box-shadow:
+                0 26px 70px rgba(0, 0, 0, 0.55),
+                0 0 0 1px rgba(99, 102, 241, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+            animation: cardRise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        /* Gradient hairline along the top edge */
+        .card::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: 26px;
+            right: 26px;
+            height: 2px;
+            border-radius: 2px;
+            background: linear-gradient(90deg, transparent, var(--blue), var(--purple), transparent);
+        }
+
+        @keyframes cardRise {
+            from { opacity: 0; transform: translateY(16px) scale(0.985); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
         }
 
         .brand {
@@ -311,37 +280,67 @@
         }
 
         .logo {
-            width: 42px;
-            height: 42px;
+            width: 46px;
+            height: 46px;
             flex-shrink: 0;
 
             display: flex;
             align-items: center;
             justify-content: center;
 
-            border-radius: var(--radius-sm);
+            border-radius: 14px;
 
             background: linear-gradient(135deg, var(--blue), var(--purple));
+            box-shadow: 0 8px 22px rgba(99, 102, 241, 0.45);
 
             font-family: 'Space Grotesk', 'Inter', sans-serif;
-            font-size: 17px;
+            font-size: 20px;
             font-weight: 700;
             color: #fff;
+
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Sheen sweep across the logo */
+        .logo::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(120deg, transparent 32%, rgba(255, 255, 255, 0.4) 50%, transparent 68%);
+            transform: translateX(-130%);
+            animation: logoSheen 5s ease-in-out infinite;
+        }
+
+        @keyframes logoSheen {
+            0%, 55%  { transform: translateX(-130%); }
+            78%, 100% { transform: translateX(130%); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .card { animation: none; }
+            .logo::after { animation: none; display: none; }
         }
 
         .brand h1 {
             margin: 0;
 
             font-family: 'Space Grotesk', 'Inter', sans-serif;
-            font-size: 19px;
+            font-size: 21px;
             font-weight: 700;
             letter-spacing: -0.01em;
+
+            background: linear-gradient(90deg, #fff, #c7c9ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
         .brand p {
-            margin: 3px 0 0;
+            margin: 4px 0 0;
             color: var(--muted);
             font-size: 12.5px;
+            letter-spacing: 0.02em;
         }
 
         label {
@@ -415,9 +414,9 @@
             padding: 13px;
 
             border-radius: var(--radius-sm);
-            border: 1px solid var(--border-strong);
+            border: 1px solid transparent;
 
-            background: var(--blue);
+            background: linear-gradient(135deg, var(--blue), #8b5cf6);
             color: #fff;
 
             font-family: inherit;
@@ -426,13 +425,17 @@
 
             cursor: pointer;
 
+            box-shadow: 0 8px 22px rgba(99, 102, 241, 0.32);
+
             transition:
-                opacity 0.15s ease,
-                transform 0.15s ease;
+                box-shadow 0.15s ease,
+                filter 0.15s ease,
+                transform 0.1s ease;
         }
 
         button:hover:not(:disabled) {
-            opacity: 0.9;
+            filter: brightness(1.08);
+            box-shadow: 0 10px 28px rgba(99, 102, 241, 0.45);
         }
 
         button:active:not(:disabled) {
@@ -469,22 +472,6 @@
 </head>
 
 <body>
-
-    <div class="theme-picker-float" id="themeSwatches">
-
-        <button class="theme-swatch" data-theme-value="dark" onclick="setTheme('dark')" title="Dark" style="background: linear-gradient(135deg, #0b0c10 50%, #6366f1 50%);"></button>
-        <button class="theme-swatch" data-theme-value="light" onclick="setTheme('light')" title="Light" style="background: linear-gradient(135deg, #f7f7f9 50%, #6366f1 50%);"></button>
-        <button class="theme-swatch" data-theme-value="midnight" onclick="setTheme('midnight')" title="Midnight" style="background: linear-gradient(135deg, #0e0c14 50%, #c084fc 50%);"></button>
-        <button class="theme-swatch" data-theme-value="aurora" onclick="setTheme('aurora')" title="Aurora" style="background: linear-gradient(135deg, #08120f 50%, #2dd4bf 50%);"></button>
-        <button class="theme-swatch" data-theme-value="sunset" onclick="setTheme('sunset')" title="Sunset" style="background: linear-gradient(135deg, #140d09 50%, #fb923c 50%);"></button>
-
-        <label class="theme-swatch custom-swatch" id="customAccentSwatch" title="Custom accent color">
-            <input type="color" id="customAccentInput" value="#6366f1" oninput="setCustomAccent(this.value)">
-        </label>
-
-        <button class="theme-custom-reset" id="customAccentReset" title="Reset accent color" onclick="clearCustomAccent()">&#10005;</button>
-
-    </div>
 
     <div class="card">
 
@@ -554,11 +541,11 @@
                 Verify
             </button>
 
-            <button id="backToLoginBtn" type="button" style="background: transparent; color: var(--muted); border-color: var(--border);">
+            <button id="backToLoginBtn" type="button" style="background: transparent; color: var(--muted); border-color: var(--border); box-shadow: none;">
                 Back
             </button>
 
-            <button id="recoveryToggle" type="button" style="background: transparent; color: var(--muted); border: none; margin-top: 10px; padding: 4px; font-size: 12px; font-weight: 600; text-decoration: underline;">
+            <button id="recoveryToggle" type="button" style="background: transparent; color: var(--muted); border: none; box-shadow: none; margin-top: 10px; padding: 4px; font-size: 12px; font-weight: 600; text-decoration: underline;">
                 I don't have my phone / backup code
             </button>
 
@@ -594,7 +581,7 @@
                 Yes, trust this device for 72h
             </button>
 
-            <button id="stayNoBtn" type="button" style="background: transparent; color: var(--muted); border-color: var(--border);">
+            <button id="stayNoBtn" type="button" style="background: transparent; color: var(--muted); border-color: var(--border); box-shadow: none;">
                 No, ask every time
             </button>
 
@@ -606,165 +593,9 @@
 
         'use strict'
 
-        // ==================================================
-        // THEME
-        // ==================================================
-
-        const THEMES = ['dark', 'light', 'midnight', 'aurora', 'sunset']
-        const CUSTOM_ACCENT_PROPS = ['--blue', '--border', '--border-strong']
-
-        function applyTheme(theme) {
-
-            if (!THEMES.includes(theme)) {
-                theme = 'dark'
-            }
-
-            document.documentElement.setAttribute('data-theme', theme)
-
-            document.querySelectorAll('.theme-swatch').forEach(
-                el => {
-
-                    el.classList.toggle(
-                        'active',
-                        el.dataset.themeValue === theme
-                    )
-
-                }
-            )
-
-        }
-
-        function setTheme(theme) {
-
-            const root = document.documentElement
-
-            CUSTOM_ACCENT_PROPS.forEach(
-                prop => root.style.removeProperty(prop)
-            )
-
-            applyTheme(theme)
-
-            const resetBtn = document.getElementById('customAccentReset')
-
-            if (resetBtn) {
-                resetBtn.style.display = 'none'
-            }
-
-            try {
-
-                localStorage.setItem('fleaxer-theme', theme)
-                localStorage.removeItem('fleaxer-accent')
-
-            } catch {}
-
-        }
-
-        function hexToRgb(hex) {
-
-            const clean = hex.replace('#', '')
-
-            const full =
-                clean.length === 3
-                    ? clean.split('').map(c => c + c).join('')
-                    : clean
-
-            const num = parseInt(full, 16)
-
-            return {
-                r: (num >> 16) & 255,
-                g: (num >> 8) & 255,
-                b: num & 255
-            }
-
-        }
-
-        function setCustomAccent(hex) {
-
-            const { r, g, b } = hexToRgb(hex)
-            const root = document.documentElement
-
-            root.style.setProperty('--blue', hex)
-            root.style.setProperty('--border', `rgba(${r}, ${g}, ${b}, 0.28)`)
-            root.style.setProperty('--border-strong', `rgba(${r}, ${g}, ${b}, 0.6)`)
-
-            document.querySelectorAll('.theme-swatch').forEach(
-                el => el.classList.remove('active')
-            )
-
-            const customSwatch = document.getElementById('customAccentSwatch')
-
-            if (customSwatch) {
-                customSwatch.classList.add('active')
-            }
-
-            const input = document.getElementById('customAccentInput')
-
-            if (input) {
-                input.value = hex
-            }
-
-            const resetBtn = document.getElementById('customAccentReset')
-
-            if (resetBtn) {
-                resetBtn.style.display = 'inline-flex'
-            }
-
-            try {
-
-                localStorage.setItem('fleaxer-accent', hex)
-
-            } catch {}
-
-        }
-
-        function clearCustomAccent() {
-
-            const current =
-                document.documentElement.getAttribute('data-theme') || 'dark'
-
-            setTheme(current)
-
-        }
-
-        function initTheme() {
-
-            let stored = null
-
-            try {
-
-                stored = localStorage.getItem('fleaxer-theme')
-
-            } catch {}
-
-            if (stored && THEMES.includes(stored)) {
-
-                applyTheme(stored)
-
-            } else {
-
-                const prefersLight =
-                    window.matchMedia &&
-                    window.matchMedia('(prefers-color-scheme: light)').matches
-
-                applyTheme(prefersLight ? 'light' : 'dark')
-
-            }
-
-            let customAccent = null
-
-            try {
-
-                customAccent = localStorage.getItem('fleaxer-accent')
-
-            } catch {}
-
-            if (customAccent) {
-                setCustomAccent(customAccent)
-            }
-
-        }
-
-        initTheme()
+        // The login screen deliberately always uses the default (dark)
+        // look - a user's saved theme/accent is account-wide and only
+        // applies once they're signed in, not on this pre-auth page.
 
         // ==================================================
         // LOGIN FORM

@@ -1661,7 +1661,7 @@ const BADGE_DEFINITIONS = [
 // Everything the dashboard used to keep in localStorage only
 // (Threats, Allies, and the Appearance tab) - now synced through
 // here too, so it follows the account across devices/browsers.
-const PREFERENCE_KEYS = ['threats', 'allies', 'theme', 'customAccent', 'reduceMotion', 'compactMode', 'alertVolume']
+const PREFERENCE_KEYS = ['threats', 'allies', 'theme', 'customAccent', 'reduceMotion', 'compactMode', 'alertVolume', 'cardVisibility', 'layout']
 
 function getPreferences(username) {
 
@@ -1676,6 +1676,8 @@ function getPreferences(username) {
         reduceMotion: !!config.reduceMotion,
         compactMode: !!config.compactMode,
         alertVolume: Number.isFinite(config.alertVolume) ? config.alertVolume : 70,
+        cardVisibility: (config.cardVisibility && typeof config.cardVisibility === 'object' && !Array.isArray(config.cardVisibility)) ? config.cardVisibility : {},
+        layout: Array.isArray(config.layout) ? config.layout : [],
         // False the very first time this account is seen after this
         // feature shipped - tells the client "nothing saved here yet,
         // push your localStorage state up instead of overwriting it."
@@ -7996,6 +7998,15 @@ app.post('/api/preferences', (req, res) => {
 
             const volume = Number(body[key])
             partial[key] = Number.isFinite(volume) ? Math.max(0, Math.min(100, volume)) : 70
+
+        } else if (key === 'cardVisibility') {
+
+            const v = body[key]
+            partial[key] = (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}
+
+        } else if (key === 'layout') {
+
+            partial[key] = Array.isArray(body[key]) ? body[key].filter(x => typeof x === 'string') : []
 
         } else {
 

@@ -13813,9 +13813,17 @@
                         // whatever's already in localStorage up rather
                         // than overwrite it with server defaults.
                         let localAccent = null
+                        let localCardVis = {}
+                        let localLayout = []
 
                         try {
                             localAccent = localStorage.getItem('fleaxer-accent')
+                        } catch {}
+                        try {
+                            localCardVis = JSON.parse(localStorage.getItem(CARD_VIS_KEY) || '{}') || {}
+                        } catch {}
+                        try {
+                            localLayout = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY) || '[]') || []
                         } catch {}
 
                         syncPreferenceToServer({
@@ -13825,7 +13833,9 @@
                             customAccent: localAccent,
                             reduceMotion: document.documentElement.classList.contains('reduce-motion'),
                             compactMode: document.body.classList.contains('compact'),
-                            alertVolume: Math.round(alertVolume * 100)
+                            alertVolume: Math.round(alertVolume * 100),
+                            cardVisibility: localCardVis,
+                            layout: localLayout
                         })
 
                         return
@@ -13922,6 +13932,23 @@
                             slider.value = String(percent)
                         }
 
+                    }
+
+                    // Card visibility (which cards are hidden) - account-wide.
+                    if (data.cardVisibility && typeof data.cardVisibility === 'object') {
+                        try {
+                            localStorage.setItem(CARD_VIS_KEY, JSON.stringify(data.cardVisibility))
+                        } catch {}
+                        applyCardVisibility()
+                        renderCardToggles()
+                    }
+
+                    // Dashboard card order - account-wide.
+                    if (Array.isArray(data.layout) && data.layout.length) {
+                        try {
+                            localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(data.layout))
+                        } catch {}
+                        loadDashboardLayout()
                     }
 
                 })
@@ -14216,6 +14243,8 @@
 
             } catch {}
 
+            syncPreferenceToServer({ layout: order })
+
         }
 
         function resetDashboardLayout() {
@@ -14225,6 +14254,8 @@
                 localStorage.removeItem(LAYOUT_STORAGE_KEY)
 
             } catch {}
+
+            syncPreferenceToServer({ layout: [] })
 
             showToast('Layout reset - reloading...', 'success')
 
@@ -14387,12 +14418,14 @@
             else map[id] = false
             saveCardVisibility(map)
             applyCardVisibility()
+            syncPreferenceToServer({ cardVisibility: map })
         }
 
         function showAllCards() {
             saveCardVisibility({})
             applyCardVisibility()
             renderCardToggles()
+            syncPreferenceToServer({ cardVisibility: {} })
         }
 
         // The card's own title text, ignoring its icon / badges / buttons.

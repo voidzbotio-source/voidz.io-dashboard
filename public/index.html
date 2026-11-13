@@ -3710,7 +3710,7 @@
 
         .inv-slot-droppable:hover {
             filter: brightness(1.15);
-            outline-color: var(--red);
+            outline-color: var(--blue);
         }
 
         /* Remote control pad */
@@ -5596,7 +5596,7 @@
                     <span id="ecViewCountdown" class="badge" style="margin-left: auto; display: none; color: var(--purple); border-color: var(--purple);"></span>
                 </div>
 
-                <p class="settings-section-desc">Open a live view of the bot's Ender Chest (<code>/ec</code>). It stays open ~60s &mdash; click any item to drop that whole stack on the ground.</p>
+                <p class="settings-section-desc">Open a live view of the bot's Ender Chest (<code>/ec</code>). It stays open ~60s &mdash; click any item to transfer it to the bot's inventory.</p>
 
                 <button class="modal-ok" id="ecViewOpenBtn" onclick="openEcView()" style="width: 100%; margin-bottom: 12px;">Open Ender Chest</button>
 
@@ -6225,6 +6225,27 @@
                     Confirm
                 </button>
 
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- ================================================== -->
+    <!-- INVENTORY ITEM ACTION MENU -->
+    <!-- ================================================== -->
+
+    <div id="invActionOverlay" class="modal-overlay">
+
+        <div class="modal-card">
+
+            <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg><span id="invActionTitle">Item</span></h3>
+            <p id="invActionMsg" style="margin-bottom: 16px;">What do you want to do with this stack?</p>
+
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <button class="modal-ok" style="width: 100%;" onclick="invActionTransferEc()">Transfer to Ender Chest</button>
+                <button class="modal-ok" style="width: 100%; background: color-mix(in srgb, var(--red) 16%, transparent); border-color: color-mix(in srgb, var(--red) 45%, transparent); color: var(--red);" onclick="invActionDrop()">Drop on ground</button>
+                <button class="logout-button" style="width: 100%;" onclick="closeInvActionMenu()">Cancel</button>
             </div>
 
         </div>
@@ -8725,9 +8746,37 @@
             sendCommand('bm-buy ' + slot)
         }
 
-        // Drop the stack in one inventory slot (clicking an item in the
-        // Inventory card). Confirms first so a stray tap doesn't throw
-        // away gear.
+        // Clicking an inventory item opens a small menu: send it to the
+        // Ender Chest, or drop it.
+        let invActionSlot = null
+
+        function openInvItemMenu(slot) {
+            const item = currentInventory.find(i => i.slot === slot)
+            if (!item) return
+            invActionSlot = slot
+            $('invActionTitle').textContent = `${item.count}× ${item.displayName || item.name}`
+            $('invActionOverlay').classList.add('show')
+        }
+
+        function closeInvActionMenu() {
+            $('invActionOverlay').classList.remove('show')
+            invActionSlot = null
+        }
+
+        function invActionTransferEc() {
+            const slot = invActionSlot
+            closeInvActionMenu()
+            if (slot !== null) sendCommand('inv-to-ec ' + slot)
+        }
+
+        function invActionDrop() {
+            const slot = invActionSlot
+            closeInvActionMenu()
+            if (slot !== null) dropInvSlot(slot)
+        }
+
+        // Drop the stack in one inventory slot. Confirms first so a stray
+        // tap doesn't throw away gear.
         function dropInvSlot(slot) {
             const item = currentInventory.find(i => i.slot === slot)
             const label = item ? `${item.count}× ${item.displayName || item.name}` : 'this item'
@@ -8897,8 +8946,8 @@
             if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; setTimeout(() => { btn.disabled = false; btn.textContent = 'Open Ender Chest' }, 3000) }
         }
 
-        function dropEcSlot(slot, label) {
-            sendCommand('ec-drop ' + slot, { confirm: `Drop ${label || 'this stack'}? It'll fall on the ground where the bot is standing.` })
+        function transferEcSlot(slot) {
+            sendCommand('ec-transfer ' + slot)
         }
 
         socket.on('ecView', data => {
@@ -8919,9 +8968,8 @@
             grid.innerHTML = slots.length
                 ? slots.map(s => {
                     const name = s.name || s.item || '?'
-                    const label = `${s.count || 1}× ${name}`
                     return `
-                    <div class="bm-tile" onclick="dropEcSlot(${s.slot}, ${JSON.stringify(label).replace(/"/g, '&quot;')})" title="Click to drop">
+                    <div class="bm-tile" onclick="transferEcSlot(${s.slot})" title="Click to move to the bot's inventory">
                         <div class="bm-tile-name">${escapeHtml(name)}</div>
                         <div class="bm-tile-count">x${s.count || 1}</div>
                     </div>
@@ -9401,6 +9449,12 @@
                 closeConfirmModal(false)
             }
 
+        })
+
+        $('invActionOverlay').addEventListener('click', event => {
+            if (event.target.id === 'invActionOverlay') {
+                closeInvActionMenu()
+            }
         })
 
         // ==================================================
@@ -11930,7 +11984,7 @@
                                                     : `${name} x${item.count}`
 
                                                 return `
-                                                    <div class="inv-slot inv-slot-droppable" title="${escapeHtml(title)} — click to drop" onclick="dropInvSlot(${item.slot})">
+                                                    <div class="inv-slot inv-slot-droppable" title="${escapeHtml(title)} — click for options" onclick="openInvItemMenu(${item.slot})">
                                                         <img
                                                             class="inv-slot-icon"
                                                             src="${itemIconUrl(item.name, 'item')}"

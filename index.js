@@ -5147,10 +5147,11 @@ class BotSession {
         io.to(this.username).emit('ecView', { open: true, slots, closesAt: this.ecViewClosesAt })
     }
 
-    // Q-drops the whole stack in one ender-chest slot onto the ground
-    // (clickWindow mode 4 = drop, button 1 = drop full stack), then
-    // refreshes the grid once the slot clears.
-    dropEnderChestSlot(slot) {
+    // Shift-clicks one ender-chest slot to move that stack into the bot's
+    // inventory (clickWindow mode 1 = quick-move between the window's two
+    // areas), then refreshes the grid. If the inventory has no free slot,
+    // the move can't happen - say so instead of failing silently.
+    transferEnderChestToInventory(slot) {
         const n = Number(slot)
         if (!this.bot || !this.ecViewWindow || !Number.isInteger(n)) return
         const item = this.ecViewWindow.slots[n]
@@ -5159,12 +5160,108 @@ class BotSession {
         const label = String(item.displayName || item.name || '').replace(/§./g, '').trim()
         const count = item.count || 1
 
-        this.log(`EC view: dropping slot ${n} (${count}x ${label}).`)
-        this.bot.clickWindow(n, 1, 4).catch(err => this.log(`EC drop failed (slot ${n}): ${err.message}`))
+        // Any empty main/hotbar slot (9-44) means there's room.
+        let hasRoom = false
+        const inv = this.bot.inventory?.slots || []
+        for (let i = 9; i <= 44; i++) { if (!inv[i]) { hasRoom = true; break } }
 
-        io.to(this.username).emit('notice', { type: 'info', text: `Dropped ${count}× ${label}` })
+        if (!hasRoom) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Inventory full, you cannot transfer' })
+            return
+        }
+
+        this.log(`EC view: transferring slot ${n} (${count}x ${label}) to inventory.`)
+        this.bot.clickWindow(n, 0, 1).catch(err => this.log(`EC transfer failed (slot ${n}): ${err.message}`))
+
+        io.to(this.username).emit('notice', { type: 'info', text: `Moved ${count}× ${label} to inventory` })
 
         setTimeout(() => { if (this.bot && this.ecViewWindow) this.streamEnderChestView() }, 400)
+    }
+
+    // Opens /ec once and resolves with the window (or null on timeout).
+    openEnderChestWindowOnce() {
+        return new Promise(resolve => {
+            if (!this.bot) return resolve(null)
+            const timeout = setTimeout(() => { try { this.bot?.removeListener('windowOpen', onOpen) } catch {}; resolve(null) }, 5000)
+            const onOpen = w => { clearTimeout(timeout); resolve(w) }
+            this.bot.once('windowOpen', onOpen)
+            this.sendMinecraftChat(EC_OPEN_COMMAND)
+        })
+    }
+
+    // Moves one inventory stack INTO the ender chest. Opens /ec if the
+    // viewer isn't already showing it. Refuses (with "Enderchest Filled")
+    // when the chest has no free slot.
+    async transferInventoryToEnderChest(slotArg) {
+
+        if (this.config.platform === 'bedrock') {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Ender Chest transfer is Java-only.' })
+            return
+        }
+        if (!this.bot || !this.bot.inventory) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Bot is not connected.' })
+            return
+        }
+
+        const invSlot = parseInt(slotArg, 10)
+        if (!Number.isInteger(invSlot)) return
+
+        // Only main inventory + hotbar (9-44) can shift-click into a chest.
+        if (invSlot < 9 || invSlot > 44) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Only inventory & hotbar items can go to the Ender Chest.' })
+            return
+        }
+
+        const item = this.bot.inventory.slots[invSlot]
+        if (!item) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'That slot is empty.' })
+            return
+        }
+
+        const label = String(item.displayName || item.name || '').replace(/§./g, '').trim()
+        const count = item.count || 1
+
+        // Reuse the viewer's open window if there is one, else open one.
+        const usingViewer = !!this.ecViewWindow
+        const win = this.ecViewWindow || await this.openEnderChestWindowOnce()
+
+        if (!win) {
+            io.to(this.username).emit('notice', { type: 'error', text: "Couldn't open the Ender Chest (/ec)." })
+            return
+        }
+
+        const chestEnd = typeof win.inventoryStart === 'number' ? win.inventoryStart : 27
+
+        // Full if no empty chest slot.
+        let hasEmpty = false
+        for (let i = 0; i < chestEnd; i++) { if (!win.slots[i]) { hasEmpty = true; break } }
+
+        if (!hasEmpty) {
+            io.to(this.username).emit('notice', { type: 'error', text: 'Enderchest Filled, you cannot transfer' })
+            if (!usingViewer) { try { this.bot.closeWindow(win) } catch {} }
+            return
+        }
+
+        // Map the player-inventory slot (9-44) to this window's own
+        // inventory-portion slot: it starts at chestEnd and mirrors 9-44.
+        const winSlot = invSlot - 9 + chestEnd
+
+        this.log(`Transferring inv slot ${invSlot} (${count}x ${label}) to Ender Chest (win slot ${winSlot}).`)
+
+        try {
+            await this.bot.clickWindow(winSlot, 0, 1)
+            io.to(this.username).emit('notice', { type: 'info', text: `Moved ${count}× ${label} to Ender Chest` })
+        } catch (err) {
+            io.to(this.username).emit('notice', { type: 'error', text: `Couldn't transfer: ${err.message}` })
+        }
+
+        if (usingViewer) {
+            setTimeout(() => { if (this.bot && this.ecViewWindow) this.streamEnderChestView() }, 400)
+        } else {
+            setTimeout(() => { try { this.bot.closeWindow(win) } catch {} }, 400)
+        }
+
+        this.updateDashboard()
     }
 
     closeEnderChestView(silent = false) {
@@ -7139,8 +7236,10 @@ function handleWebCommand(username, command) {
                 botSession.buyBlackMarketSlot(command.substring('bm-buy '.length))
             } else if (lower.startsWith('drop ')) {
                 botSession.dropInventorySlot(command.substring('drop '.length))
-            } else if (lower.startsWith('ec-drop ')) {
-                botSession.dropEnderChestSlot(command.substring('ec-drop '.length))
+            } else if (lower.startsWith('ec-transfer ')) {
+                botSession.transferEnderChestToInventory(command.substring('ec-transfer '.length))
+            } else if (lower.startsWith('inv-to-ec ')) {
+                botSession.transferInventoryToEnderChest(command.substring('inv-to-ec '.length))
             }
 
             break

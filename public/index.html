@@ -6568,7 +6568,7 @@
                         <span>Dashboard Cards</span>
                     </div>
 
-                    <p class="settings-section-desc">Turn any card off to hide it from the dashboard. Your choice is saved on this device.</p>
+                    <p class="settings-section-desc">Turn any card off to hide it from the dashboard &mdash; or just <strong>right-click a card's header</strong> to hide it. Saved to your account, so it follows you across devices.</p>
 
                     <div id="cardToggleList"></div>
 
@@ -14594,6 +14594,25 @@
         }
 
         applyCardVisibility()
+
+        // Right-click a card's header to hide it fast (restore it from
+        // Settings → Appearance → Dashboard Cards). Scoped to the header
+        // so right-clicking content (chat, inputs) still works normally.
+        document.addEventListener('contextmenu', e => {
+            const title = e.target.closest && e.target.closest('.card-title')
+            if (!title) return
+            const card = title.closest('#dashboardGrid .card[data-card-id]')
+            if (!card) return
+            e.preventDefault()
+            setCardVisible(card.dataset.cardId, false)
+            renderCardToggles()
+            showToast(`Hid "${cardLabel(card)}" — turn it back on in Settings → Appearance`, 'info')
+        })
+
+        // Discoverability: hint on each card header.
+        document.querySelectorAll('#dashboardGrid .card[data-card-id] > .card-title').forEach(t => {
+            if (!t.getAttribute('title')) t.setAttribute('title', 'Right-click to hide this card (restore in Settings → Appearance)')
+        })
 
         // ==================================================
         // CUSTOM QUICK ACTIONS

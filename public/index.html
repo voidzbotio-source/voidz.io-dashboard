@@ -230,6 +230,55 @@
                 color 0.25s ease;
         }
 
+        /* Shared "aurora" backdrop (same look as the login screen). Sits
+           behind everything via z-index:-1, so no layout needs changing.
+           Colours come from theme vars, so it adapts to every theme and
+           to the user's custom accent. */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: -25%;
+            z-index: -1;
+            pointer-events: none;
+
+            background:
+                radial-gradient(440px 440px at 14% 18%, color-mix(in srgb, var(--blue) 26%, transparent), transparent 60%),
+                radial-gradient(400px 400px at 86% 10%, color-mix(in srgb, var(--purple) 22%, transparent), transparent 60%),
+                radial-gradient(540px 540px at 72% 96%, color-mix(in srgb, var(--teal) 16%, transparent), transparent 60%);
+
+            filter: blur(14px);
+            animation: auroraDrift 24s ease-in-out infinite alternate;
+        }
+
+        @keyframes auroraDrift {
+            0%   { transform: translate3d(0, 0, 0) scale(1); }
+            50%  { transform: translate3d(2.5%, 2%, 0) scale(1.07); }
+            100% { transform: translate3d(-2.5%, -2%, 0) scale(1.04); }
+        }
+
+        /* Faint grid, faded out toward the edges */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            pointer-events: none;
+
+            background-image:
+                linear-gradient(color-mix(in srgb, var(--text) 4%, transparent) 1px, transparent 1px),
+                linear-gradient(90deg, color-mix(in srgb, var(--text) 4%, transparent) 1px, transparent 1px);
+            background-size: 48px 48px;
+
+            -webkit-mask-image: radial-gradient(circle at 50% 28%, #000 0%, transparent 80%);
+            mask-image: radial-gradient(circle at 50% 28%, #000 0%, transparent 80%);
+        }
+
+        html[data-theme="light"] body::before { opacity: 0.55; }
+
+        @media (prefers-reduced-motion: reduce) {
+            body::before { animation: none; }
+        }
+
         ::selection {
             background: rgba(99, 102, 241, 0.35);
         }
@@ -429,7 +478,9 @@
             padding: 22px 14px;
             gap: 3px;
 
-            background: var(--panel);
+            background: color-mix(in srgb, var(--panel) 82%, transparent);
+            -webkit-backdrop-filter: blur(14px);
+            backdrop-filter: blur(14px);
 
             border-right: 1px solid var(--border);
 
@@ -467,7 +518,29 @@
             font-weight: 700;
             color: #fff;
 
-            box-shadow: var(--shadow);
+            box-shadow: 0 8px 20px color-mix(in srgb, var(--blue) 45%, transparent);
+
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Sheen sweep across the logo (matches the login screen) */
+        .logo::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(120deg, transparent 32%, rgba(255, 255, 255, 0.4) 50%, transparent 68%);
+            transform: translateX(-130%);
+            animation: logoSheen 5s ease-in-out infinite;
+        }
+
+        @keyframes logoSheen {
+            0%, 55%   { transform: translateX(-130%); }
+            78%, 100% { transform: translateX(130%); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .logo::after { animation: none; display: none; }
         }
 
         .brand h1 {
@@ -1098,32 +1171,37 @@
 
             --card-accent: var(--blue);
 
-            background: var(--panel);
+            /* Glass panel + a gradient hairline along the top edge that
+               fades at the ends (same language as the login card), tinted
+               by each card's own accent. */
+            background:
+                linear-gradient(90deg, transparent, color-mix(in srgb, var(--card-accent) 75%, transparent), transparent) top / 100% 2px no-repeat,
+                color-mix(in srgb, var(--panel) 90%, transparent);
 
-            border:
-                1px solid
-                var(--border);
-
-            border-top: 3px solid var(--card-accent);
-
+            border: 1px solid var(--border);
             border-radius: var(--radius);
 
             padding: 22px;
 
-            box-shadow: var(--shadow);
+            box-shadow:
+                0 14px 34px rgba(0, 0, 0, 0.32),
+                inset 0 1px 0 rgba(255, 255, 255, 0.04);
 
             overflow: hidden;
 
             transition:
-                background-color 0.15s ease,
-                border-color 0.15s ease;
+                border-color 0.15s ease,
+                box-shadow 0.2s ease;
 
             animation: rise 0.4s ease backwards;
         }
 
         .card:hover {
             border-color: var(--border-strong);
-            border-top-color: var(--card-accent);
+            box-shadow:
+                0 18px 42px rgba(0, 0, 0, 0.4),
+                0 0 0 1px color-mix(in srgb, var(--card-accent) 22%, transparent),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
         }
 
         /* Bento-style color coding - each card type gets its own

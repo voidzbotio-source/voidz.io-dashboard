@@ -518,6 +518,53 @@
                 Log In
             </button>
 
+            <button id="forgotToggle" type="button" style="background: transparent; color: var(--muted); border: none; box-shadow: none; margin-top: 10px; padding: 4px; font-size: 12px; font-weight: 600; text-decoration: underline;">
+                Forgot Passcode?
+            </button>
+
+        </form>
+
+        <form id="forgotForm" style="display: none;">
+
+            <p class="hint" style="margin: 0 0 16px;">We'll email a one-time login code to your account's recovery email, so you can sign in without your password.</p>
+
+            <div id="forgotError" class="error"></div>
+
+            <div class="field">
+                <label for="forgotUsername">Username</label>
+                <input
+                    id="forgotUsername"
+                    name="forgotUsername"
+                    type="text"
+                    autocomplete="username"
+                    placeholder="Username"
+                >
+            </div>
+
+            <div class="field" id="forgotCodeField" style="display: none;">
+                <label for="forgotCode">Login Code</label>
+                <input
+                    id="forgotCode"
+                    name="forgotCode"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                    placeholder="6-digit code from your email"
+                >
+            </div>
+
+            <button id="forgotSendBtn" type="button">
+                Email me a login code
+            </button>
+
+            <button id="forgotVerifyBtn" type="button" style="display: none;">
+                Log In
+            </button>
+
+            <button id="forgotBackBtn" type="button" style="background: transparent; color: var(--muted); border-color: var(--border); box-shadow: none;">
+                Back
+            </button>
+
         </form>
 
         <form id="twoFactorForm" style="display: none;">
@@ -675,6 +722,128 @@
                     showError('Could not reach the server. Try again.')
                     submitBtn.disabled = false
                     submitBtn.textContent = 'Log In'
+                })
+
+        })
+
+        // ==================================================
+        // FORGOT PASSCODE (sign in with a code emailed to Gmail)
+        // ==================================================
+
+        const forgotForm = document.getElementById('forgotForm')
+        const forgotToggle = document.getElementById('forgotToggle')
+        const forgotBackBtn = document.getElementById('forgotBackBtn')
+        const forgotUsername = document.getElementById('forgotUsername')
+        const forgotCodeField = document.getElementById('forgotCodeField')
+        const forgotCode = document.getElementById('forgotCode')
+        const forgotSendBtn = document.getElementById('forgotSendBtn')
+        const forgotVerifyBtn = document.getElementById('forgotVerifyBtn')
+        const forgotErrorBox = document.getElementById('forgotError')
+        const forgotHint = forgotForm.querySelector('.hint')
+
+        function showForgotError(message) {
+            forgotErrorBox.textContent = message
+            forgotErrorBox.classList.add('show')
+        }
+        function clearForgotError() {
+            forgotErrorBox.classList.remove('show')
+            forgotErrorBox.textContent = ''
+        }
+
+        // No submit button in this form, but guard against Enter submitting.
+        forgotForm.addEventListener('submit', event => event.preventDefault())
+
+        forgotToggle.addEventListener('click', () => {
+            clearError()
+            clearForgotError()
+            forgotUsername.value = document.getElementById('username').value.trim()
+            form.style.display = 'none'
+            forgotForm.style.display = 'block'
+            // reset to the "send code" state
+            forgotCodeField.style.display = 'none'
+            forgotVerifyBtn.style.display = 'none'
+            forgotSendBtn.style.display = 'block'
+            forgotSendBtn.disabled = false
+            forgotSendBtn.textContent = 'Email me a login code'
+            forgotCode.value = ''
+            forgotHint.textContent = "We'll email a one-time login code to your account's recovery email, so you can sign in without your password."
+            forgotUsername.focus()
+        })
+
+        forgotBackBtn.addEventListener('click', () => {
+            forgotForm.style.display = 'none'
+            form.style.display = 'block'
+            clearForgotError()
+        })
+
+        forgotSendBtn.addEventListener('click', () => {
+
+            clearForgotError()
+
+            const username = forgotUsername.value.trim()
+            if (!username) { showForgotError('Enter your username first.'); return }
+
+            forgotSendBtn.disabled = true
+            forgotSendBtn.textContent = 'Sending...'
+
+            fetch('/login/forgot/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            })
+                .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                .then(({ ok, data }) => {
+
+                    if (!ok) {
+                        showForgotError(data.error || 'Could not send a code.')
+                        forgotSendBtn.disabled = false
+                        forgotSendBtn.textContent = 'Email me a login code'
+                        return
+                    }
+
+                    forgotCodeField.style.display = 'block'
+                    forgotVerifyBtn.style.display = 'block'
+                    forgotSendBtn.textContent = 'Resend code'
+                    forgotSendBtn.disabled = false
+                    forgotHint.textContent = 'If that account has a recovery email, a code is on its way — check your inbox (and spam). It expires in 10 minutes.'
+                    forgotCode.focus()
+
+                })
+                .catch(() => {
+                    showForgotError('Could not reach the server. Try again.')
+                    forgotSendBtn.disabled = false
+                    forgotSendBtn.textContent = 'Email me a login code'
+                })
+
+        })
+
+        forgotVerifyBtn.addEventListener('click', () => {
+
+            clearForgotError()
+
+            const username = forgotUsername.value.trim()
+            const code = forgotCode.value.trim()
+            if (!code) { showForgotError('Enter the code from your email.'); return }
+
+            forgotVerifyBtn.disabled = true
+            forgotVerifyBtn.textContent = 'Logging in...'
+
+            fetch('/login/forgot/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, code })
+            })
+                .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                .then(({ ok, data }) => {
+                    if (ok && data.ok) { goToDashboard(); return }
+                    showForgotError(data.error || 'That code is wrong or has expired.')
+                    forgotVerifyBtn.disabled = false
+                    forgotVerifyBtn.textContent = 'Log In'
+                })
+                .catch(() => {
+                    showForgotError('Could not reach the server. Try again.')
+                    forgotVerifyBtn.disabled = false
+                    forgotVerifyBtn.textContent = 'Log In'
                 })
 
         })

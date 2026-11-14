@@ -7545,6 +7545,105 @@ app.post('/login/2fa/email-code', rateLimitPreAuth, async (req, res) => {
 
 })
 
+// Resolves a submitted username to the canonical account name, or null if
+// no such account exists (the env admin login, or a users.json entry).
+function resolveAccountName(username) {
+    const name = String(username || '').trim()
+    if (!name) return null
+    if (name.toLowerCase() === DASHBOARD_USERNAME.toLowerCase()) return DASHBOARD_USERNAME
+    const users = loadUsers()
+    const user = findUser(users, name)
+    return user ? user.username : null
+}
+
+// "Forgot Passcode?" - sign in with a code emailed to the account's
+// recovery email (the user's Gmail), bypassing the password. This is the
+// account-recovery path, so that email is the root of trust. Keyed by
+// username; responds generically so it never reveals which accounts exist
+// or have a recovery email set.
+app.post('/login/forgot/send', rateLimitPreAuth, async (req, res) => {
+
+    const ip = req.ip
+    const generic = { ok: true, message: 'If that account has a recovery email set up, a login code has been sent to it.' }
+
+    const resolved = resolveAccountName(req.body?.username)
+
+    if (!resolved || !mailConfigured() || !getRecoveryEmail(resolved)) {
+        return res.json(generic)
+    }
+
+    const result = createRecoveryLoginCode(resolved)
+
+    if (result.error === 'too-soon') {
+        return res.status(429).json({ error: 'A code was just sent. Wait a minute before requesting another.' })
+    }
+
+    if (result.error || !result.code) {
+        return res.json(generic)
+    }
+
+    try {
+        await sendMail(
+            result.email,
+            'Your Voidz.IO login code',
+            `Your Voidz.IO login code is: ${result.code}\n\nUse it on the login screen to sign in without your password. It expires in 10 minutes. If you didn't request this, you can ignore this email - your account is unchanged.`,
+            buildCodeEmailHtml({
+                heading: 'Your login code',
+                intro: "Use this code to sign in to your Voidz.IO dashboard without your password. It's valid for 10 minutes.",
+                code: result.code,
+                note: "If you didn't request this, ignore this email - nothing has changed."
+            })
+        )
+    } catch (error) {
+        appLog(`Forgot-password email send failed for ${resolved}: ${error.message}`)
+        return res.status(500).json({ error: 'Could not send the email. Try again shortly.' })
+    }
+
+    appLog(`Forgot-password login code emailed for ${resolved} (from ${ip})`)
+    res.json(generic)
+
+})
+
+app.post('/login/forgot/verify', rateLimitPreAuth, (req, res) => {
+
+    const ip = req.ip
+    const resolved = resolveAccountName(req.body?.username)
+    const code = String(req.body?.code || '').trim()
+
+    if (!resolved || !code || !verifyRecoveryLoginCode(resolved, code)) {
+        recordFailedLogin(ip)
+        appLog(`Failed forgot-password code for ${resolved || '(unknown)'} from ${ip}`)
+        return res.status(401).json({ error: 'That code is wrong or has expired.' })
+    }
+
+    // The email code stands in for both the password and 2FA (it's the
+    // recovery path). Regenerate the session (fixation protection), then
+    // mark it logged in.
+    req.session.regenerate(regenError => {
+
+        if (regenError) {
+            appLog(`Session regenerate failed (forgot) for ${resolved}: ${regenError.message}`)
+            return res.status(500).json({ error: 'Login failed, please try again.' })
+        }
+
+        clearLoginAttempts(ip)
+
+        req.session.loggedIn = true
+        req.session.username = resolved
+
+        req.session.save(saveError => {
+            if (saveError) {
+                return res.status(500).json({ error: 'Login failed, please try again.' })
+            }
+            recordLoginEvent(resolved, { outcome: 'success', method: 'recovery-email', ip, newDevice: true })
+            appLog(`Dashboard login via recovery email (forgot password): ${resolved}`)
+            res.json({ ok: true })
+        })
+
+    })
+
+})
+
 // The "stay logged in? (re-authenticate in 72 hours)" answer shown after
 // a successful code. Yes -> trust this browser for 72h so future logins
 // skip the code (password is still required). Requires the just-completed

@@ -640,6 +640,15 @@
 
         'use strict'
 
+        // Register the service worker here too (not just on the dashboard)
+        // so Android/Chrome offers "Install app" right from the login page.
+        // No-op on plain HTTP; works once the site is behind HTTPS.
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(() => {})
+            })
+        }
+
         // The login screen deliberately always uses the default (dark)
         // look - a user's saved theme/accent is account-wide and only
         // applies once they're signed in, not on this pre-auth page.

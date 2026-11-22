@@ -1,0 +1,6 @@
+// Top-level build file. Plugin versions are declared here and applied
+// in app/build.gradle. AGP 8.5.2 pairs with Gradle 8.7 (pinned by the
+// wrapper the CI workflow generates).
+plugins {
+    id 'com.android.application' version '8.5.2' apply false
+}

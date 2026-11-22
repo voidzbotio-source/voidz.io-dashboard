@@ -10407,6 +10407,7 @@
         let lastTeamHistory = []
         let lastKothHistory = []
         let lastDeathHistory = []
+        let lastTeamStats = {}
         let lastRoleChangeHistory = []
         let lastTeamEventHistory = []
         let lastBadgeProgress = null
@@ -10716,6 +10717,7 @@
             lastTeamHistory = history
             lastKothHistory = Array.isArray(team.kothHistory) ? team.kothHistory : []
             lastDeathHistory = Array.isArray(team.deathHistory) ? team.deathHistory : []
+            lastTeamStats = (team.teamStats && typeof team.teamStats === 'object') ? team.teamStats : {}
             lastRoleChangeHistory = Array.isArray(team.roleChangeHistory) ? team.roleChangeHistory : []
             lastTeamEventHistory = Array.isArray(team.teamEventHistory) ? team.teamEventHistory : []
 
@@ -11103,21 +11105,12 @@
 
             if (!container) return
 
-            const byPlayer = {}
-
-            for (const entry of [...lastKothHistory.map(entry => ({ ...entry, isCapture: true })), ...lastDeathHistory.map(entry => ({ ...entry, isCapture: false }))]) {
-
-                const key = entry.uuid || entry.player.toLowerCase()
-
-                if (!byPlayer[key]) {
-                    byPlayer[key] = { name: entry.player, net: 0 }
-                }
-
-                byPlayer[key].net += entry.points
-
-            }
-
-            const rows = Object.values(byPlayer).sort((a, b) => b.net - a.net).slice(0, 5)
+            // Same lifetime tally as the main Leaderboard card, top 5 by net.
+            const rows = Object.values(lastTeamStats || {})
+                .filter(s => s && ((s.captures || 0) || (s.deaths || 0)))
+                .map(s => ({ name: s.name || '?', net: s.net || 0 }))
+                .sort((a, b) => b.net - a.net)
+                .slice(0, 5)
 
             if (!rows.length) {
                 container.innerHTML = '<div class="empty-state">No KOTH captures or deaths logged yet.</div>'
@@ -11288,46 +11281,19 @@
 
             if (!container) return
 
-            const byPlayer = {}
-
-            // Entries logged after this feature shipped carry the
-            // player's UUID (captured while they were online, at the
-            // moment of the KOTH/death event) - grouping by that
-            // instead of the name string means a rename no longer
-            // splits one player's totals into two rows. Older entries
-            // without a uuid still group by name as before, so nothing
-            // existing gets dropped - they just merge into the uuid-
-            // based row naturally once they age out of the 50-entry
-            // history cap.
-            const tally = (entry, isCapture) => {
-
-                const key = entry.uuid || entry.player.toLowerCase()
-
-                if (!byPlayer[key]) {
-                    byPlayer[key] = { name: entry.player, lastSeenAt: 0, captures: 0, deaths: 0, net: 0 }
-                }
-
-                // Display whichever name was logged most recently, so a
-                // renamed player's combined row shows their current name.
-                if ((entry.timestamp || 0) >= byPlayer[key].lastSeenAt) {
-                    byPlayer[key].name = entry.player
-                    byPlayer[key].lastSeenAt = entry.timestamp || 0
-                }
-
-                byPlayer[key].net += entry.points
-
-                if (isCapture) {
-                    byPlayer[key].captures++
-                } else {
-                    byPlayer[key].deaths++
-                }
-
-            }
-
-            lastKothHistory.forEach(entry => tally(entry, true))
-            lastDeathHistory.forEach(entry => tally(entry, false))
-
-            const rows = Object.values(byPlayer).sort((a, b) => b.net - a.net)
+            // Built from the server's LIFETIME tally (team.teamStats),
+            // not the capped 50-event history - so a player's KOTH count
+            // is their true total and never drops when someone else caps.
+            // The tally is keyed by uuid-or-name, so renames stay merged.
+            const rows = Object.values(lastTeamStats || {})
+                .filter(s => s && ((s.captures || 0) || (s.deaths || 0)))
+                .map(s => ({
+                    name: s.name || '?',
+                    captures: s.captures || 0,
+                    deaths: s.deaths || 0,
+                    net: s.net || 0
+                }))
+                .sort((a, b) => b.net - a.net)
 
             if (!rows.length) {
                 container.innerHTML = '<div class="empty-state">No KOTH captures or deaths logged yet.</div>'

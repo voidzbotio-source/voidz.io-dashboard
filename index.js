@@ -1522,6 +1522,24 @@ function saveNemesisHistory(username, history) {
     saveBotConfigs(configs)
 }
 
+// Lifetime per-player KOTH/death tally for the Team leaderboard, keyed by
+// uuid-or-lowercased-name (same keying renderLeaderboard uses). Kept
+// SEPARATE from the prunable kothHistory/deathHistory arrays, so counts
+// are true lifetime totals that never shrink when the 50-entry event
+// window rolls over (that's what made a player's count drop every time
+// someone else capped). Shape: { [key]: { name, captures, deaths, net, lastSeenAt } }.
+function getTeamStats(username) {
+    const configs = loadBotConfigs()
+    const stats = configs[username]?.teamStats
+    return (stats && typeof stats === 'object' && !Array.isArray(stats)) ? stats : {}
+}
+
+function saveTeamStats(username, stats) {
+    const configs = loadBotConfigs()
+    configs[username] = { ...configs[username], teamStats: stats }
+    saveBotConfigs(configs)
+}
+
 // Rolling chat log, persisted so it survives a dashboard reload AND a
 // server restart - and so messages that arrived while no browser tab was
 // open are still there on next load. Kept to the last CHAT_HISTORY_LIMIT
@@ -1605,10 +1623,36 @@ function combineLeaderboardPlayers(username, nameA, nameB) {
     saveKothHistory(username, kothHistory)
     saveDeathHistory(username, deathHistory)
 
+    // Merge the two names' lifetime tally entries into one, under the
+    // same uuid key the history was just retagged with.
+    const teamStats = getTeamStats(username)
+    const mergeKeys = Object.keys(teamStats).filter(k =>
+        k === normalizedA.toLowerCase() ||
+        k === normalizedB.toLowerCase() ||
+        matches(teamStats[k].name)
+    )
+
+    if (mergeKeys.length) {
+        const merged = teamStats[uuid] || { name: normalizedB, captures: 0, deaths: 0, net: 0, lastSeenAt: 0 }
+        for (const k of mergeKeys) {
+            if (k === uuid) continue
+            const s = teamStats[k]
+            merged.captures = (merged.captures || 0) + (s.captures || 0)
+            merged.deaths = (merged.deaths || 0) + (s.deaths || 0)
+            merged.net = (merged.net || 0) + (s.net || 0)
+            merged.lastSeenAt = Math.max(merged.lastSeenAt || 0, s.lastSeenAt || 0)
+            delete teamStats[k]
+        }
+        merged.name = normalizedB
+        teamStats[uuid] = merged
+        saveTeamStats(username, teamStats)
+    }
+
     if (session) {
 
         session.kothHistory = kothHistory
         session.deathHistory = deathHistory
+        session.teamStats = teamStats
 
         session.log(`Combined leaderboard entries for "${normalizedA}" and "${normalizedB}" (${touched} entries, uuid ${uuid}).`)
 
@@ -2392,6 +2436,17 @@ class BotSession {
         // modal so it reads as one "why did our points change" log.
         this.deathHistory = getDeathHistory(username)
 
+        // Lifetime per-player leaderboard tally (never pruned). On the
+        // first run after this shipped it's seeded from whatever's left
+        // in the capped history, so it doesn't start blank - counts only
+        // ever grow from there (see recordTeamStat).
+        this.teamStats = getTeamStats(username)
+        if (Object.keys(this.teamStats).length === 0 && (this.kothHistory.length || this.deathHistory.length)) {
+            for (const e of this.kothHistory) this.recordTeamStat(e.player, e.uuid, { capture: true, points: e.points, save: false })
+            for (const e of this.deathHistory) this.recordTeamStat(e.player, e.uuid, { death: true, points: e.points, save: false })
+            saveTeamStats(username, this.teamStats)
+        }
+
         // Every KOTH capture seen server-wide (any team), for the
         // Server Activity feed - kept separate from kothHistory since
         // that one's scoped to our own team only.
@@ -2953,6 +3008,7 @@ class BotSession {
                     history: this.teamHistory,
                     kothHistory: this.kothHistory,
                     deathHistory: this.deathHistory,
+                    teamStats: this.teamStats,
                     roleChangeHistory: this.roleChangeHistory,
                     teamEventHistory: this.teamEventHistory
                 }
@@ -4622,6 +4678,12 @@ class BotSession {
         saveKothHistory(this.username, this.kothHistory)
         saveDeathHistory(this.username, this.deathHistory)
 
+        // Drop the player from the lifetime leaderboard tally too.
+        for (const key of Object.keys(this.teamStats)) {
+            if (String(this.teamStats[key].name || '').toLowerCase() === lower) delete this.teamStats[key]
+        }
+        saveTeamStats(this.username, this.teamStats)
+
         this.log(`Removed ${removed} history entr${removed === 1 ? 'y' : 'ies'} for ${name}`)
 
         io.to(this.username).emit('notice', {
@@ -4665,10 +4727,12 @@ class BotSession {
         this.teamHistory = []
         this.kothHistory = []
         this.deathHistory = []
+        this.teamStats = {}
 
         saveTeamHistory(this.username, this.teamHistory)
         saveKothHistory(this.username, this.kothHistory)
         saveDeathHistory(this.username, this.deathHistory)
+        saveTeamStats(this.username, this.teamStats)
 
         this.log('Team history reset (points, KOTH captures, deaths).')
 
@@ -4709,6 +4773,29 @@ class BotSession {
     // Points!" - shown as a history list alongside the Points detail
     // chart on the dashboard. Not anchored to a specific prefix since
     // the exact glyph/icon in front of the player name isn't known.
+    // Bumps the lifetime leaderboard tally for one player. Keyed by
+    // uuid-or-lowercased-name so it follows renames the same way the
+    // leaderboard groups rows. Never pruned, so counts only grow.
+    recordTeamStat(player, uuid, { capture = false, death = false, points = 0, save = true } = {}) {
+
+        const name = String(player || '').trim()
+        const key = uuid || name.toLowerCase()
+        if (!key) return
+
+        const e = this.teamStats[key] || { name, captures: 0, deaths: 0, net: 0, lastSeenAt: 0 }
+
+        if (name) e.name = name
+        e.lastSeenAt = Date.now()
+        if (capture) e.captures = (e.captures || 0) + 1
+        if (death) e.deaths = (e.deaths || 0) + 1
+        e.net = (e.net || 0) + (Number(points) || 0)
+
+        this.teamStats[key] = e
+
+        if (save) saveTeamStats(this.username, this.teamStats)
+
+    }
+
     // This broadcast is server-wide (every team's captures show up in
     // it), so it's logged to serverActivity regardless of team, but
     // only counted toward our own kothHistory/leaderboard/badges when
@@ -4736,16 +4823,22 @@ class BotSession {
 
         if (!isOwnTeam) return
 
+        const uuid = this.findUuidForPlayerName(match[1])
+
         this.kothHistory.push({
             timestamp: Date.now(),
             player: match[1],
-            uuid: this.findUuidForPlayerName(match[1]),
+            uuid,
             points: Number(match[2])
         })
 
         this.kothHistory = this.kothHistory.slice(-50)
 
         saveKothHistory(this.username, this.kothHistory)
+
+        // Lifetime tally (never pruned) - this is what the leaderboard
+        // counts from, so a count never drops when someone else caps.
+        this.recordTeamStat(match[1], uuid, { capture: true, points: Number(match[2]) })
 
         this.log(`KOTH captured by ${match[1]} (+${match[2]} team points)`)
 
@@ -4773,16 +4866,20 @@ class BotSession {
         if (!match) return
         if (!this.isTeamMember(match[2])) return
 
+        const uuid = this.findUuidForPlayerName(match[2])
+
         this.deathHistory.push({
             timestamp: Date.now(),
             player: match[2],
-            uuid: this.findUuidForPlayerName(match[2]),
+            uuid,
             points: -Number(match[1])
         })
 
         this.deathHistory = this.deathHistory.slice(-50)
 
         saveDeathHistory(this.username, this.deathHistory)
+
+        this.recordTeamStat(match[2], uuid, { death: true, points: -Number(match[1]) })
 
         this.log(`${match[2]} died (-${match[1]} team points)`)
 

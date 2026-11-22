@@ -351,6 +351,17 @@ const BALANCE_RESPONSE_WINDOW = 15000
 // Change this if FlareMC uses a different one (e.g. /enderchest).
 const EC_OPEN_COMMAND = '/ec'
 
+// FlareMC staff allow the bot's kick -> reinvite as long as there's a
+// LONG gap between the two commands (~3-4 minutes), so the reinvite is
+// spaced out that far instead of firing a moment after the kick. A bit
+// of jitter keeps it from being a fixed interval. Change the window here
+// if staff ever state a different minimum.
+const REINVITE_MIN_DELAY_MS = 3 * 60 * 1000
+const REINVITE_MAX_DELAY_MS = 4 * 60 * 1000
+function reinviteDelayMs() {
+    return REINVITE_MIN_DELAY_MS + Math.floor(Math.random() * (REINVITE_MAX_DELAY_MS - REINVITE_MIN_DELAY_MS))
+}
+
 const HUB_RECOVERY_DELAY = 90000
 
 const KEYALL_TIMEZONE = 'Europe/Brussels'
@@ -4143,11 +4154,16 @@ class BotSession {
 
         if (!tracked) return
 
-        this.log(`Auto-reinviting ${username} (left the team).`)
+        // Space the reinvite well after the leave (staff-permitted gap),
+        // rather than firing it immediately on top of the leave event.
+        const delay = reinviteDelayMs()
+        const mins = Math.round(delay / 60000)
 
-        this.sendMinecraftChat(`/t invite ${username}`)
+        this.log(`Auto-reinviting ${username} in ~${mins} min (left the team).`)
 
-        io.to(this.username).emit('notice', { type: 'success', text: `Auto-reinvited ${username}` })
+        io.to(this.username).emit('notice', { type: 'success', text: `Will reinvite ${username} in ~${mins} min.` })
+
+        setTimeout(() => { if (this.bot) this.sendMinecraftChat(`/t invite ${username}`) }, delay)
 
     }
 
@@ -4230,9 +4246,23 @@ class BotSession {
             this.logTeamEvent(kickedMatch[1].trim(), 'kicked')
         }
 
-        // A burst of these (e.g. several people leaving/getting
-        // kicked at once) shouldn't each fire their own /t info -
-        // one refresh a couple seconds later covers all of them.
+        // Only refresh /t info on KOTH / team-point events - NOT on
+        // join/left/kick/online-offline. Firing /t info on a kick landed
+        // it right between a /t kick and /t invite, bunching 3 commands
+        // into one second (which reads as a macro). Team points only
+        // actually change on KOTH captures / deaths anyway, and KOTHs
+        // are frequent, so the roster still refreshes regularly. Join/
+        // left/kick are still logged above for the Activity Log.
+        const isPointsEvent =
+            /\bKOTH has been captured!?$/i.test(text) ||
+            /\bhas received\b.*\bteam points\b/i.test(text) ||
+            /\byour team has lost \d+ points? due to\b/i.test(text)
+
+        if (!isPointsEvent) return
+
+        // A KOTH often broadcasts two matching lines ("captured" +
+        // "received points") - one refresh a couple seconds later covers
+        // both.
         if (Date.now() - this.lastTeamRefreshRequestAt < 2000) return
 
         this.lastTeamRefreshRequestAt = Date.now()
@@ -4322,7 +4352,13 @@ class BotSession {
 
         this.sendMinecraftChat(`/t kick ${sender}`)
         if (reinvite) {
-            setTimeout(() => { if (this.bot) this.sendMinecraftChat(`/t invite ${sender}`) }, 350)
+            // Long gap between kick and reinvite - this is what staff
+            // permit (so it doesn't read as a rapid macro).
+            const delay = reinviteDelayMs()
+            const mins = Math.round(delay / 60000)
+            this.log(`Backup kick: will reinvite ${sender} in ~${mins} min.`)
+            io.to(this.username).emit('notice', { type: 'info', text: `Will reinvite ${sender} in ~${mins} min.` })
+            setTimeout(() => { if (this.bot) this.sendMinecraftChat(`/t invite ${sender}`) }, delay)
         }
 
     }

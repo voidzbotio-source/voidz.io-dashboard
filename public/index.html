@@ -2723,7 +2723,9 @@
         .koth-history-row {
             display: flex;
             align-items: baseline;
+            flex-wrap: wrap;
             gap: 8px;
+            row-gap: 3px;
 
             padding: 8px 10px;
 
@@ -2734,9 +2736,14 @@
             font-size: 13px;
         }
 
+        /* The player name keeps its full width and never collapses - on a
+           narrow card it's the verb / badge / date that wrap to the next
+           line instead of the name getting squeezed to "Cloud..." / "p..".
+           A single pathologically long name still ellipsises (max-width). */
         .koth-history-player {
-            flex: 1;
+            flex: 0 0 auto;
             min-width: 0;
+            max-width: 100%;
 
             overflow: hidden;
             text-overflow: ellipsis;
@@ -2780,6 +2787,7 @@
 
         .koth-history-points {
             flex-shrink: 0;
+            margin-left: auto;
 
             color: var(--green);
             font-family: var(--font-display);
@@ -2792,6 +2800,7 @@
 
         .koth-history-date {
             flex-shrink: 0;
+            margin-left: auto;
 
             color: var(--muted);
             font-size: 11.5px;

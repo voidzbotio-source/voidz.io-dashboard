@@ -4174,9 +4174,10 @@ class BotSession {
     // someone who was Officer/Captain before leaving/getting kicked
     // would otherwise need re-promoting by hand every single time.
     // FlareMC's rank ladder only has a single /t promote step between
-    // each rank, so Officer needs one, Captain needs two run back to
-    // back - staggered slightly so the second isn't sent before the
-    // server's finished applying the first.
+    // each rank, so Officer needs one, Captain needs two. They're now
+    // spaced 2 seconds apart (staff-permitted spacing) so two promotes
+    // never fire within a second of each other, and so the server has
+    // finished applying the first before the second is sent.
     checkAutoPromote(text) {
 
         const match = text.match(/^TEAMS ➟ (.+?) has joined the team\.?$/i)
@@ -4204,7 +4205,7 @@ class BotSession {
         this.log(`${username} rejoined with a permanent ${entry.rank} rank - promoting ${promotions}x.`)
 
         for (let i = 0; i < promotions; i++) {
-            setTimeout(() => this.sendMinecraftChat(`/t promote ${username}`), 500 + i * 700)
+            setTimeout(() => this.sendMinecraftChat(`/t promote ${username}`), 2000 * (i + 1))
         }
 
         io.to(this.username).emit('notice', { type: 'success', text: `Promoting ${username} back to ${entry.rank}` })
@@ -4267,7 +4268,10 @@ class BotSession {
 
         this.lastTeamRefreshRequestAt = Date.now()
 
-        this.requestTeamInfo()
+        // Delay the auto /t info by 2 seconds so it never lands right on
+        // top of another command (staff-permitted spacing). Manual
+        // refreshes (Team button / `team` command) still fire instantly.
+        setTimeout(() => this.requestTeamInfo(), 2000)
 
     }
 

@@ -2724,6 +2724,7 @@
             display: flex;
             align-items: baseline;
             flex-wrap: wrap;
+            flex-shrink: 0;
             gap: 8px;
             row-gap: 3px;
 
@@ -2824,6 +2825,12 @@
             display: flex;
             align-items: center;
             gap: 10px;
+
+            /* Don't let a long list squeeze each row shorter than its
+               content (the body is a max-height flex column) - keep full
+               height and let the list scroll instead, so names/subtext
+               aren't vertically clipped on phones. */
+            flex-shrink: 0;
 
             padding: 9px 10px;
 
@@ -4922,11 +4929,11 @@
 
             /* Any card with a wide inner element (tables, long rows)
                scrolls its own content sideways instead of blowing out
-               the page's width. */
+               the page's width. Leaderboard/history rows are left out -
+               they fit via ellipsis / wrapping, and overflow here forced
+               overflow-y:auto which clipped the squished text. */
             .fleet-row,
-            .manage-account-row,
-            .leaderboard-row,
-            .koth-history-row {
+            .manage-account-row {
                 overflow-x: auto;
             }
 
